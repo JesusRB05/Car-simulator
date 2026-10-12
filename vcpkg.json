@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "car-simulator",
+  "version-semver": "0.1.0",
+  "description": "Open-source, community-maintained driving simulator with a custom physics engine and a custom Vulkan renderer.",
+  "homepage": "https://github.com/car-simulator/car-simulator",
+  "license": "GPL-3.0-or-later",
+  "builtin-baseline": "e456309491fd875487bf02b8a0dca76c1b1b00cc",
+  "dependencies": [
+    "cgltf",
+    "doctest",
+    "eigen3",
+    "glm",
+    "imgui",
+    "implot",
+    "ktx",
+    "luajit",
+    "meshoptimizer",
+    "miniaudio",
+    "openxr-loader",
+    "physfs",
+    { "name": "sdl3", "features": ["vulkan"] },
+    "sol2",
+    "spdlog",
+    "stb",
+    "tomlplusplus",
+    "tracy",
+    "vulkan-headers",
+    "vulkan-memory-allocator",
+    "volk"
+  ]
+}

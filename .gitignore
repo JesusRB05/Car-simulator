@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Car Simulator contributors
+#
+# Build outputs
+build/
+out/
+vcpkg_installed/
+vcpkg-manifest-install.log
+
+# CMake
+CMakeUserPresets.json
+CMakeCache.txt
+CMakeFiles/
+cmake-build-*/
+compile_commands.json
+
+# IDE / editors
+.vs/
+.vscode/
+.idea/
+*.user
+*.sln
+*.vcxproj
+*.vcxproj.*
+
+# Compiled artefacts
+*.obj
+*.o
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.ilk
+*.exp
+
+# Shader build artefacts
+*.spv
+*.spv.json
+
+# Profiler captures
+*.tracy
+
+# Software Vulkan driver downloaded by tools/setup_swiftshader.*
+tools/mesa/
+
+# OS noise
+Thumbs.db
+.DS_Store
+
+# Local captures and logs (keep only the reviewed contact sheet)
+/*.png
+/*.log
+screenshots/*.png
+!screenshots/contact_sheet.png

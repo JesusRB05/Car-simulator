@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Car Simulator contributors
+#
+# Normalise line endings to LF in the repository regardless of the platform.
+* text=auto eol=lf
+
+# Keep binaries untouched.
+*.png binary
+*.jpg binary
+*.spv binary
+*.ico binary
+*.ttf binary
+*.otf binary
+
+# Windows scripts may want CRLF, but LF still works with PowerShell/cmd.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
