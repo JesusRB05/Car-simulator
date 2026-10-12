@@ -1,0 +1,8 @@
+id = "example_mod"
+name = "Example Mod"
+version = "0.1.0"
+author = "Car Simulator contributors"
+license = "CC BY-SA 4.0"
+description = "Reference mod showing the required structure. Enable it in config under mods.active."
+min_game_version = "0.1.0"
+dependencies = []

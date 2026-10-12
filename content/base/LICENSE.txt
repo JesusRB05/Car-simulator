@@ -1,0 +1,39 @@
+Car Simulator - Base Content license
+====================================
+
+Everything in this directory (the "Base Content", id "base") is licensed under
+the Creative Commons Attribution-ShareAlike 4.0 International License
+(CC BY-SA 4.0).
+
+You are free to:
+
+  - Share  - copy and redistribute the material in any medium or format.
+  - Adapt  - remix, transform, and build upon the material for any purpose,
+             even commercially.
+
+Under the following terms:
+
+  - Attribution   - You must give appropriate credit, provide a link to the
+                    license, and indicate if changes were made. You may do so
+                    in any reasonable manner, but not in any way that suggests
+                    the licensor endorses you or your use.
+  - ShareAlike    - If you remix, transform, or build upon the material, you
+                    must distribute your contributions under the same license
+                    as the original.
+  - No additional restrictions - You may not apply legal terms or
+                    technological measures that legally restrict others from
+                    doing anything the license permits.
+
+Full license text: https://creativecommons.org/licenses/by-sa/4.0/legalcode
+
+Human-readable summary: https://creativecommons.org/licenses/by-sa/4.0/
+
+SPDX-License-Identifier: CC-BY-SA-4.0
+
+Note: The engine source code is licensed separately under the GNU General
+Public License v3.0-or-later with a linking exception; see the LICENSE file at
+the repository root. This content license applies only to the files in this
+directory.
+
+No real car brands, cars or tracks are used anywhere in this content on
+purpose.
