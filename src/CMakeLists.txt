@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Car Simulator contributors
+add_subdirectory(core)
+add_subdirectory(platform)
+add_subdirectory(vfs)
+add_subdirectory(modding)
+add_subdirectory(scripting)
+add_subdirectory(plugin_api)
+add_subdirectory(rhi)
+add_subdirectory(render)
+add_subdirectory(physics)
+add_subdirectory(vehicle)
+add_subdirectory(telemetry)
+add_subdirectory(audio)
+add_subdirectory(net)
