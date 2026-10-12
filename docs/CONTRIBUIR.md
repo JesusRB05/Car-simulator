@@ -97,6 +97,20 @@ TEST_CASE("descripción")
 La integración continua (`.github/workflows/ci.yml`) compila y ejecuta los tests
 en Linux (GCC y Clang); el trabajo debe pasar antes de fusionarse.
 
+### Firma de los commits (DCO)
+
+Todo commit debe incluir la firma de desarrollador (Developer Certificate of
+Origin):
+
+```text
+Signed-off-by: Nombre Apellidos <email>
+```
+
+Con Git basta añadir `-s` al confirmar (`git commit -s`); la firma se añade a
+partir de `user.name`/`user.email`. Al firmar afirmas que tienes derecho a
+publicar el cambio bajo la licencia del proyecto. No se aceptan *pull requests*
+cuyos commits carezcan de `Signed-off-by`.
+
 ## Añadir contenido
 
 El contenido nuevo normalmente va en un **mod** (`mods/`), no en el árbol base.
