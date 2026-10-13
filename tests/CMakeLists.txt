@@ -43,7 +43,11 @@ if(SIM_ENABLE_GPU_TESTS)
              COMMAND $<TARGET_FILE:sim> --headless --contact-sheet "${_shot}/contact_sheet.png")
 
     # Golden-image regression + semantic (projected pixel) checks per scene.
-    set(_golden "${CMAKE_SOURCE_DIR}/tests/golden")
+    # References live in tests/golden/<driver>/, keyed by the Vulkan driver that
+    # produced them (lavapipe in CI, SwiftShader as an alternative). Picking a
+    # different driver transparently switches the whole set.
+    set(SIM_GOLDEN_DRIVER "lavapipe" CACHE STRING "Vulkan driver whose golden references are used")
+    set(_golden "${CMAKE_SOURCE_DIR}/tests/golden/${SIM_GOLDEN_DRIVER}")
     set(_scenes default grid pyramid ramp orbit tower checker rows)
     set(_golden_tests "")
     foreach(_scene IN LISTS _scenes)
@@ -65,7 +69,8 @@ if(SIM_ENABLE_GPU_TESTS)
     set(_gpu_tests sim_headless_default sim_headless_resize sim_headless_validation sim_contact_sheet ${_golden_tests})
     set_tests_properties(${_gpu_tests} PROPERTIES LABELS gpu WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
-    # Regenerate every golden reference (run manually after intentional changes):
+    # Regenerate every golden reference for the selected driver (run manually
+    # after intentional changes):
     #   cmake --build <build> --target update_golden
     add_custom_target(update_golden
         COMMAND ${CMAKE_COMMAND} -E echo "Regenerating golden images into ${_golden}"

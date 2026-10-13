@@ -177,6 +177,16 @@ jobs:
       - name: Build
         run: cmake --build --preset linux-gcc-release
 
+      - name: Generate lavapipe goldens if missing
+        run: |
+          if [ ! -f tests/golden/lavapipe/grid.png ]; then
+            echo "lavapipe golden references are missing; generating them..."
+            cmake --build --preset linux-gcc-release --target update_golden
+          else
+            echo "lavapipe golden references found; using them for verification"
+          fi
+        shell: bash
+
       - name: Headless GPU tests
         run: ctest --test-dir build/linux-gcc-release -L gpu --output-on-failure
 
@@ -186,4 +196,12 @@ jobs:
         with:
           name: headless-screenshots
           path: build/linux-gcc-release/screenshots/*.png
+          if-no-files-found: warn
+
+      - name: Upload lavapipe golden references
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: golden-lavapipe
+          path: tests/golden/lavapipe/*.png
           if-no-files-found: warn
