@@ -35,6 +35,13 @@ El *baseline* está fijado en `vcpkg.json`
 (`builtin-baseline`), de modo que todo el mundo instala exactamente las mismas
 versiones.
 
+> **Reproducible setup (English).** Point `VCPKG_ROOT` at a stable clone of
+> vcpkg, for example `C:\devcpkg` on Windows or `$HOME/vcpkg` on Linux;
+> never at a temporary folder. `vcpkg.json` pins `builtin-baseline`
+> (`e456309491fd875487bf02b8a0dca76c1b1b00cc`), so every machine and CI resolve
+> the same port versions. To update dependencies, bump the baseline in a
+> dedicated commit.
+
 ### Dependencias
 
 `cgltf`, `doctest`, `eigen3`, `glm`, `imgui`, `implot`, `ktx`, `luajit`,
@@ -48,6 +55,29 @@ El cargador de Vulkan **no** se enlaza: `volk` resuelve `vulkan-1.dll` /
 ## Presets
 
 ### Windows (MSVC + Ninja)
+
+**Developer environment (English).** The presets need `cl`, `ninja`, `cmake`
+and `ctest` on the `PATH`. Use Visual Studio 2022 or later (Build Tools are
+enough) with the "MSVC x64/x86 build tools" component, located with `vswhere`
+rather than a hardcoded path, and call `vcvars64.bat` from that installation.
+`tools\dev-env.bat` does this for you:
+
+```bat
+call tools\dev-env.bat
+set "VCPKG_ROOT=C:\devcpkg"
+```
+
+Manual equivalent (in a `.bat` file; use `%i` in an interactive prompt):
+
+```bat
+for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installerswhere.exe" -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+call "%VSINSTALL%\VC\Auxiliary\Buildcvars64.bat"
+```
+
+**Non-English MSVC.** Install the English language pack for Visual Studio.
+The Windows presets set `VSLANG=1033`; without the English pack, the localized
+`cl /showIncludes` prefix does not match what Ninja expects and Ninja silently
+loses header dependencies (edits to headers stop triggering rebuilds).
 
 ```powershell
 # Debug
@@ -80,7 +110,8 @@ Slang (`v2026.19`) mediante `FetchContent`. Puedes usar una copia local con:
 cmake --preset windows-msvc-debug -DSIM_SLANGC=C:\ruta\slang\bin\slangc.exe
 ```
 
-o definiendo la variable de entorno `SIM_SLANGC`.
+o definiendo la variable de entorno `SIM_SLANGC`. (In English: `SIM_SLANGC` can
+be given either as a CMake cache variable or as an environment variable.)
 
 La función `sim_slang_shader(objetivo shader entrada etapa)` compila cada shader
 `.slang` a SPIR-V en `${CMAKE_BINARY_DIR}/shaders/` y lo copia junto al
@@ -120,6 +151,9 @@ build/<preset>/lib/*.lib            (librerías estáticas de los módulos)
 
 - **`VCPKG_ROOT` no definido**: los presets fallan al no encontrar el toolchain
   de vcpkg. Define la variable de entorno.
+- **Header edits do not trigger rebuilds on Windows**: MSVC is running in a
+  non-English language. Install the English language pack (see above).
+- **`cl` / `ninja` not found**: run `call tools\dev-env.bat` first.
 - **`slangc` no encontrado**: deja que CMake lo descargue, o pasa
   `-DSIM_SLANGC=...`.
 - **No arranca / pantalla negra**: comprueba que el driver soporta Vulkan 1.3 y

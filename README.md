@@ -117,7 +117,7 @@ El script imprime la ruta del ICD. Configura y ejecuta los tests:
 
 ```powershell
 cmake --preset windows-msvc-release -DSIM_ENABLE_GPU_TESTS=ON `
-      -DSIM_VULKAN_ICD="C:\Programas\Car Simulator\tools\mesa\x64\lvp_icd.x86_64.json"
+      -DSIM_VULKAN_ICD="$PWD\tools\mesa\x64\lvp_icd.x86_64.json"
 cmake --build --preset windows-msvc-release
 ctest --test-dir build/windows-msvc-release -L gpu --output-on-failure
 ```

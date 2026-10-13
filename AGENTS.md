@@ -23,18 +23,36 @@ ImGui/ImPlot, modding y plugin API. La documentación del proyecto está en `doc
 
 ## Build
 
-Windows + presets CMake (MSVC). No hay `cmake`/`cl`/`ninja`/`ctest` en el PATH:
-hay que pasar por `vcvars64.bat` de Visual Studio. Locally `VCPKG_ROOT` apunta a
-un vcpkg y todos los presets lo usan (`VCPKG_MANIFEST_MODE` ON). El SHADER
-current slangc se resuelve con `SIM_SLANGC` o el env `SIM_SLANGC`.
+Windows builds use the CMake presets (MSVC + Ninja). `cmake`, `cl`, `ninja` and
+`ctest` are usually not on the `PATH`; open a developer environment first.
+
+- **Visual Studio 2022 or later** (Build Tools are enough) with the
+  "MSVC x64/x86 build tools" component. Locate it with `vswhere` instead of
+  hardcoding an edition or version path, then call
+  `VC\Auxiliary\Build\vcvars64.bat` from that installation.
+  `tools\dev-env.bat` does exactly this.
+- **vcpkg**: set the `VCPKG_ROOT` environment variable to a stable clone (for
+  example `C:\dev\vcpkg`, never a temporary folder). All presets take the
+  toolchain from `$env{VCPKG_ROOT}` and run in manifest mode; `vcpkg.json` pins
+  the `builtin-baseline`, so everyone gets the same dependency versions.
+- **slangc**: if it is not on the `PATH`, CMake downloads a prebuilt Slang.
+  To use a local copy, pass the `SIM_SLANGC` cache variable
+  (`-DSIM_SLANGC=...\slangc.exe`) or set the `SIM_SLANGC` environment variable.
+- **Non-English MSVC**: install the English language pack. The Windows presets
+  set `VSLANG=1033`; without the English pack `cl /showIncludes` prints
+  localized prefixes and Ninja silently loses header dependencies.
 
 ```bat
-call "C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Auxiliary\Build\vcvars64.bat"
+for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do set "VSINSTALL=%%i"
+call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat"
+rem or simply: call tools\dev-env.bat
 set "VCPKG_ROOT=C:\dev\vcpkg"
 cmake --preset windows-msvc-release
 cmake --build --preset windows-msvc-release --target sim       # app
 cmake --build --preset windows-msvc-release --target sim_tests # suite
 ```
+
+(Inside an interactive `cmd` prompt, write `%i` instead of `%%i`.)
 
 ## Tests
 
@@ -43,7 +61,7 @@ cmake --build --preset windows-msvc-release --target sim_tests # suite
   `ctest --test-dir build\windows-msvc-release -R sim_tests -V`.
 - Tests GPU (headless, requieren ICD Vulkan + `-DSIM_ENABLE_GPU_TESTS=ON`):
   con Mesa lavapipe,
-  `set VK_ICD_FILENAMES=C:\Programas\Car Simulator\tools\mesa\x64\lvp_icd.x86_64.json`
+  `set "VK_ICD_FILENAMES=%CD%\tools\mesa\x64\lvp_icd.x86_64.json"` (run from the repository root)
   y `tools\mesa\x64` en `PATH`; luego
   `ctest --test-dir build\windows-msvc-release -L gpu --output-on-failure`.
 - Dorados: las candidatas se regeneran a mano con
