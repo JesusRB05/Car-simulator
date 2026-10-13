@@ -40,4 +40,28 @@ struct TorqueConverter {
     Real turbineTorque(Real pumpTorque) const;       // T_t = TR * T_p
 };
 
+// Sequential shift controller (PHYSICS_PLAN Section 7.3). A request interrupts the
+// torque for the shift time (the gears swap at the end of it) and then ramps it
+// back in over the blend time, which is the torque interruption a dog or
+// synchroniser engagement needs.
+class SequentialShift {
+public:
+    Real shiftTime = 0.2;  // s of torque interruption
+    Real blendTime = 0.05; // s to ramp the torque back in
+
+    void request(int gear);
+    void step(Real deltaSeconds);
+
+    Real torqueFactor() const; // 0 during the interruption, then ramp to 1
+    bool shifting() const { return active_; }
+    int gear() const { return currentGear_; }
+    int target() const { return targetGear_; }
+
+private:
+    int currentGear_ = 0;
+    int targetGear_ = 0;
+    Real elapsed_ = 0.0;
+    bool active_ = false;
+};
+
 } // namespace sim::vehicle

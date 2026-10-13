@@ -37,4 +37,40 @@ Real TorqueConverter::turbineTorque(Real pumpTorque) const {
     return torqueRatio * pumpTorque;
 }
 
+void SequentialShift::request(int gear) {
+    if (active_ || gear == currentGear_) {
+        return;
+    }
+    targetGear_ = gear;
+    elapsed_ = 0.0;
+    active_ = true;
+}
+
+void SequentialShift::step(Real deltaSeconds) {
+    if (!active_) {
+        return;
+    }
+    elapsed_ += deltaSeconds;
+    if (elapsed_ >= shiftTime) {
+        currentGear_ = targetGear_; // the new gear engages when the interruption ends
+    }
+    if (elapsed_ >= shiftTime + blendTime - 1.0e-9) {
+        active_ = false;
+    }
+}
+
+Real SequentialShift::torqueFactor() const {
+    if (!active_) {
+        return 1.0;
+    }
+    if (elapsed_ < shiftTime) {
+        return 0.0;
+    }
+    if (blendTime <= 0.0) {
+        return 1.0;
+    }
+    const Real f = (elapsed_ - shiftTime) / blendTime;
+    return (f < 1.0) ? f : 1.0;
+}
+
 } // namespace sim::vehicle

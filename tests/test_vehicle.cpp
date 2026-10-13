@@ -1327,6 +1327,35 @@ TEST_CASE("the turbo boost lags towards its target and scales the torque") {
     CHECK(stepTurboBoost(turbo, 101325.0, 2.0e5, 5.0) == doctest::Approx(2.0e5).epsilon(1.0e-3));
 }
 
+TEST_CASE("the sequential shift interrupts and ramps the torque") {
+    SequentialShift shift;
+    shift.shiftTime = 0.2;
+    shift.blendTime = 0.1;
+
+    CHECK_FALSE(shift.shifting());
+    CHECK(shift.torqueFactor() == doctest::Approx(1.0));
+    CHECK(shift.gear() == 0);
+
+    shift.request(2);
+    CHECK(shift.shifting());
+    CHECK(shift.target() == 2);
+
+    shift.step(0.1); // still interrupting
+    CHECK(shift.torqueFactor() == doctest::Approx(0.0));
+    CHECK(shift.gear() == 0);
+
+    shift.step(0.1); // interruption ends, the new gear engages
+    CHECK(shift.gear() == 2);
+    CHECK(shift.torqueFactor() == doctest::Approx(0.0));
+
+    shift.step(0.05); // half-way through the blend
+    CHECK(shift.torqueFactor() == doctest::Approx(0.5));
+
+    shift.step(0.05); // blend done
+    CHECK(shift.torqueFactor() == doctest::Approx(1.0));
+    CHECK_FALSE(shift.shifting());
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 
