@@ -122,8 +122,11 @@ ObjectPushConstants:  model (mat4),           baseColor
 `src/render/shaders/mesh.slang` define las dos etapas del pipeline de escena:
 
 - `vertexMain`: transforma a espacio de mundo, luego a clip, y rota la normal.
-- `fragmentMain`: Lambert sencillo,
-  `color = baseColor.rgb * (0.18 + max(0, n·l) * lightColor.rgb)`.
+- `fragmentMain`: iluminación **per-face** clásica: la normal se interpola en
+  *flat* (`nointerpolation`), de modo que cada triángulo queda uniforme
+  (primitivas facetadas), y se combina Lambert direccional con **ambiente
+  hemisférico** (más claro hacia el cielo, más oscuro hacia el suelo, más una
+  pequeña contribución del albedo de la pieza).
 
 Se compilan a SPIR-V durante el build con la función `sim_slang_shader`, que
 genera `shaders/mesh.vertex.spv` y `shaders/mesh.fragment.spv` y los copia

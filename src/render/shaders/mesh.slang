@@ -24,7 +24,9 @@ ConstantBuffer<FrameUniforms> frame : register(b0);
 struct VSOutput
 {
     float4 position : SV_Position;
-    float3 worldNormal : NORMAL0;
+    // Flat interpolation so the lighting is constant per triangle (per-face):
+    // low-poly box/sphere/cylinder demos read as faceted primitives.
+    nointerpolation float3 worldNormal : NORMAL0;
     float2 uv : TEXCOORD0;
 };
 
@@ -45,9 +47,13 @@ float4 fragmentMain(VSOutput input) : SV_Target
     float3 n = normalize(input.worldNormal);
     float3 l = normalize(-frame.lightDirection.xyz);
     float ndl = saturate(dot(n, l));
-    // Constant ambient plus a small sky term so up-facing surfaces are never
-    // pitch black, then a single Lambert directional term.
-    float3 ambient = float3(0.22, 0.23, 0.26) + 0.18 * saturate(n.y);
+    // Hemispheric ambient: the hemisphere is a soft fill that is brighter when
+    // the face points up (sky) and dimmer when it points down (ground), which
+    // grounds the silhouettes. Base material contributes a small albedo amount.
+    float up = saturate(n.y);
+    float3 sky = float3(0.62, 0.66, 0.74);
+    float3 ground = float3(0.16, 0.17, 0.19);
+    float3 ambient = 0.45 * lerp(ground, sky, up) + 0.10 * push.baseColor.rgb;
     float3 color = push.baseColor.rgb * (ambient + ndl * frame.lightColor.rgb);
     return float4(color, push.baseColor.a);
 }
