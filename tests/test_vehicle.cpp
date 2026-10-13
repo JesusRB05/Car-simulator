@@ -356,6 +356,56 @@ TEST_CASE("camber modifies the tyre through thrust, peaks and shifts") {
     }
 }
 
+TEST_CASE("the .tir scaling factors scale the whole coefficient set") {
+    const MagicFormulaCoefficients c;
+    const Real fz0 = c.nominalLoad;
+
+    const auto state = [&](Real kappa, Real alpha) {
+        TireState s;
+        s.normalLoad = fz0;
+        s.slipRatio = kappa;
+        s.slipAngle = alpha;
+        return s;
+    };
+
+    SUBCASE("LMUX and LMUY scale the peaks") {
+        MagicFormulaCoefficients cc = c;
+        cc.scaling.muX = 1.2;
+        cc.scaling.muY = 0.8;
+        MagicFormulaTire tire(cc);
+        Real fxPeak = 0.0;
+        Real fyPeak = 0.0;
+        for (int i = 0; i <= 2000; ++i) {
+            const Real x = 0.5 * static_cast<Real>(i) / 2000.0;
+            fxPeak = std::max(fxPeak, tire.computeForces(state(x, 0.0)).longitudinal);
+            fyPeak = std::max(fyPeak, std::abs(tire.computeForces(state(0.0, x)).lateral));
+        }
+        CHECK(fxPeak == doctest::Approx(c.pDx1 * fz0 * cc.scaling.muX).epsilon(0.01));
+        CHECK(fyPeak == doctest::Approx(c.pDy1 * fz0 * cc.scaling.muY).epsilon(0.01));
+    }
+
+    SUBCASE("LKXK and LKYC scale the slip stiffness") {
+        MagicFormulaCoefficients cc = c;
+        cc.scaling.kxKappa = 1.5;
+        cc.scaling.kyAlpha = 0.6;
+        MagicFormulaTire tire(cc);
+        const Real eps = 1e-5;
+        const Real kx = fz0 * c.pKx1; // dfz = 0
+        const Real ky = c.pKy1 * fz0 * std::sin(2.0 * std::atan(1.0 / c.pKy2));
+        CHECK(tire.computeForces(state(eps, 0.0)).longitudinal / eps == doctest::Approx(kx * 1.5).epsilon(1e-3));
+        CHECK(-tire.computeForces(state(0.0, eps)).lateral / eps == doctest::Approx(ky * 0.6).epsilon(1e-3));
+    }
+
+    SUBCASE("LFZO rescales the nominal load used by dfz") {
+        MagicFormulaCoefficients cc = c;
+        cc.scaling.fz0 = 2.0; // rated load doubles, so dfz = -0.5 at the old load
+        MagicFormulaTire tire(cc);
+        const Real eps = 1e-5;
+        const Real slope = tire.computeForces(state(eps, 0.0)).longitudinal / eps;
+        CHECK(slope == doctest::Approx(fz0 * (c.pKx1 + c.pKx2 * (-0.5))).epsilon(1e-4));
+    }
+}
+
 TEST_CASE("the residual, overturning and rolling-resistance moments follow their coefficients") {
     const MagicFormulaCoefficients c;
     MagicFormulaTire tire(c);
@@ -657,6 +707,9 @@ TEST_CASE("a .tir file parses into the pure-slip coefficients") {
                            "PDX3 = 0.4\n"
                            "PVY3 = -0.25\n"
                            "PHX1 = 0.02\n"
+                           "LMUX = 1.15\n"
+                           "LKYC = 0.9\n"
+                           "LFZO = 1.0\n"
                            "QSX1 = 0.02\n"
                            "QDR1 = 0.015\n"
                            "ROLLING_RESISTANCE = 0.012\n"
@@ -681,6 +734,9 @@ TEST_CASE("a .tir file parses into the pure-slip coefficients") {
     CHECK(c.pDx3 == doctest::Approx(0.4));
     CHECK(c.pVy3 == doctest::Approx(-0.25));
     CHECK(c.pHx1 == doctest::Approx(0.02));
+    CHECK(c.scaling.muX == doctest::Approx(1.15));
+    CHECK(c.scaling.kyAlpha == doctest::Approx(0.9));
+    CHECK(c.scaling.fz0 == doctest::Approx(1.0));
     CHECK(c.qSx1 == doctest::Approx(0.02));
     CHECK(c.qDr1 == doctest::Approx(0.015));
     CHECK(c.rollingResistanceC0 == doctest::Approx(0.012));

@@ -12,6 +12,26 @@ namespace sim::vehicle {
 
 using physics::Real;
 
+// Scaling factors (the lambda of the `.tir` format). Applied to a base
+// coefficient set they produce a variant (a different compound, a worn or a
+// moulded tyre) without refitting. Each names the `.tir` key it maps to and all
+// default to 1, which leaves the base set untouched.
+struct TireScaling {
+    Real fz0 = 1.0;     // LFZO, nominal (rated) load
+    Real muX = 1.0;     // LMUX, longitudinal peak friction
+    Real muY = 1.0;     // LMUY, lateral peak friction
+    Real kxKappa = 1.0; // LKXK, longitudinal slip stiffness
+    Real kyAlpha = 1.0; // LKYC, cornering stiffness
+    Real cx = 1.0;      // LCX, longitudinal shape
+    Real cy = 1.0;      // LCY, lateral shape
+    Real ex = 1.0;      // LEX, longitudinal curvature
+    Real ey = 1.0;      // LEY, lateral curvature
+    Real hx = 1.0;      // LHX, longitudinal horizontal shift
+    Real hy = 1.0;      // LHY, lateral horizontal shift
+    Real vx = 1.0;      // LVX, longitudinal vertical shift
+    Real vy = 1.0;      // LVY, lateral vertical shift
+};
+
 // Pacejka Magic Formula 6.x pure-slip tyre. The coefficient set mirrors the
 // subset of a `.tir` file needed for Fx(kappa) and Fy(alpha); the loader for the
 // full file lands with P2.2. All coefficients refer to the nominal load Fz0.
@@ -111,6 +131,11 @@ struct MagicFormulaCoefficients {
     // the tyre radius; the caller advances the relaxed slips by the fixed step.
     Real relaxationLengthLongitudinal = 0.3;
     Real relaxationLengthLateral = 0.4;
+
+    // Scaling factors (the lambda of the `.tir` format), used to derive a variant
+    // (another compound, a worn or a moulded tyre) from a base file without
+    // refitting. They scale the whole coefficient set, so all default to 1.
+    TireScaling scaling{};
 
     Real radius = 0.31; // unloaded tyre radius (m)
 };
