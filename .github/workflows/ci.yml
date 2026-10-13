@@ -122,7 +122,7 @@ jobs:
 
       - name: Upload determinism hash
         if: matrix.build_type == 'release' && matrix.compiler == 'gcc'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: statehash-linux
           path: statehash.txt
@@ -134,7 +134,7 @@ jobs:
 
       - name: Upload dependency licence report
         if: matrix.build_type == 'release' && matrix.compiler == 'gcc'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-licenses
           path: dependency-licenses.txt
@@ -194,7 +194,7 @@ jobs:
 
       - name: Upload determinism hash
         if: matrix.build_type == 'release'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: statehash-windows
           path: statehash.txt
@@ -284,7 +284,7 @@ jobs:
 
       - name: Upload screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: headless-screenshots
           path: build/linux-gcc-release/screenshots/*.png
@@ -292,7 +292,7 @@ jobs:
 
       - name: Upload golden candidates
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: golden-candidates
           path: screenshots/golden_candidates/*.png
