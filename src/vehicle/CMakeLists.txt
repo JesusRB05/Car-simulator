@@ -50,6 +50,9 @@ add_library(sim_vehicle STATIC
     # Gearbox ratios and torque converter (Phase 2, P2.10).
     include/vehicle/Gearbox.hpp
     src/Gearbox.cpp
+    # Differentials (Phase 2, P2.10).
+    include/vehicle/Differential.hpp
+    src/Differential.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

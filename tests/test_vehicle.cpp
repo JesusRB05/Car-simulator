@@ -11,6 +11,7 @@
 #include "vehicle/AntiRollBar.hpp"
 #include "vehicle/Bushing.hpp"
 #include "vehicle/Clutch.hpp"
+#include "vehicle/Differential.hpp"
 #include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/Engine.hpp"
 #include "vehicle/Gearbox.hpp"
@@ -1182,6 +1183,67 @@ TEST_CASE("the gearbox scales torque and reflects inertia") {
     converter.torqueRatio = 2.0;
     CHECK(converter.pumpTorque(100.0) == doctest::Approx(5000.0));
     CHECK(converter.turbineTorque(5000.0) == doctest::Approx(10000.0));
+}
+
+TEST_CASE("the differentials split the torque by their laws") {
+    DifferentialInput input;
+    input.inputTorque = 100.0;
+
+    SUBCASE("open splits equally") {
+        DifferentialCoefficients c;
+        c.type = DifferentialType::Open;
+        const DifferentialOutput o = computeDifferentialTorques(c, input);
+        CHECK(o.leftTorque == doctest::Approx(50.0));
+        CHECK(o.rightTorque == doctest::Approx(50.0));
+    }
+
+    SUBCASE("the clutch pack transfers by the preload and the ramp") {
+        DifferentialCoefficients c;
+        c.type = DifferentialType::ClutchPack;
+        c.preloadTorque = 10.0;
+        c.powerRamp = 0.5;
+        c.slipScale = 0.1;
+
+        input.leftAngularVelocity = 1.0; // left faster: right gets the extra
+        const DifferentialOutput o = computeDifferentialTorques(c, input);
+        // capacity = 10 + 0.5*100 = 60, so the split is 50 -/+ 30.
+        CHECK(o.leftTorque == doctest::Approx(20.0));
+        CHECK(o.rightTorque == doctest::Approx(80.0));
+
+        input.leftAngularVelocity = -1.0;
+        const DifferentialOutput r = computeDifferentialTorques(c, input);
+        CHECK(r.leftTorque == doctest::Approx(80.0));
+        CHECK(o.leftTorque + o.rightTorque == doctest::Approx(100.0));
+    }
+
+    SUBCASE("a viscous coupling transfers with the slip") {
+        DifferentialCoefficients c;
+        c.type = DifferentialType::Viscous;
+        c.viscousCoefficient = 20.0;
+        input.leftAngularVelocity = 2.0;
+        const DifferentialOutput o = computeDifferentialTorques(c, input);
+        CHECK(o.leftTorque == doctest::Approx(30.0));
+        CHECK(o.rightTorque == doctest::Approx(70.0));
+    }
+
+    SUBCASE("a Torsen biases towards the slower wheel") {
+        DifferentialCoefficients c;
+        c.type = DifferentialType::Torsen;
+        c.torqueBiasRatio = 3.0;
+        input.leftAngularVelocity = 1.0; // left faster, so right (slow) gets 3/4
+        const DifferentialOutput o = computeDifferentialTorques(c, input);
+        CHECK(o.leftTorque == doctest::Approx(25.0));
+        CHECK(o.rightTorque == doctest::Approx(75.0));
+    }
+
+    SUBCASE("a spool forces the speeds together with a large couple") {
+        DifferentialCoefficients c;
+        c.type = DifferentialType::Locked;
+        input.leftAngularVelocity = 1.0e-3;
+        const DifferentialOutput o = computeDifferentialTorques(c, input);
+        CHECK(o.leftTorque == doctest::Approx(0.0));
+        CHECK(o.rightTorque == doctest::Approx(100.0));
+    }
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
