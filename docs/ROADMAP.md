@@ -141,8 +141,8 @@ ground interface, not rigid contacts). Work packages P1.1-P1.6 in the
 - **Tests:** box stack stays stable for 60 s; sphere bounce matches restitution;
   block-on-ramp matches `tan(theta) = mu` threshold; Newton's cradle conserves
   momentum; two runs and snapshot/restore stay bit-identical. Done: box stack
-  (and sleeping), sphere bounce/restitution, friction (sliding sphere at 5/7)
-  and the block-on-ramp threshold. Pending: Newton's cradle.
+  (and sleeping), sphere bounce/restitution, friction (sliding sphere at 5/7),
+  the block-on-ramp threshold and the Newton's cradle.
 - **Exit:** the chassis no longer falls through the ground; the render-test scenes
   can be run as physics scenes.
 

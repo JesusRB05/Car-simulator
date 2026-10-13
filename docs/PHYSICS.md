@@ -341,12 +341,13 @@ chain. `test_collision.cpp` covers the detection primitives (AABB, broadphase,
 SAT/clipping, cylinder), a resting box, the opt-in behaviour, friction (a sliding
 sphere rolling to 5/7 of its speed), restitution (dropped-sphere rebound),
 sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
-5-box stack stable for 60 s, the block-on-ramp friction threshold and contact
-determinism across repeated runs and snapshot/restore.
+5-box stack stable for 60 s, the block-on-ramp friction threshold, an elastic
+Newton's cradle and contact determinism across repeated runs and
+snapshot/restore.
 
 ## Results
 
-Full suite: **62 cases / 7232 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **63 cases / 7236 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -383,6 +384,7 @@ absolute error in metres/radians/J for physical magnitudes).
 | Box stack (5 boxes, 60 s) | Max horizontal drift / height error / residual speed | 0 | 9.15e-5 m / 1.47e-4 m / 0 | < 0.05 m / 0.05 m / 0.05 m/s | Warm-started PGS holds the stack essentially rigid; it sleeps, so the residual speed is exactly zero |
 | Resting stack wakes on impact | Woken bodies | 3 | 3 | 0 | exact | A projectile dropped on the sleeping stack wakes every box through the contact graph |
 | Block on ramp (μ = 0.5, 2 s) | Displacement from rest | 0 m | 9.8e-6 m (tan θ = 0.4) / 1.18 m (tan θ = 0.7) | < 0.01 m / > 0.1 m | Static friction holds below the cone (tan θ ≤ μ), slides above it |
+| Newton's cradle (3 equal balls, e = 1) | Linear momentum / exit speed | 2 kg·m/s | 2 kg·m/s (vx = 0, 0, 2 m/s) | < 1e-6 / > 0.9·v | An elastic impulse chain passes down the row and conserves momentum |
 | Sliding sphere, friction μ = 0.6 | Rolled speed | 5/7·v₀ = 1.42857 m/s | 1.42857 m/s | < 1e-5 | < 1e-2 | Starts sliding, rolls without slipping once the contact point stops: v → 5/7 v₀ for a solid sphere (I = 2/5 m r²); the discrete friction impulses land on the analytic value |
 | Sliding sphere, friction μ = 0 | Rolled speed | v₀ = 2.0 m/s | 2.0 m/s | 0 | < 2e-2 | No friction rows carry impulse, so the horizontal speed is preserved |
 | Dropped sphere, restitution e = 0.8 | Rebound apex (centre y) | 1.46 m | 1.5718 m | 0.112 | < 0.22 (15 %) | Rebound height = e²·drop; the ~8 % excess is the discrete contact detection giving a slightly faster approach than the ideal free-fall at the sampled step |

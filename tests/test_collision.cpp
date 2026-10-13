@@ -554,6 +554,53 @@ TEST_CASE("a block on a ramp holds while tan(theta) <= mu and slides otherwise")
     CHECK(slipping > 0.1);
 }
 
+TEST_CASE("an elastic collision chain conserves momentum (Newton's cradle)") {
+    PhysicsWorld world;
+    world.gravity = Vec3(0.0); // free space: no external force along the row
+
+    constexpr Real kRadius = 0.5;
+    constexpr Real kGap = 0.01;
+    constexpr int kBalls = 3;
+    constexpr Real kSpeed = 2.0;
+
+    std::vector<RigidBody*> balls;
+    for (int i = 0; i < kBalls; ++i) {
+        RigidBody& ball = world.createBody();
+        ball.shape = Shape::sphere(kRadius);
+        ball.setMass(1.0);
+        ball.setShapeInertia();
+        ball.position = Vec3(static_cast<Real>(i) * (2.0 * kRadius + kGap), 0.0, 0.0);
+        ball.restitution = 1.0; // elastic
+        ball.friction = 0.0;
+        ball.collisionEnabled = true;
+        ball.updateCache();
+        balls.push_back(&ball);
+    }
+    balls.front()->linearVelocity = Vec3(kSpeed, 0.0, 0.0);
+
+    const auto momentum = [&]() {
+        Real p = 0.0;
+        for (RigidBody* ball : balls) {
+            p += ball->mass * ball->linearVelocity.x;
+        }
+        return p;
+    };
+    const Real before = momentum();
+
+    for (int i = 0; i < 4000; ++i) {
+        world.step(1.0 / 1000.0);
+    }
+
+    const Real after = momentum();
+    MESSAGE("cradle momentum before = " << before << ", after = " << after << "; vx = " << balls[0]->linearVelocity.x
+                                        << ", " << balls[1]->linearVelocity.x << ", " << balls[2]->linearVelocity.x);
+    CHECK(std::abs(after - before) < 1e-6);
+    // The impulse travels down the row: the struck-end ball stops, the far one leaves.
+    CHECK(std::abs(balls[0]->linearVelocity.x) < 0.05);
+    CHECK(std::abs(balls[1]->linearVelocity.x) < 0.05);
+    CHECK(balls[2]->linearVelocity.x > 0.9 * kSpeed);
+}
+
 TEST_CASE("detectCollisions returns deterministic ordered manifolds") {
     PhysicsWorld world;
     RigidBody& ground = world.createBody();
