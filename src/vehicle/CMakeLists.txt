@@ -24,6 +24,9 @@ add_library(sim_vehicle STATIC
     # Double-wishbone hardpoint kinematics, the multibody reference (Phase 2, P2.5).
     include/vehicle/DoubleWishbone.hpp
     src/DoubleWishbone.cpp
+    # Spring, damper and progressive stops (Phase 2, P2.7).
+    include/vehicle/SpringDamper.hpp
+    src/SpringDamper.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

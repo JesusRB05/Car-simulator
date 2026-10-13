@@ -194,7 +194,9 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   (P2.5): the upright closure solved by a damped Newton over the five links, with
   camber, toe, the spring motion ratio, the steering-axis alignment (caster,
   kingpin inclination, scrub radius, mechanical trail) and the front-view, side-
-  view and roll centres derived from the pose.
+  view and roll centres derived from the pose. `SpringDamper`
+  (`vehicle/SpringDamper.hpp`) adds the coil spring, the asymmetric damper (linear
+  or piecewise-linear table) and the progressive bump and rebound stops (P2.7).
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,

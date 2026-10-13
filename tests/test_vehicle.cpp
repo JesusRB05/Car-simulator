@@ -16,6 +16,7 @@
 #include "vehicle/IVehicleModel.hpp"
 #include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/PlaceholderVehicle.hpp"
+#include "vehicle/SpringDamper.hpp"
 #include "vehicle/TireBristle.hpp"
 #include "vehicle/TireVertical.hpp"
 #include "vehicle/WheelSpin.hpp"
@@ -790,6 +791,84 @@ TEST_CASE("the instant centres and roll centre come out of the arm lines") {
         const Vec3 rc = rollCentre(l, r);
         CHECK(std::abs(rc.x) < 1e-9);
         CHECK(rc.y == doctest::Approx(-0.077796).epsilon(1e-4));
+    }
+}
+
+TEST_CASE("the spring, damper and stops give their own forces") {
+    SUBCASE("the coil spring is linear with a preload") {
+        SpringDamperCoefficients c;
+        c.stiffness = 50000.0;
+        c.restLength = 0.3;
+        c.preload = 200.0;
+
+        CHECK(computeSpringDamperForces(c, {0.28, 0.0}).spring == doctest::Approx(1200.0));
+        CHECK(computeSpringDamperForces(c, {0.30, 0.0}).spring == doctest::Approx(200.0));
+        CHECK(computeSpringDamperForces(c, {0.32, 0.0}).spring == doctest::Approx(-800.0));
+    }
+
+    SUBCASE("the damper is asymmetric between bump and rebound") {
+        SpringDamperCoefficients c;
+        c.dampingCompression = 3000.0;
+        c.dampingRebound = 6000.0;
+
+        CHECK(computeSpringDamperForces(c, {0.3, 0.1}).damper == doctest::Approx(300.0));
+        CHECK(computeSpringDamperForces(c, {0.3, -0.1}).damper == doctest::Approx(-600.0));
+    }
+
+    SUBCASE("the damper table interpolates and clamps") {
+        SpringDamperCoefficients c;
+        c.damperTable.speeds = {-0.5, 0.0, 0.5};
+        c.damperTable.forces = {-600.0, 0.0, 300.0};
+
+        CHECK(computeSpringDamperForces(c, {0.3, 0.25}).damper == doctest::Approx(150.0));
+        CHECK(computeSpringDamperForces(c, {0.3, 1.0}).damper == doctest::Approx(300.0));
+        CHECK(computeSpringDamperForces(c, {0.3, -1.0}).damper == doctest::Approx(-600.0));
+    }
+
+    SUBCASE("the bump stop is progressive and one-sided") {
+        SpringDamperCoefficients c;
+        c.hasBumpStop = true;
+        c.bumpStopLength = 0.25;
+        c.bumpStopStiffness = 1.0e6;
+        c.bumpStopExponent = 2.0;
+
+        CHECK(computeSpringDamperForces(c, {0.26, 0.0}).bumpStop == doctest::Approx(0.0));
+        CHECK(computeSpringDamperForces(c, {0.24, 0.0}).bumpStop == doctest::Approx(100.0));
+        CHECK(computeSpringDamperForces(c, {0.23, 0.0}).bumpStop == doctest::Approx(400.0));
+
+        c.bumpStopDamping = 5000.0;
+        CHECK(computeSpringDamperForces(c, {0.24, 0.1}).bumpStop == doctest::Approx(600.0));
+    }
+
+    SUBCASE("the rebound stop pulls against extension") {
+        SpringDamperCoefficients c;
+        c.hasReboundStop = true;
+        c.reboundStopLength = 0.35;
+        c.reboundStopStiffness = 2.0e6;
+        c.reboundStopExponent = 2.0;
+
+        CHECK(computeSpringDamperForces(c, {0.34, 0.0}).reboundStop == doctest::Approx(0.0));
+        CHECK(computeSpringDamperForces(c, {0.37, 0.0}).reboundStop == doctest::Approx(-800.0));
+
+        c.reboundStopDamping = 4000.0;
+        CHECK(computeSpringDamperForces(c, {0.37, 0.1}).reboundStop == doctest::Approx(-1200.0));
+    }
+
+    SUBCASE("the total sums the four contributions") {
+        SpringDamperCoefficients c;
+        c.stiffness = 50000.0;
+        c.restLength = 0.3;
+        c.dampingCompression = 3000.0;
+        c.hasBumpStop = true;
+        c.bumpStopLength = 0.25;
+        c.bumpStopStiffness = 1.0e6;
+        c.bumpStopExponent = 2.0;
+
+        const SpringDamperForces f = computeSpringDamperForces(c, {0.24, 0.1});
+        CHECK(f.spring == doctest::Approx(50000.0 * (0.3 - 0.24)));
+        CHECK(f.damper == doctest::Approx(300.0));
+        CHECK(f.bumpStop == doctest::Approx(100.0));
+        CHECK(f.total() == doctest::Approx(f.spring + f.damper + f.bumpStop));
     }
 }
 
