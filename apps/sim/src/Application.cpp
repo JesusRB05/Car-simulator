@@ -3,7 +3,6 @@
 #include "Application.hpp"
 
 #include <imgui.h>
-#include <implot.h>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -20,6 +19,7 @@
 #include "ImGuiLayer.hpp"
 #include "PhysicsScenes.hpp"
 #include "Scenes.hpp"
+#include "SimUi.hpp"
 #include "core/Log.hpp"
 #include "core/Version.hpp"
 
@@ -184,6 +184,7 @@ bool Application::initialise()
 
     imgui_ = std::make_unique<ImGuiLayer>(*device_, *swapchain_, window_->handle());
     window_->setEventHook([this](const SDL_Event& event) { imgui_->processEvent(event); });
+    ui_ = std::make_unique<SimUi>();
 
     telemetry_ = std::make_unique<telemetry::Telemetry>(600);
 
@@ -446,22 +447,61 @@ void Application::gatherSnapshots(SimSnapshot& interpolated)
 
 void Application::stepScenePhysics(double delta)
 {
-    if (sceneSelection_ <= 0 || sceneWorld_ == nullptr)
+    if (sceneWorld_ == nullptr || ui_ == nullptr || ui_->paused())
     {
         return;
     }
-    const double dt = sceneWorld_->fixedStep;
-    sceneWorldRemainder_ += delta;
-    int steps = 0;
-    while (sceneWorldRemainder_ >= dt && steps < 64)
+    // The time scale only changes how much wall time is fed to the fixed-step
+    // integrator; dt stays sceneWorld_->fixedStep. Long hitches are clamped so
+    // a stalled frame never triggers a burst of thousands of steps.
+    const double wall = std::min(delta, 0.1);
+    sceneWorld_->advance(wall * static_cast<double>(ui_->timeScale()));
+}
+
+void Application::loadScene(const std::string& name)
+{
+    sceneName_ = name;
+    sceneWorld_.reset();
+    if (ui_ != nullptr)
     {
-        sceneWorld_->step(dt);
-        sceneWorldRemainder_ -= dt;
-        ++steps;
+        ui_->resetHistory();
     }
-    if (steps >= 64)
+    if (name.empty())
     {
-        sceneWorldRemainder_ = 0.0;
+        return;
+    }
+
+    // Build once with the curated camera, then adopt it as the orbit start.
+    const float aspect = swapchain_->extent().height > 0
+                             ? static_cast<float>(swapchain_->extent().width) / static_cast<float>(swapchain_->extent().height)
+                             : 16.0f / 9.0f;
+    if (isPhysicsScene(name))
+    {
+        sceneWorld_ = std::make_unique<physics::PhysicsWorld>();
+        buildPhysicsWorld(name, *sceneWorld_);
+        buildSceneFromWorld(*sceneWorld_, scene_, cubeMesh_, sphereMesh_, cylinderMesh_, groundMesh_);
+        physicsSceneCamera(name, scene_, aspect);
+    }
+    else
+    {
+        buildScene(name, scene_, cubeMesh_, groundMesh_);
+    }
+    glm::vec3 center(0.0f);
+    float radius = 1.0f;
+    if (!sceneBounds(scene_, groundMesh_.get(), center, radius))
+    {
+        center = glm::vec3(0.0f);
+    }
+    sceneCamera_.fromCamera(scene_.camera(), center);
+}
+
+void Application::frameScene()
+{
+    glm::vec3 center(0.0f);
+    float radius = 1.0f;
+    if (!sceneName_.empty() && sceneBounds(scene_, groundMesh_.get(), center, radius))
+    {
+        sceneCamera_.frame(center, radius);
     }
 }
 
@@ -471,29 +511,17 @@ void Application::updateScene(const SimSnapshot& interpolated)
                              ? static_cast<float>(swapchain_->extent().width) / static_cast<float>(swapchain_->extent().height)
                              : 16.0f / 9.0f;
 
-    if (sceneSelection_ > 0)
+    if (!sceneName_.empty())
     {
-        const std::vector<std::string> names = sceneNames();
-        const int index = std::clamp(sceneSelection_ - 1, 0, static_cast<int>(names.size()) - 1);
-        const std::string name = names[static_cast<std::size_t>(index)];
-
-        if (isPhysicsScene(name))
+        if (sceneWorld_ != nullptr)
         {
-            if (sceneWorld_ == nullptr || sceneWorldName_ != name)
-            {
-                sceneWorld_ = std::make_unique<physics::PhysicsWorld>();
-                buildPhysicsWorld(name, *sceneWorld_);
-                sceneWorldRemainder_ = 0.0;
-                sceneWorldName_ = name;
-            }
             buildSceneFromWorld(*sceneWorld_, scene_, cubeMesh_, sphereMesh_, cylinderMesh_, groundMesh_);
-            physicsSceneCamera(name, scene_, aspect);
-            return;
         }
-
-        sceneWorld_.reset();
-        sceneWorldName_.clear();
-        buildScene(name, scene_, cubeMesh_, groundMesh_);
+        else
+        {
+            buildScene(sceneName_, scene_, cubeMesh_, groundMesh_);
+        }
+        sceneCamera_.apply(scene_.camera(), aspect);
         return;
     }
 
@@ -527,7 +555,7 @@ void Application::updateScene(const SimSnapshot& interpolated)
         scene_.add(cubeMesh_, wheel, glm::vec4(0.08f, 0.08f, 0.09f, 1.0f));
     }
 
-    scene_.camera().setPerspective(60.0f, aspect, 0.1f, 1000.0f);
+    scene_.camera().setPerspective(sceneCamera_.fovDegrees, aspect, 0.1f, 1000.0f);
 
     const glm::vec3 focus = position + glm::vec3(0.0f, 0.8f, 0.0f);
     if (cameraMode_ == CameraMode::Orbit)
@@ -563,9 +591,9 @@ void Application::handleCameraKeys()
                                                           : CameraMode::Chase;
     }
 
-    if (ImGui::IsKeyPressed(ImGuiKey_G, false))
+    if (!sceneName_.empty())
     {
-        debugDrawEnabled_ = !debugDrawEnabled_;
+        return; // inspection scenes: SimUi drives sceneCamera_
     }
 
     const bool looking = ImGui::IsMouseDown(ImGuiMouseButton_Right) && !io.WantCaptureMouse;
@@ -616,136 +644,196 @@ void Application::handleCameraKeys()
 
 void Application::drawUi()
 {
-    if (ImGui::Begin("Overview"))
+    SimUiFrame frame;
+    frame.activeScene = sceneName_;
+    frame.world = sceneWorld_.get();
+    if (sceneWorld_ != nullptr)
     {
-        ImGui::Text("Car Simulator %s", core::kVersionString);
-        ImGui::Text("FPS: %.1f (%.2f ms)", telemetry_->fps(), telemetry_->frameTimeMs());
-        ImGui::Text("Frame avg: %.2f ms", telemetry_->averageFrameTimeMs());
-        ImGui::Separator();
-        ImGui::Text("Physics: %.3f ms / %d steps", telemetry_->physicsTimeMs(), telemetry_->physicsSteps());
-        ImGui::Text("Render: %.3f ms", telemetry_->renderTimeMs());
-        ImGui::Text("GPU: %.3f ms", telemetry_->gpuTimeMs());
-        ImGui::Text("UI: %.3f ms", telemetry_->uiTimeMs());
-        ImGui::Separator();
-        ImGui::Text("Speed: %.1f km/h", current_.speed * 3.6);
-        ImGui::Text("RPM: %.0f", current_.rpm);
-        ImGui::Text("Sim time: %.2f s", current_.simTime);
-        ImGui::Text("Position: (%.1f, %.1f, %.1f)", current_.vehiclePosition.x, current_.vehiclePosition.y, current_.vehiclePosition.z);
+        frame.hasEnergy = true;
+        frame.totalEnergy = physicsSceneEnergy(sceneName_, *sceneWorld_);
     }
-    ImGui::End();
-
-    if (ImGui::Begin("Mods"))
+    else if (sceneName_.empty() && current_.bodyCount > 0)
     {
-        const modding::ModReport& report = mods_->report();
-        for (const modding::ModStatus& mod : report.mods)
-        {
-            const char* state = mod.state == modding::ModState::Active ? "active"
-                                : mod.state == modding::ModState::Disabled ? "disabled"
-                                                                            : "invalid";
-            ImGui::BulletText("%s %s [%s]", mod.name.c_str(), mod.version.c_str(), state);
-        }
-        if (report.mods.empty())
-        {
-            ImGui::TextUnformatted("No mods found.");
-        }
+        frame.hasEnergy = true;
+        frame.totalEnergy = current_.kineticEnergy + current_.potentialEnergy;
     }
-    ImGui::End();
+    frame.cpuFrameMs = telemetry_->frameTimeMs();
+    frame.gpuFrameMs = lastGpuMs_;
+    frame.fps = telemetry_->fps();
+    frame.nowSeconds = wallNow();
+    frame.viewportHeight = static_cast<float>(swapchain_->extent().height);
 
-    if (ImGui::Begin("Input"))
+    const SimUiActions actions = ui_->draw(frame, sceneCamera_);
+    if (actions.quit)
     {
-        ImGui::Text("Devices: %zu", input_->joystickCount());
-        for (std::size_t index = 0; index < input_->devices().size(); ++index)
+        window_->requestClose();
+    }
+    if (actions.loadScene)
+    {
+        loadScene(actions.scene);
+    }
+    if (actions.reset && sceneWorld_ != nullptr)
+    {
+        const glm::vec3 target = sceneCamera_.target;
+        const float yaw = sceneCamera_.yaw;
+        const float pitch = sceneCamera_.pitch;
+        const float distance = sceneCamera_.distance;
+        loadScene(sceneName_);
+        // A reset restarts the physics, not the user's view.
+        sceneCamera_.target = target;
+        sceneCamera_.yaw = yaw;
+        sceneCamera_.pitch = pitch;
+        sceneCamera_.distance = distance;
+    }
+    if (actions.step && sceneWorld_ != nullptr)
+    {
+        sceneWorld_->step(sceneWorld_->fixedStep);
+    }
+    if (actions.frameScene)
+    {
+        frameScene();
+    }
+    if (actions.loadScene || actions.reset || actions.step)
+    {
+        updateScene(current_); // show the new state this frame
+    }
+
+    PanelVisibility& panels = ui_->panels();
+    if (panels.vehicle)
+    {
+        if (ImGui::Begin("Vehicle", &panels.vehicle))
         {
-            const platform::InputDevice& device = input_->devices()[index];
-            ImGui::PushID(static_cast<int>(index));
-            ImGui::BulletText("%s%s", device.name.c_str(),
-                              device.isGamepad ? " (gamepad)"
-                              : device.axes.size() >= 4 ? " (wheel/pedals)"
-                                                        : " (joystick)");
-            if (ImGui::TreeNode("Details"))
+            ImGui::Text("Speed: %.1f km/h", current_.speed * 3.6);
+            ImGui::Text("RPM: %.0f", current_.rpm);
+            ImGui::Text("Sim time: %.2f s", current_.simTime);
+            ImGui::Text("Position: (%.1f, %.1f, %.1f)", current_.vehiclePosition.x, current_.vehiclePosition.y,
+                        current_.vehiclePosition.z);
+            ImGui::Text("Physics thread: %.3f ms / %d steps", telemetry_->physicsTimeMs(), telemetry_->physicsSteps());
+            ImGui::Text("Bodies: %d  Kinetic: %.2f J  Potential: %.2f J", current_.bodyCount, current_.kineticEnergy,
+                        current_.potentialEnergy);
+
+            ImGui::Separator();
+            const char* modeNames[] = {"Chase", "Orbit", "Free"};
+            int mode = static_cast<int>(cameraMode_);
+            if (ImGui::Combo("Camera (C)", &mode, modeNames, 3))
             {
-                for (std::size_t axis = 0; axis < device.axes.size(); ++axis)
-                {
-                    ImGui::Text("Axis %zu", axis);
-                    ImGui::SameLine();
-                    ImGui::ProgressBar((device.axes[axis] + 1.0f) * 0.5f, ImVec2(-1.0f, 0.0f));
-                }
-                ImGui::Text("Buttons (%zu)", device.buttons.size());
-                for (std::size_t button = 0; button < device.buttons.size(); ++button)
-                {
-                    ImGui::SameLine();
-                    const bool pressed = device.buttons[button];
-                    ImGui::TextColored(pressed ? ImVec4(0.3f, 1.0f, 0.3f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "%zu", button);
-                }
-                ImGui::TreePop();
+                cameraMode_ = static_cast<CameraMode>(mode);
             }
-            ImGui::PopID();
-        }
-        if (input_->devices().empty())
-        {
-            ImGui::TextUnformatted("No wheels, pedals or gamepads connected.");
-        }
-        ImGui::Separator();
-        ImGui::Text("Network: %.*s", static_cast<int>(net_->status().size()), net_->status().data());
-        ImGui::Text("Plugins: %zu", plugins_->plugins().size());
-    }
-    ImGui::End();
 
-    if (ImGui::Begin("View"))
+            ImGui::Separator();
+            if (ImGui::Button("Save snapshot"))
+            {
+                snapshotSaveRequest_.store(true, std::memory_order_relaxed);
+            }
+            ImGui::SameLine();
+            ImGui::BeginDisabled(!snapshotValid_.load(std::memory_order_relaxed));
+            if (ImGui::Button("Restore snapshot"))
+            {
+                snapshotRestoreRequest_.store(true, std::memory_order_relaxed);
+            }
+            ImGui::EndDisabled();
+            ImGui::Text("Snapshot: %s", snapshotValid_.load() ? "available" : "none");
+        }
+        ImGui::End();
+    }
+
+    if (panels.mods)
     {
-        const char* modeNames[] = {"Chase", "Orbit", "Free"};
-        int mode = static_cast<int>(cameraMode_);
-        if (ImGui::Combo("Camera (C)", &mode, modeNames, 3))
+        if (ImGui::Begin("Mods", &panels.mods))
         {
-            cameraMode_ = static_cast<CameraMode>(mode);
+            const modding::ModReport& report = mods_->report();
+            for (const modding::ModStatus& mod : report.mods)
+            {
+                const char* state = mod.state == modding::ModState::Active ? "active"
+                                    : mod.state == modding::ModState::Disabled ? "disabled"
+                                                                                : "invalid";
+                ImGui::BulletText("%s %s [%s]", mod.name.c_str(), mod.version.c_str(), state);
+            }
+            if (report.mods.empty())
+            {
+                ImGui::TextUnformatted("No mods found.");
+            }
         }
-        ImGui::Text("Right-drag to look, wheel to zoom (Orbit/Free).");
-
-        ImGui::Separator();
-        const std::vector<std::string> names = sceneNames();
-        std::vector<const char*> labels;
-        labels.reserve(names.size() + 1);
-        labels.push_back("driving");
-        for (const std::string& name : names)
-        {
-            labels.push_back(name.c_str());
-        }
-        ImGui::Combo("Scene", &sceneSelection_, labels.data(), static_cast<int>(labels.size()));
-
-        ImGui::Separator();
-        ImGui::Checkbox("Debug grid (G)", &debugDrawEnabled_);
-
-        ImGui::Separator();
-        if (ImGui::Button("Save snapshot"))
-        {
-            snapshotSaveRequest_.store(true, std::memory_order_relaxed);
-        }
-        ImGui::SameLine();
-        ImGui::BeginDisabled(!snapshotValid_.load(std::memory_order_relaxed));
-        if (ImGui::Button("Restore snapshot"))
-        {
-            snapshotRestoreRequest_.store(true, std::memory_order_relaxed);
-        }
-        ImGui::EndDisabled();
-        ImGui::Text("Snapshot: %s", snapshotValid_.load() ? "available" : "none");
+        ImGui::End();
     }
-    ImGui::End();
 
-    if (ImGui::Begin("Energy"))
+    if (panels.input)
     {
-        ImGui::Text("Bodies: %d  Kinetic: %.2f J  Potential: %.2f J", current_.bodyCount, current_.kineticEnergy,
-                    current_.potentialEnergy);
-        ImGui::Text("Total: %.2f J", current_.kineticEnergy + current_.potentialEnergy);
-        if (!energyKinetic_.empty() && ImPlot::BeginPlot("##energy", ImVec2(-1.0f, 220.0f)))
+        if (ImGui::Begin("Input", &panels.input))
         {
-            ImPlot::SetupAxes("frames", "joules");
-            const int count = static_cast<int>(energyKinetic_.size());
-            ImPlot::PlotLine("kinetic", energyKinetic_.data(), count);
-            ImPlot::PlotLine("potential", energyPotential_.data(), count);
-            ImPlot::EndPlot();
+            ImGui::Text("Devices: %zu", input_->joystickCount());
+            for (std::size_t index = 0; index < input_->devices().size(); ++index)
+            {
+                const platform::InputDevice& device = input_->devices()[index];
+                ImGui::PushID(static_cast<int>(index));
+                ImGui::BulletText("%s%s", device.name.c_str(),
+                                  device.isGamepad ? " (gamepad)"
+                                  : device.axes.size() >= 4 ? " (wheel/pedals)"
+                                                            : " (joystick)");
+                if (ImGui::TreeNode("Details"))
+                {
+                    for (std::size_t axis = 0; axis < device.axes.size(); ++axis)
+                    {
+                        ImGui::Text("Axis %zu", axis);
+                        ImGui::SameLine();
+                        ImGui::ProgressBar((device.axes[axis] + 1.0f) * 0.5f, ImVec2(-1.0f, 0.0f));
+                    }
+                    ImGui::Text("Buttons (%zu)", device.buttons.size());
+                    for (std::size_t button = 0; button < device.buttons.size(); ++button)
+                    {
+                        ImGui::SameLine();
+                        const bool pressed = device.buttons[button];
+                        ImGui::TextColored(pressed ? ImVec4(0.3f, 1.0f, 0.3f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "%zu", button);
+                    }
+                    ImGui::TreePop();
+                }
+                ImGui::PopID();
+            }
+            if (input_->devices().empty())
+            {
+                ImGui::TextUnformatted("No wheels, pedals or gamepads connected.");
+            }
+            ImGui::Separator();
+            ImGui::Text("Network: %.*s", static_cast<int>(net_->status().size()), net_->status().data());
+            ImGui::Text("Plugins: %zu", plugins_->plugins().size());
         }
+        ImGui::End();
     }
-    ImGui::End();
+}
+
+void Application::drawDebugOverlay(rhi::CommandList& commandList)
+{
+    if (debugDraw_ == nullptr || ui_ == nullptr)
+    {
+        return;
+    }
+    const DebugDrawFlags& flags = ui_->debugFlags();
+    debugDraw_->clear();
+    if (flags.grid)
+    {
+        debugDraw_->addGrid(20.0f, 1.0f, {0.55f, 0.58f, 0.62f, 1.0f}, {0.75f, 0.30f, 0.20f, 1.0f});
+    }
+    if (flags.worldAxes)
+    {
+        debugDraw_->addAxes({0.0f, 0.02f, 0.0f}, 3.0f);
+    }
+    if (sceneWorld_ != nullptr)
+    {
+        PhysicsDebugOptions options;
+        options.reference = flags.reference;
+        options.joints = flags.joints;
+        options.springs = flags.springs;
+        options.bodyAxes = flags.bodyAxes;
+        options.velocities = flags.velocities;
+        drawPhysicsSceneDebug(sceneName_, *sceneWorld_, *debugDraw_, options);
+    }
+    if (debugDraw_->empty())
+    {
+        return;
+    }
+    rhi::ColorAttachment overlay = frame_->swapchainAttachment();
+    overlay.loadOp = rhi::LoadOp::Load;
+    debugDraw_->render(commandList, scene_.camera(), overlay);
 }
 
 int Application::run()
@@ -791,14 +879,6 @@ int Application::run()
         stepScenePhysics(delta);
         updateScene(interpolated);
 
-        energyKinetic_.push_back(static_cast<float>(current_.kineticEnergy));
-        energyPotential_.push_back(static_cast<float>(current_.potentialEnergy));
-        if (energyKinetic_.size() > 600)
-        {
-            energyKinetic_.erase(energyKinetic_.begin());
-            energyPotential_.erase(energyPotential_.begin());
-        }
-
         const bool resized = window_->wasResized() || swapchain_->framebufferResized();
         if (resized)
         {
@@ -835,20 +915,8 @@ int Application::run()
         renderer_->renderScene(commandList, scene_, frame_->swapchainAttachment(rhi::LoadOp::Clear, sky.r, sky.g, sky.b, sky.a),
                                frame_->slot());
         gpuTimer_->end(commandList, frame_->slot());
-        const bool physicsOverlay = !sceneWorldName_.empty();
-        if ((debugDrawEnabled_ || physicsOverlay) && debugDraw_ != nullptr)
-        {
-            debugDraw_->clear();
-            debugDraw_->addGrid(20.0f, 1.0f, {0.55f, 0.58f, 0.62f, 1.0f}, {0.75f, 0.30f, 0.20f, 1.0f});
-            debugDraw_->addAxes({0.0f, 0.02f, 0.0f}, 3.0f);
-            if (physicsOverlay)
-            {
-                drawPhysicsSceneDebug(sceneWorldName_, *sceneWorld_, *debugDraw_);
-            }
-            rhi::ColorAttachment overlay = frame_->swapchainAttachment();
-            overlay.loadOp = rhi::LoadOp::Load;
-            debugDraw_->render(commandList, scene_.camera(), overlay);
-        }
+        lastGpuMs_ = gpuMs;
+        drawDebugOverlay(commandList);
         const double uiStart = wallNow();
         imgui_->endFrame(commandList.handle());
         const double uiEnd = wallNow();

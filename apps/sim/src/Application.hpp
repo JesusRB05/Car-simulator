@@ -38,11 +38,14 @@
 #include "vehicle/PlaceholderVehicle.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
+#include "OrbitCamera.hpp"
+
 #include <volk.h>
 
 namespace sim::app {
 
 class ImGuiLayer;
+class SimUi;
 
 // One physics state, produced by the physics thread and consumed by the render
 // thread. Copied through a lock-free single-producer/single-consumer ring.
@@ -120,6 +123,9 @@ private:
     void updateDemoCamera(const glm::vec3& target);
     void handleCameraKeys();
     void drawUi();
+    void loadScene(const std::string& name);
+    void frameScene();
+    void drawDebugOverlay(rhi::CommandList& commandList);
 
     enum class CameraMode
     {
@@ -173,23 +179,24 @@ private:
     float freePitch_ = -0.15f;
     glm::vec3 freePosition_{0.0f, 3.0f, 8.0f};
 
-    // Demo scene selector (phase D). 0 is the interactive driving scene; 1..N
-    // are entries of sceneNames() rendered for inspection (static render-test
-    // scenes, or live physics scenes stepped on the main thread).
-    int sceneSelection_ = 0;
+    // Active scene: empty is the interactive driving scene, otherwise an entry
+    // of sceneCatalog() rendered for inspection (static render-test scenes, or
+    // live physics scenes stepped on the main thread).
+    std::string sceneName_;
 
     // Physics demo scenes run in their own world on the main thread, separate
-    // from the vehicle world on the physics thread.
+    // from the vehicle world on the physics thread. Wall time (scaled by the
+    // UI time scale) is fed to PhysicsWorld::advance(), which keeps the step
+    // fixed.
     std::unique_ptr<physics::PhysicsWorld> sceneWorld_;
-    std::string sceneWorldName_;
-    double sceneWorldRemainder_ = 0.0;
 
-    // Instanced debug overlay (ground grid + world axes), toggled in the UI.
-    bool debugDrawEnabled_ = false;
+    // Mouse-driven camera of the inspection scenes (also owns the FOV used by
+    // the driving cameras).
+    OrbitCamera sceneCamera_;
 
-    // Rolling energy history for the ImPlot panel (phase D).
-    std::vector<float> energyKinetic_;
-    std::vector<float> energyPotential_;
+    // Windowed-mode ImGui interface (menus, panels, shortcuts).
+    std::unique_ptr<SimUi> ui_;
+    double lastGpuMs_ = 0.0;
 
     // Snapshot save/restore is requested by the UI thread and executed on the
     // physics thread so it never races the simulation.

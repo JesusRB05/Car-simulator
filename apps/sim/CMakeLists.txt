@@ -5,8 +5,10 @@ add_executable(sim
     src/Application.cpp
     src/ImGuiLayer.cpp
     src/HeadlessRunner.cpp
+    src/OrbitCamera.cpp
     src/PhysicsScenes.cpp
-    src/Scenes.cpp)
+    src/Scenes.cpp
+    src/SimUi.cpp)
 
 find_package(Stb REQUIRED)
 target_include_directories(sim PRIVATE src ${Stb_INCLUDE_DIR})

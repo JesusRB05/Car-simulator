@@ -64,3 +64,6 @@ screenshots/*.png
 
 # Local agent / assistant folders (worktrees, settings)
 .claude/
+
+# Per-user ImGui layout and panel visibility written by the windowed app
+imgui.ini
