@@ -196,7 +196,8 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   kingpin inclination, scrub radius, mechanical trail) and the front-view, side-
   view and roll centres derived from the pose. `SpringDamper`
   (`vehicle/SpringDamper.hpp`) adds the coil spring, the asymmetric damper (linear
-  or piecewise-linear table) and the progressive bump and rebound stops (P2.7).
+  or piecewise-linear table) and the progressive bump and rebound stops, and
+  `AntiRollBar` (`vehicle/AntiRollBar.hpp`) the roll-stiffness couple (P2.7).
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,

@@ -6,6 +6,7 @@
 #include <sstream>
 
 // Every interface header is included so that it is compile-checked here.
+#include "vehicle/AntiRollBar.hpp"
 #include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/IAerodynamics.hpp"
 #include "vehicle/IBrakeSystem.hpp"
@@ -870,6 +871,22 @@ TEST_CASE("the spring, damper and stops give their own forces") {
         CHECK(f.bumpStop == doctest::Approx(100.0));
         CHECK(f.total() == doctest::Approx(f.spring + f.damper + f.bumpStop));
     }
+}
+
+TEST_CASE("the anti-roll bar answers only a travel difference") {
+    const Real kTheta = 20000.0;
+    const Real tA = 1.0;
+
+    const AntiRollBarForces level = computeAntiRollBarForces(kTheta, tA, 0.02, 0.02);
+    CHECK(level.left == doctest::Approx(0.0));
+    CHECK(level.right == doctest::Approx(0.0));
+
+    const AntiRollBarForces rolled = computeAntiRollBarForces(kTheta, tA, 0.03, 0.01);
+    CHECK(rolled.left == doctest::Approx(-400.0));
+    CHECK(rolled.right == doctest::Approx(400.0));
+    CHECK(rolled.left + rolled.right == doctest::Approx(0.0)); // a couple, no net force
+
+    CHECK(computeAntiRollBarForces(kTheta, 0.0, 0.03, 0.01).left == doctest::Approx(0.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {

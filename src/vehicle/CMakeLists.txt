@@ -27,6 +27,9 @@ add_library(sim_vehicle STATIC
     # Spring, damper and progressive stops (Phase 2, P2.7).
     include/vehicle/SpringDamper.hpp
     src/SpringDamper.cpp
+    # Anti-roll bar (Phase 2, P2.7).
+    include/vehicle/AntiRollBar.hpp
+    src/AntiRollBar.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)
