@@ -47,7 +47,60 @@ struct MagicFormulaCoefficients {
     Real qDz2 = -0.05; // trail load sensitivity
     Real qEz1 = -1.0;  // trail curvature
 
+    // Residual self-aligning torque Mzr = Dr cos(Cr atan(Br alpha_r)) cos(alpha),
+    // with alpha_r = alpha + SHr, Br = qBz * (qBr1 + qBr2 dfz), Dr = Fz R0 (qDr).
+    // It adds a small torque that survives as the pneumatic trail vanishes.
+    Real qCr1 = 1.0;  // residual torque shape
+    Real qBr1 = 0.1;  // residual stiffness at the nominal load
+    Real qBr2 = 0.0;  // residual stiffness load sensitivity
+    Real qDr1 = 0.01; // residual peak (as a fraction of Fz R0)
+    Real qDr2 = 0.0;  // residual peak load sensitivity
+    Real qHr1 = 0.0;  // residual horizontal shift (rad)
+
+    // Overturning moment Mx = R0 Fz (qSx1 - qSx2 gamma + qSx3 Fy / Fz0).
+    Real qSx1 = 0.0;
+    Real qSx2 = 0.0;
+    Real qSx3 = 0.0;
+
+    // Rolling resistance as a speed-dependent coefficient Crr = C0 + C1 v + C2 v^2,
+    // applied as the moment My = -Crr Fz Rl (Section 4.7).
+    Real rollingResistanceC0 = 0.01;
+    Real rollingResistanceC1 = 0.0;
+    Real rollingResistanceC2 = 0.0;
+
+    // Combined-slip weighting functions (MF 6.x subset). Ax is the shaping of the
+    // longitudinal force with slip angle and Ay of the lateral force with slip
+    // ratio: Gxa = cos(Cxa atan(Bxa alpha_s))/cos(Cxa atan(Bxa SHxa)), etc.
+    Real rBx1 = 12.0;  // longitudinal weighting slope factor
+    Real rBx2 = -10.0; // slip-ratio influence on the longitudinal slope
+    Real rCx1 = 1.0;   // longitudinal weighting shape
+    Real rHx1 = 0.0;   // longitudinal weighting shift (rad)
+    Real rBy1 = 8.0;   // lateral weighting slope factor
+    Real rBy2 = 8.0;   // slip-angle influence on the lateral slope
+    Real rBy3 = 0.0;   // lateral weighting shift scale
+    Real rCy1 = 1.0;   // lateral weighting shape
+    Real rHy1 = 0.0;   // lateral weighting shift (dimensionless)
+
+    // Slip-vector (friction-ellipse) form: the reference slip ratio and slip angle
+    // at which the pure-slip forces peak, used to normalise the combined slip.
+    Real peakSlipRatio = 0.12;
+    Real peakSlipAngle = 0.13;
+
+    // Transient relaxation lengths (Section 4.4), sigma in metres. They scale with
+    // the tyre radius; the caller advances the relaxed slips by the fixed step.
+    Real relaxationLengthLongitudinal = 0.3;
+    Real relaxationLengthLateral = 0.4;
+
     Real radius = 0.31; // unloaded tyre radius (m)
+};
+
+// Which combined-slip formulation the tyre uses. Both satisfy the friction-circle
+// bound; the weighting functions follow the MF 6.x family, while the slip-vector
+// form keeps the force aligned with the slip direction and stays well behaved far
+// outside the fitted data (spins, drifts, loose surfaces).
+enum class CombinedSlipModel {
+    WeightingFunctions,
+    SlipVector,
 };
 
 class MagicFormulaTire : public ITireModel {
@@ -57,11 +110,16 @@ public:
 
     const MagicFormulaCoefficients& coefficients() const { return coefficients_; }
 
+    // Selects the combined-slip formulation (default: weighting functions).
+    void setCombinedSlipModel(CombinedSlipModel model) { combinedSlipModel_ = model; }
+    CombinedSlipModel combinedSlipModel() const { return combinedSlipModel_; }
+
     TireForces computeForces(const TireState& state) const override;
     Real unloadedRadius() const override { return coefficients_.radius; }
 
 private:
     MagicFormulaCoefficients coefficients_{};
+    CombinedSlipModel combinedSlipModel_ = CombinedSlipModel::WeightingFunctions;
 };
 
 // Parses the pure-slip subset of a TNO `.tir` file: section headers in square

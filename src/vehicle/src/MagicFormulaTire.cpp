@@ -70,6 +70,62 @@ MagicFormulaCoefficients parseMagicFormulaCoefficients(std::istream& input) {
             c.pKy1 = value;
         } else if (key == "PKY2") {
             c.pKy2 = value;
+        } else if (key == "QBZ1") {
+            c.qBz1 = value;
+        } else if (key == "QCZ1") {
+            c.qCz1 = value;
+        } else if (key == "QDZ1") {
+            c.qDz1 = value;
+        } else if (key == "QDZ2") {
+            c.qDz2 = value;
+        } else if (key == "QEZ1") {
+            c.qEz1 = value;
+        } else if (key == "QCR1") {
+            c.qCr1 = value;
+        } else if (key == "QBR1") {
+            c.qBr1 = value;
+        } else if (key == "QBR2") {
+            c.qBr2 = value;
+        } else if (key == "QDR1") {
+            c.qDr1 = value;
+        } else if (key == "QDR2") {
+            c.qDr2 = value;
+        } else if (key == "QHR1") {
+            c.qHr1 = value;
+        } else if (key == "QSX1") {
+            c.qSx1 = value;
+        } else if (key == "QSX2") {
+            c.qSx2 = value;
+        } else if (key == "QSX3") {
+            c.qSx3 = value;
+        } else if (key == "RBX1") {
+            c.rBx1 = value;
+        } else if (key == "RBX2") {
+            c.rBx2 = value;
+        } else if (key == "RCX1") {
+            c.rCx1 = value;
+        } else if (key == "RHX1") {
+            c.rHx1 = value;
+        } else if (key == "RBY1") {
+            c.rBy1 = value;
+        } else if (key == "RBY2") {
+            c.rBy2 = value;
+        } else if (key == "RBY3") {
+            c.rBy3 = value;
+        } else if (key == "RCY1") {
+            c.rCy1 = value;
+        } else if (key == "RHY1") {
+            c.rHy1 = value;
+        } else if (key == "ROLLING_RESISTANCE") {
+            c.rollingResistanceC0 = value;
+        } else if (key == "ROLLING_RESISTANCE_C1") {
+            c.rollingResistanceC1 = value;
+        } else if (key == "ROLLING_RESISTANCE_C2") {
+            c.rollingResistanceC2 = value;
+        } else if (key == "SIGMA_X") {
+            c.relaxationLengthLongitudinal = value;
+        } else if (key == "SIGMA_Y") {
+            c.relaxationLengthLateral = value;
         }
     }
     return c;

@@ -250,6 +250,15 @@ TEST_CASE("a .tir file parses into the pure-slip coefficients") {
                            "PKX1 = 26\n"
                            "PKY1 = 14\n"
                            "PKY2 = 2.2\n"
+                           "RBY1 = 9.5\n"
+                           "RBY2 = 7.5\n"
+                           "RCY1 = 1.2\n"
+                           "RHY1 = 0.01\n"
+                           "QSX1 = 0.02\n"
+                           "QDR1 = 0.015\n"
+                           "ROLLING_RESISTANCE = 0.012\n"
+                           "SIGMA_X = 0.35\n"
+                           "SIGMA_Y = 0.45\n"
                            "SOME_OTHER_COEFFICIENT = 99\n"
                            "[VERTICAL]\n"
                            "VERTICAL_STIFFNESS = 200000\n");
@@ -262,6 +271,15 @@ TEST_CASE("a .tir file parses into the pure-slip coefficients") {
     CHECK(c.pKx1 == doctest::Approx(26.0));
     CHECK(c.pKy1 == doctest::Approx(14.0));
     CHECK(c.pKy2 == doctest::Approx(2.2));
+    CHECK(c.rBy1 == doctest::Approx(9.5));
+    CHECK(c.rBy2 == doctest::Approx(7.5));
+    CHECK(c.rCy1 == doctest::Approx(1.2));
+    CHECK(c.rHy1 == doctest::Approx(0.01));
+    CHECK(c.qSx1 == doctest::Approx(0.02));
+    CHECK(c.qDr1 == doctest::Approx(0.015));
+    CHECK(c.rollingResistanceC0 == doctest::Approx(0.012));
+    CHECK(c.relaxationLengthLongitudinal == doctest::Approx(0.35));
+    CHECK(c.relaxationLengthLateral == doctest::Approx(0.45));
     CHECK(c.pDx2 == doctest::Approx(MagicFormulaCoefficients{}.pDx2)); // untouched default
 
     // A parse followed by a model evaluation works end to end.
