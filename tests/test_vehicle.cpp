@@ -198,6 +198,86 @@ TEST_CASE("MagicFormulaTire matches the pure-slip Magic Formula curve") {
     CHECK(tire.unloadedRadius() == doctest::Approx(c.radius));
 }
 
+TEST_CASE("combined slip stays inside the friction circle in both forms") {
+    MagicFormulaTire tire;
+    const Real fz0 = tire.coefficients().nominalLoad;
+    const Real limit = std::max(tire.coefficients().pDx1, tire.coefficients().pDy1) * fz0;
+
+    for (const CombinedSlipModel model : {CombinedSlipModel::WeightingFunctions, CombinedSlipModel::SlipVector}) {
+        tire.setCombinedSlipModel(model);
+        for (int ki = -10; ki <= 10; ++ki) {
+            for (int ai = -6; ai <= 6; ++ai) {
+                TireState s;
+                s.normalLoad = fz0;
+                s.slipRatio = 0.1 * static_cast<Real>(ki);
+                s.slipAngle = 0.1 * static_cast<Real>(ai);
+                const TireForces f = tire.computeForces(s);
+                const Real magnitude = std::sqrt(f.longitudinal * f.longitudinal + f.lateral * f.lateral);
+                CHECK(magnitude <= limit * 1.0000001);
+                // Zero slip gives zero force in both formulations.
+                if (ki == 0 && ai == 0) {
+                    CHECK(magnitude == doctest::Approx(0.0));
+                }
+            }
+        }
+    }
+}
+
+TEST_CASE("the weighting functions never exceed the pure-slip force") {
+    MagicFormulaTire tire; // weighting functions by default
+    const Real fz0 = tire.coefficients().nominalLoad;
+
+    const auto state = [&](Real kappa, Real alpha) {
+        TireState s;
+        s.normalLoad = fz0;
+        s.slipRatio = kappa;
+        s.slipAngle = alpha;
+        return s;
+    };
+
+    for (int i = 1; i <= 10; ++i) {
+        const Real kappa = 0.05 * static_cast<Real>(i);
+        const Real alpha = 0.05 * static_cast<Real>(i);
+
+        const TireForces pureX = tire.computeForces(state(kappa, 0.0));
+        const TireForces combX = tire.computeForces(state(kappa, alpha));
+        CHECK(combX.longitudinal > 0.0);                                     // still driving
+        CHECK(std::abs(combX.longitudinal) <= std::abs(pureX.longitudinal)); // and reduced
+
+        const TireForces pureY = tire.computeForces(state(0.0, alpha));
+        const TireForces combY = tire.computeForces(state(kappa, alpha));
+        CHECK(combY.lateral < 0.0);                                // still opposes alpha
+        CHECK(std::abs(combY.lateral) <= std::abs(pureY.lateral)); // and reduced
+    }
+}
+
+TEST_CASE("the slip-vector form aligns the resultant with the slip direction") {
+    MagicFormulaTire tire;
+    tire.setCombinedSlipModel(CombinedSlipModel::SlipVector);
+    const MagicFormulaCoefficients& c = tire.coefficients();
+    const Real fz0 = c.nominalLoad;
+
+    const auto state = [&](Real kappa, Real alpha) {
+        TireState s;
+        s.normalLoad = fz0;
+        s.slipRatio = kappa;
+        s.slipAngle = alpha;
+        return s;
+    };
+
+    // The resultant peaks (equals mu * Fz) exactly at the reference slip.
+    const TireForces peak = tire.computeForces(state(c.peakSlipRatio, 0.0));
+    CHECK(peak.longitudinal == doctest::Approx(c.pDx1 * fz0).epsilon(1e-6));
+
+    // Sign follows the slip: driving is +Fx, a positive slip angle gives -Fy.
+    const TireForces f = tire.computeForces(state(0.2, 0.15));
+    CHECK(f.longitudinal > 0.0);
+    CHECK(f.lateral < 0.0);
+    const TireForces mirrored = tire.computeForces(state(-0.2, -0.15));
+    CHECK(mirrored.longitudinal == doctest::Approx(-f.longitudinal));
+    CHECK(mirrored.lateral == doctest::Approx(-f.lateral));
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 
