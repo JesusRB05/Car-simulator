@@ -1,130 +1,128 @@
-# Arquitectura
+# Architecture
 
-Este documento describe cómo está organizado el simulador, las convenciones que
-sigue todo el código y cómo se comunican las distintas capas.
+This document describes how the simulator is organised, the conventions all
+the code follows and how the different layers communicate.
 
-## Principios
+## Principles
 
-1. **Sin motores de terceros** para física ni render. Se permiten bibliotecas de
-   utilidad (Vulkan headers, VMA, volk, glm, SDL3, ...), pero el motor de
-   física y el renderizador son propios.
-2. **Unidades del SI** en todo el motor (metros, kilogramos, segundos,
-   radianes). No hay unidades "de juego" escondidas.
-3. **Precisión controlada**: las posiciones del mundo se guardan en `double`
-   (`glm::dvec3`); lo local y lo que va a la GPU, en `float`.
-4. **Determinismo**: mismo conjunto de entradas ⇒ misma secuencia de estados,
-   con independencia de la velocidad de la máquina.
-5. **Sistema de coordenadas**: diestro (right-handed), **+Y arriba**, **-Z
-   adelante**.
-6. **Separación estricta por capas**: cada módulo depende solo de los que están
-   por debajo. La física no conoce el render; el RHI no conoce SDL.
+1. **No third-party engines** for physics or rendering. Utility libraries are
+   allowed (Vulkan headers, VMA, volk, glm, SDL3, ...), but the physics engine
+   and the renderer are our own.
+2. **SI units** throughout the engine (metres, kilograms, seconds, radians).
+   There are no hidden "game" units.
+3. **Controlled precision**: world positions are stored as `double`
+   (`glm::dvec3`); local data and whatever goes to the GPU use `float`.
+4. **Determinism**: the same set of inputs ⇒ the same sequence of states,
+   regardless of how fast the machine is.
+5. **Coordinate system**: right-handed, **+Y up**, **-Z forward**.
+6. **Strict layering**: each module depends only on the ones below it. Physics
+   knows nothing about rendering; the RHI knows nothing about SDL.
 
-## Capas y módulos
+## Layers and modules
 
-De abajo hacia arriba:
+From bottom to top:
 
-| Módulo | Responsabilidad | Depende de |
+| Module | Responsibility | Depends on |
 |---|---|---|
-| `core` | Reloj de paso fijo, jobs, config TOML, log, matemáticas, aserciones | — |
-| `platform` | SDL3: contexto, ventana, entrada, superficie Vulkan | `core` |
-| `vfs` | Sistema de ficheros virtual (PhysicsFS) | `core` |
-| `modding` | Manifiestos, versiones, dependencias, gestor de mods | `core`, `vfs` |
-| `scripting` | Sandbox Lua y host de scripts | `core`, `vfs` |
-| `plugin_api` | ABI de plugins nativos + cargador | `core`, `vfs` |
-| `rhi` | Instancia/dispositivo, swapchain, recursos, pipelines | `core` |
-| `render` | Escena, cámara, mallas, shaders, grafo de render | `core`, `rhi`, `vfs` |
-| `physics` | Cuerpos rígidos, elementos de fuerza y articulaciones (solver PGS) | `core` |
-| `vehicle` | Modelo del vehículo | `core`, `physics` |
-| `telemetry` | Métricas de frame y exportación CSV | `core`, `vfs` |
+| `core` | Fixed-step clock, jobs, TOML config, logging, math, assertions | — |
+| `platform` | SDL3: context, window, input, Vulkan surface | `core` |
+| `vfs` | Virtual file system (PhysicsFS) | `core` |
+| `modding` | Manifests, versions, dependencies, mod manager | `core`, `vfs` |
+| `scripting` | Lua sandbox and script host | `core`, `vfs` |
+| `plugin_api` | Native plugin ABI + loader | `core`, `vfs` |
+| `rhi` | Instance/device, swapchain, resources, pipelines | `core` |
+| `render` | Scene, camera, meshes, shaders, render graph | `core`, `rhi`, `vfs` |
+| `physics` | Rigid bodies, force elements and joints (PGS solver) | `core` |
+| `vehicle` | Vehicle model | `core`, `physics` |
+| `telemetry` | Frame metrics and CSV export | `core`, `vfs` |
 | `audio` | miniaudio | `core`, `vfs` |
-| `net` | Esqueleto de red | `core` |
-| `apps/sim` | Aplicación: bucle principal, ImGui, física en hilo aparte | todos |
+| `net` | Network skeleton | `core` |
+| `apps/sim` | Application: main loop, ImGui, physics on its own thread | all |
 
-Cada módulo es una librería estática `sim::<nombre>` con sus cabeceras públicas
-en `include/<nombre>/` y sus fuentes en `src/`.
+Each module is a static library `sim::<name>` with its public headers in
+`include/<name>/` and its sources in `src/`.
 
-## Bucle principal
+## Main loop
 
-El programa (`apps/sim`) sigue este orden:
+The program (`apps/sim`) follows this order:
 
 ```
 main()
   └─ Application::run()
        ├─ initialise()
        │    ├─ SdlContext, Window, InputManager
-       │    ├─ Config (config.toml del usuario)
+       │    ├─ Config (user config.toml)
        │    ├─ VirtualFileSystem
-       │    ├─ ModManager::reload()      (monta contenido y mods)
-       │    ├─ montar el directorio del ejecutable (shaders) por debajo
+       │    ├─ ModManager::reload()      (mounts content and mods)
+       │    ├─ mount the executable directory (shaders) underneath
        │    ├─ LuaSandbox + ScriptHost, PluginLoader
-       │    ├─ superficie Vulkan + Device + Swapchain + Frame
+       │    ├─ Vulkan surface + Device + Swapchain + Frame
        │    ├─ Renderer, ImGuiLayer, Telemetry, AudioEngine, NetworkSystem
-       │    ├─ escena inicial (suelo + cubo) y vehículo
+       │    ├─ initial scene (ground + cube) and vehicle
        │    └─ startPhysicsThread()
-       └─ bucle:
-            ├─ pumpInput()              (SDL → InputManager/ImGui, teclas → atómicos)
-            ├─ gatherSnapshots()        (consume el anillo, interpola)
-            ├─ frame_->begin()          (espera slot, adquiere imagen)
+       └─ loop:
+            ├─ pumpInput()              (SDL → InputManager/ImGui, keys → atomics)
+            ├─ gatherSnapshots()        (drains the ring, interpolates)
+            ├─ frame_->begin()          (waits for a slot, acquires an image)
             ├─ imgui_->beginFrame()
-            ├─ updateScene()            (rellena Scene desde el snapshot)
+            ├─ updateScene()            (fills the Scene from the snapshot)
             ├─ renderer_->renderScene()
-            ├─ drawUi()                 (paneles de telemetría/entrada)
+            ├─ drawUi()                 (telemetry/input panels)
             ├─ imgui_->endFrame()
             ├─ frame_->submitAndPresent()
-            └─ gestión de resize/cierre
+            └─ resize/close handling
 ```
 
-## Hilo de física y snapshots
+## Physics thread and snapshots
 
-La simulación corre en un **hilo dedicado** con un paso fijo (por defecto
-`1/1000 s`) para que el resultado no dependa de los FPS. El hilo de render
-interpola entre los dos últimos estados para que el movimiento se vea suave.
+The simulation runs on a **dedicated thread** with a fixed step (`1/1000 s` by
+default) so that the result does not depend on the frame rate. The render
+thread interpolates between the last two states so that motion looks smooth.
 
 ```
-Hilo de física                         Hilo de render
+Physics thread                         Render thread
 ─────────────────                      ─────────────────
-lee atómicos de entrada                escribe atómicos de entrada
-bucle de paso fijo                     cada frame:
-  ├─ FixedStepClock.advance(dt)          ├─ pop() todos los snapshots nuevos
-  ├─ vehicle.step(dt)                    ├─ previous_ = penúltimo
-  ├─ world.step(dt)                      ├─ current_  = último
-  └─ push(SimSnapshot)  ──── anillo ──►  └─ alpha = clamp((now - current.wallTime)/dt)
-                                              interpola posición/heading/ruedas
+reads input atomics                    writes input atomics
+fixed-step loop                        every frame:
+  ├─ FixedStepClock.advance(dt)          ├─ pop() all new snapshots
+  ├─ vehicle.step(dt)                    ├─ previous_ = second to last
+  ├─ world.step(dt)                      ├─ current_  = last
+  └─ push(SimSnapshot)  ──── ring ────►  └─ alpha = clamp((now - current.wallTime)/dt)
+                                              interpolate position/heading/wheels
 ```
 
-- El canal de entrada son varios `std::atomic` (`throttle`, `brake`, `steer`,
+- The input channel is a set of `std::atomic` (`throttle`, `brake`, `steer`,
   `handbrake`).
-- El canal de salida es `SnapshotRing`: un anillo **lock-free SPSC** de 128
-  `SimSnapshot`, con índice de escritura/lectura atómicos.
-- `SimSnapshot` lleva: tiempo de simulación, tiempo de reloj real, número de
-  pasos, posición del vehículo (`dvec3`), rumbo, velocidad, rpm, ángulo de
-  dirección y el giro de las 4 ruedas.
-- El reloj de render usa `FrameClock` (basado en `std::chrono::steady_clock`).
+- The output channel is `SnapshotRing`: a **lock-free SPSC** ring of 128
+  `SimSnapshot`, with atomic write/read indices.
+- `SimSnapshot` carries: simulation time, wall-clock time, step count, vehicle
+  position (`dvec3`), heading, speed, rpm, steering angle and the spin of the 4
+  wheels.
+- The render clock uses `FrameClock` (based on `std::chrono::steady_clock`).
 
-## Determinismo
+## Determinism
 
-- Paso fijo en física; nada de `dt` variable dentro de la simulación.
-- MSVC: `/fp:precise`. GCC/Clang: `-ffp-contract=off`. Nunca `-ffast-math`.
-- El orden de evaluación de la física es siempre el mismo (sin paralelismo
-  dentro del paso). El `JobSystem` se reserva para trabajo que **no** afecta a
-  la simulación (carga de assets, escaneo de mods).
+- Fixed step in physics; no variable `dt` inside the simulation.
+- MSVC: `/fp:precise`. GCC/Clang: `-ffp-contract=off`. Never `-ffast-math`.
+- Physics is always evaluated in the same order (no parallelism inside a
+  step). The `JobSystem` is reserved for work that does **not** affect the
+  simulation (asset loading, mod scanning).
 
-## Configuración y VFS
+## Configuration and VFS
 
-- La **configuración del usuario** es un TOML leído/escrito por
-  `core::Config` (claves con notación de puntos, p. ej. `mods.active`). Este
-  archivo **no** forma parte del VFS.
-- Todo el **contenido del juego** (texturas, mallas, scripts, sonidos) se lee a
-  través de `vfs::VirtualFileSystem`. Los documentos oficiales y los mods se
-  montan en el mismo árbol; las monturas posteriores tienen prioridad.
-- El **log** y el archivo de configuración son los dos únicos ficheros que se
-  tocan fuera del VFS, y los gestiona la capa de aplicación.
+- The **user configuration** is a TOML file read/written by `core::Config`
+  (dotted keys, e.g. `mods.active`). This file is **not** part of the VFS.
+- All **game content** (textures, meshes, scripts, sounds) is read through
+  `vfs::VirtualFileSystem`. Official content and mods are mounted in the same
+  tree; later mounts take precedence.
+- The **log** and the configuration file are the only two files touched
+  outside the VFS, and they are managed by the application layer.
 
-## Errores
+## Errors
 
-- Los errores de programación usan `SIM_ASSERT` (`core/Assert.hpp`).
-- Los errores recuperables se devuelven como `bool`, `std::optional` o
-  estructuras de resultado (por ejemplo `ModReport`). Un mod inválido **nunca**
-  aborta el proceso: se deshabilita con un mensaje claro.
-- Las excepciones (`std::runtime_error`) se reservan a fallos de arranque
-  irrecuperables (no se puede crear el dispositivo Vulkan, ...).
+- Programming errors use `SIM_ASSERT` (`core/Assert.hpp`).
+- Recoverable errors are returned as `bool`, `std::optional` or result
+  structures (for example `ModReport`). An invalid mod **never** aborts the
+  process: it is disabled with a clear message.
+- Exceptions (`std::runtime_error`) are reserved for unrecoverable start-up
+  failures (the Vulkan device cannot be created, ...).

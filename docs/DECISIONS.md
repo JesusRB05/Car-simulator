@@ -1,90 +1,91 @@
-# Decisiones de diseño
+# Design decisions
 
-Registro de las decisiones técnicas más importantes y por qué se tomaron.
+Record of the most important technical decisions and why they were made.
 
-## Motor propio: nada de motores de física ni de render de terceros
+## Own engine: no third-party physics or rendering engines
 
-El proyecto implementa su propio motor de física y su propio renderizador
-Vulkan. Está **prohibido** usar motores como Jolt, Bullet o PhysX para la
-física, o bgfx, Diligent o Filament para el render. El objetivo es que el
-proyecto sea plenamente comprensible y modificable por la comunidad. Sí se usan
-bibliotecas de utilidad (volk, VMA, glm, ImGui, ...).
+The project implements its own physics engine and its own Vulkan renderer.
+Using engines such as Jolt, Bullet or PhysX for physics, or bgfx, Diligent or
+Filament for rendering, is **forbidden**. The goal is for the project to be
+fully understandable and modifiable by the community. Utility libraries are
+used (volk, VMA, glm, ImGui, ...).
 
-## Unidades y convenciones
+## Units and conventions
 
-- Todo el cálculo interno va en **unidades del SI** (metros, kilogramos,
-  segundos, radianes).
-- Sistema **diestro**, **+Y arriba**, **-Z adelante**.
-- Las posiciones del mundo se guardan en **`double`**; la física local y lo que
-  se envía al render van en **`float`**. Así se evita la pérdida de precisión en
-  mapas grandes sin pagar `double` en toda la geometría.
+- All internal computation uses **SI units** (metres, kilograms, seconds,
+  radians).
+- **Right-handed** system, **+Y up**, **-Z forward**.
+- World positions are stored as **`double`**; local physics and whatever is
+  sent to the renderer use **`float`**. This avoids precision loss on large
+  maps without paying for `double` in all the geometry.
 
-## Física determinista en un hilo aparte
+## Deterministic physics on its own thread
 
-- **Paso fijo** (por defecto `1/1000` s). La física **no** usa el `dt` del
-  frame.
-- Corre en su **propio hilo**. El render **interpola** entre dos snapshots.
-- La comunicación es un **anillo sin bloqueos** (`SnapshotRing`, SPSC con 128
-  slots): no hay mutex en el camino crítico.
-- Determinismo estricto: MSVC con `/fp:precise`, GCC/Clang con
-  `-ffp-contract=off`. **Nunca** `-ffast-math`, que rompería la reproducibilidad
-  necesaria para replays y para depurar.
+- **Fixed step** (`1/1000` s by default). Physics does **not** use the frame
+  `dt`.
+- It runs on its **own thread**. The renderer **interpolates** between two
+  snapshots.
+- Communication goes through a **lock-free ring** (`SnapshotRing`, SPSC with
+  128 slots): there is no mutex on the hot path.
+- Strict determinism: MSVC with `/fp:precise`, GCC/Clang with
+  `-ffp-contract=off`. **Never** `-ffast-math`, which would break the
+  reproducibility needed for replays and debugging.
 
-## Aislamiento del RHI respecto a la plataforma
+## RHI isolated from the platform
 
-El RHI (`src/rhi`) **no conoce SDL**. La plataforma ofrece una fábrica que crea
-la `VkSurfaceKHR` y el `Device` la pide por `DeviceConfig`. Así el render es
-independiente de la ventana y podría reutilizarse con otra plataforma.
+The RHI (`src/rhi`) **does not know about SDL**. The platform provides a
+factory that creates the `VkSurfaceKHR`, and the `Device` requests it through
+`DeviceConfig`. This keeps rendering independent of the window, so it could be
+reused with another platform.
 
-## volk + VMA en lugar del cargador de Vulkan
+## volk + VMA instead of the Vulkan loader
 
-Se usa **volk** para cargar dinámicamente las funciones de Vulkan, de modo que
-**no hace falta el SDK de Vulkan** ni enlazar el cargador. VMA se compila con
-`VMA_IMPLEMENTATION` en una sola unidad (`src/rhi/src/Vma.cpp`) y se enlaza con
-funciones dinámicas (`vkGetInstanceProcAddr`/`vkGetDeviceProcAddr`).
+**volk** is used to load Vulkan functions dynamically, so **the Vulkan SDK is
+not needed** and the loader is not linked. VMA is compiled with
+`VMA_IMPLEMENTATION` in a single translation unit (`src/rhi/src/Vma.cpp`) and
+uses dynamic functions (`vkGetInstanceProcAddr`/`vkGetDeviceProcAddr`).
 
-## Renderizado dinámico (sin render passes)
+## Dynamic rendering (no render passes)
 
-Las pasadas usan `vkCmdBeginRendering` en vez de `VkRenderPass` +
-`VkFramebuffer`. Es más simple, evita recombinaciones de pases y es el camino
-moderno de Vulkan 1.3.
+Passes use `vkCmdBeginRendering` instead of `VkRenderPass` + `VkFramebuffer`.
+It is simpler, avoids render pass compatibility juggling and is the modern
+Vulkan 1.3 path.
 
-## VFS con PhysicsFS
+## VFS with PhysicsFS
 
-El acceso a contenido pasa siempre por un sistema de ficheros virtual
-(PhysicsFS). El contenido base y cada mod se montan **todos en `/`**; la
-prioridad de montaje decide quién gana. Esto hace que los mods puedan
-sobrescribir ficheros sin ninguna lógica especial en el motor.
+Content access always goes through a virtual file system (PhysicsFS). The base
+content and every mod are **all mounted at `/`**; the mount priority decides
+which one wins. This lets mods override files without any special logic in the
+engine.
 
-## Scripting aislado (LuaJIT + sol2)
+## Sandboxed scripting (LuaJIT + sol2)
 
-Los scripts corren en un **sandbox** (sin `io`, `os`, `package`, `debug`, `ffi`;
-sin `load`/`require`/`dofile`; solo texto, nunca bytecode) y con un **límite de
-instrucciones**. Un script travieso o con un bucle infinito no puede tumbar el
-simulador.
+Scripts run in a **sandbox** (no `io`, `os`, `package`, `debug`, `ffi`; no
+`load`/`require`/`dofile`; text only, never bytecode) with an **instruction
+limit**. A misbehaving script or one with an infinite loop cannot bring the
+simulator down.
 
-## ABI C para plugins
+## C ABI for plugins
 
-La interfaz de plugins es **C puro** y versionada (`struct_size` + versión). Las
-estructuras solo crecen por el final, de modo que un plugin compilado contra una
-versión pueda seguir funcionando. Esto permite plugins en cualquier lenguaje que
-genere ABI C.
+The plugin interface is **plain C** and versioned (`struct_size` + version).
+Structures only grow at the end, so a plugin compiled against one version can
+keep working. This allows plugins in any language that can produce a C ABI.
 
-## Licencia: GPLv3 con excepción de enlazado
+## License: GPLv3 with a linking exception
 
-El motor es **GPL-3.0-or-later** con una **excepción de enlazado**, para que los
-plugins y mods no tengan que ser GPL solo por enlazar contra el motor. El
-contenido oficial es **CC BY-SA 4.0**. Sin marcas ni coches reales.
+The engine is **GPL-3.0-or-later** with a **linking exception**, so that
+plugins and mods do not have to be GPL just because they link against the
+engine. The official content is **CC BY-SA 4.0**. No real brands or cars.
 
-## CMake moderno con presets y vcpkg
+## Modern CMake with presets and vcpkg
 
-Configuración con **CMake ≥ 3.25**, **vcpkg manifest** y **CMakePresets**.
-Facilita reproducir el entorno en Windows (MSVC) y Linux (GCC/Clang) sin pasos
-manuales. Slang no está en vcpkg, así que se descarga como binario precompilado
-(FetchContent) y se puede sobrescribir con `SIM_SLANGC`.
+Configuration with **CMake ≥ 3.25**, **vcpkg manifest** and **CMakePresets**.
+This makes it easy to reproduce the environment on Windows (MSVC) and Linux
+(GCC/Clang) without manual steps. Slang is not in vcpkg, so it is downloaded as
+a prebuilt binary (FetchContent) and can be overridden with `SIM_SLANGC`.
 
-## Slang para shaders
+## Slang for shaders
 
-Los shaders se escriben en **Slang** y se compilan a SPIR-V en tiempo de build.
-Slang es un lenguaje moderno con buena ergonomía para paso de estructuras entre
-CPU y GPU.
+Shaders are written in **Slang** and compiled to SPIR-V at build time. Slang
+is a modern language with good ergonomics for passing structures between CPU
+and GPU.

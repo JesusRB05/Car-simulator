@@ -1,81 +1,77 @@
 # Car Simulator
 
-Simulador de conducción de código abierto, mantenido por la comunidad, con un
-**motor de física propio** y un **renderizador Vulkan propio**. No se usan
-motores de física ni de render de terceros (Jolt, Bullet, PhysX, bgfx,
-Diligent, Filament, ...): la física y el renderizado están escritos desde cero.
+Open-source, community-maintained driving simulator with its **own physics
+engine** and its **own Vulkan renderer**. No third-party physics or rendering
+engines are used (Jolt, Bullet, PhysX, bgfx, Diligent, Filament, ...): physics
+and rendering are written from scratch.
 
-> Versión actual: **0.1.0** (hito inicial). El objetivo de este hito es dejar
-> lista una base sólida y bien documentada, no un juego terminado.
+> Current version: **0.1.0** (initial milestone). The goal of this milestone is
+> a solid, well-documented foundation, not a finished game.
 
-## Características de esta base
+## Features of this foundation
 
-- **Núcleo (core)**: reloj de paso fijo, sistema de trabajos, configuración
-  TOML tipada, log con spdlog, utilidades matemáticas, aserciones.
-- **Plataforma**: ventana SDL3, entrada de teclado, volantes/mandos/joysticks
-  con reconexión en caliente, creación de la superficie Vulkan (el RHI no ve
-  SDL nunca).
-- **VFS**: sistema de ficheros virtual sobre PhysicsFS. Todo el contenido se
-  lee por aquí; el contenido oficial y los mods viven en el mismo árbol virtual.
-- **Modding**: manifiestos `mod.toml`, resolución de dependencias con rangos de
-  versión (semver), orden de carga topológico determinista, montaje en el VFS.
-- **Scripting**: sandbox de LuaJIT + sol2 con presupuesto de instrucciones.
-- **Plugins nativos**: ABI en C puro, versionada y con evolución de struct
-  controlada por `struct_size`.
-- **RHI**: capa fina sobre Vulkan (volk + VMA), instancia/dispositivo,
-  swapchain, buffers, imágenes, pipelines, listas de comandos, frames en vuelo.
-- **Render**: cámara en perspectiva, escena plana, `RenderGraph` lineal, shader
-  Slang compilado a SPIR-V en tiempo de build.
-- **Física**: cuerpos rígidos, broadphase por AABB, estrechamiento
-  esfera/esfera, esfera/plano, caja/plano y esfera/caja, solver de impulsos
-  secuenciales, integración semi-implícita de Euler.
-- **Vehículo**: modelo de bicicleta cinemático determinista con ruedas.
-- **Telemetría**: histórico de tiempos de frame/physics/render/UI y exportación
-  CSV.
-- **Audio**: envoltorio mínimo sobre miniaudio.
-- **Red**: esqueleto de la futura capa multijugador (sin sockets aún).
+- **Core**: fixed-step clock, job system, typed TOML configuration, spdlog
+  logging, math utilities, assertions.
+- **Platform**: SDL3 window, keyboard input, wheels/gamepads/joysticks with hot
+  plugging, Vulkan surface creation (the RHI never sees SDL).
+- **VFS**: virtual file system on top of PhysicsFS. All content is read through
+  it; the official content and mods live in the same virtual tree.
+- **Modding**: `mod.toml` manifests, dependency resolution with (semver)
+  version ranges, deterministic topological load order, VFS mounting.
+- **Scripting**: LuaJIT + sol2 sandbox with an instruction budget.
+- **Native plugins**: plain C ABI, versioned, with struct evolution controlled
+  by `struct_size`.
+- **RHI**: thin layer over Vulkan (volk + VMA): instance/device, swapchain,
+  buffers, images, pipelines, command lists, frames in flight.
+- **Render**: perspective camera, flat scene, linear `RenderGraph`, Slang
+  shaders compiled to SPIR-V at build time.
+- **Physics**: rigid bodies, AABB broadphase, sphere/sphere, sphere/plane,
+  box/plane and sphere/box narrowphase, sequential-impulse solver,
+  semi-implicit Euler integration.
+- **Vehicle**: deterministic kinematic bicycle model with wheels.
+- **Telemetry**: history of frame/physics/render/UI times and CSV export.
+- **Audio**: minimal wrapper over miniaudio.
+- **Network**: skeleton of the future multiplayer layer (no sockets yet).
 
-## Requisitos
+## Requirements
 
 - **CMake** >= 3.25
-- **Compilador C++20**:
-  - **MSVC / Visual Studio 2022** con el conjunto de herramientas **v143** (el
-    estable) o superior; también se ha probado con builds recientes de VS. Usa
-    el *x64 Native Tools Command Prompt* o ejecuta `vcvars64.bat` antes de
-    configurar.
-  - **GCC 13+** o **Clang 16+**.
+- **C++20 compiler**:
+  - **MSVC / Visual Studio 2022** with the **v143** toolset (stable) or
+    later; recent VS builds have also been tested. Use the *x64 Native Tools
+    Command Prompt* or run `vcvars64.bat` before configuring.
+  - **GCC 13+** or **Clang 16+**.
 - **vcpkg** (manifest mode)
-- **Ninja** (recomendado; los presets lo usan)
-- **Slang** (`slangc`): se descarga automáticamente vía `FetchContent` si no
-  se indica una copia local
-- **Vulkan SDK**: **no** es necesario para compilar (solo se usan
-  `vulkan-headers` y `volk`); sí se necesita un **driver Vulkan** en tiempo de
-  ejecución
+- **Ninja** (recommended; the presets use it)
+- **Slang** (`slangc`): downloaded automatically via `FetchContent` unless a
+  local copy is given
+- **Vulkan SDK**: **not** needed to build (only `vulkan-headers` and `volk` are
+  used); a **Vulkan driver** is needed at run time
 
-## Compilación rápida (Windows / MSVC)
+## Quick build (Windows / MSVC)
 
 ```powershell
-# 1) Clona e instala vcpkg una vez y define VCPKG_ROOT
-$env:VCPKG_ROOT = "C:\ruta\a\vcpkg"
+# 1) Clone and bootstrap vcpkg once, then set VCPKG_ROOT
+$env:VCPKG_ROOT = "C:\path\to\vcpkg"
 
-# 2) Configura (la primera vez descarga e instala las dependencias)
+# 2) Configure (the first run downloads and installs the dependencies)
 cmake --preset windows-msvc-debug
 
-# 3) Compila
+# 3) Build
 cmake --build --preset windows-msvc-debug
 
-# 4) Ejecuta los tests
+# 4) Run the tests
 ctest --test-dir build/windows-msvc-debug --output-on-failure
 ```
 
-Binarios generados:
+Generated binaries:
 
 ```
 build/windows-msvc-debug/bin/sim.exe
 build/windows-msvc-debug/bin/sim_tests.exe
 ```
 
-Para Release:
+For Release:
 
 ```powershell
 cmake --preset windows-msvc-release
@@ -83,25 +79,25 @@ cmake --build --preset windows-msvc-release
 ctest --test-dir build/windows-msvc-release --output-on-failure
 ```
 
-Si quieres usar una copia local de Slang en lugar de la descargada:
+To use a local copy of Slang instead of the downloaded one:
 
 ```powershell
-cmake --preset windows-msvc-debug -DSIM_SLANGC=C:\ruta\slang\bin\slangc.exe
+cmake --preset windows-msvc-debug -DSIM_SLANGC=C:\path\to\slang\bin\slangc.exe
 ```
 
-En Linux se ofrecen los presets `linux-gcc-*` y `linux-clang-*`.
+On Linux, the `linux-gcc-*` and `linux-clang-*` presets are provided.
 
-Instrucciones detalladas en [`docs/BUILDING.md`](docs/BUILDING.md).
+Detailed instructions in [`docs/BUILDING.md`](docs/BUILDING.md).
 
-## Tests de GPU sin GPU (headless)
+## GPU tests without a GPU (headless)
 
-El simulador puede renderizar **fuera de pantalla**, sin ventana ni swapchain,
-mediante un driver Vulkan software. Esto permite ejecutar los tests marcados con
-la etiqueta `gpu` (comparación con imágenes de referencia, verificación de
-píxeles, etc.) en un equipo sin GPU y en CI.
+The simulator can render **off screen**, without a window or swapchain, using a
+software Vulkan driver. This makes it possible to run the tests labelled `gpu`
+(golden image comparison, pixel checks, etc.) on a machine without a GPU and in
+CI.
 
-Primero descarga el driver software (lavapipe) **pinnado y con SHA-256
-verificado**:
+First download the software driver (lavapipe), **pinned and SHA-256
+verified**:
 
 ```powershell
 # Windows
@@ -109,11 +105,11 @@ powershell -ExecutionPolicy Bypass -File tools/setup_swiftshader.ps1
 ```
 
 ```bash
-# Linux (usa el paquete mesa-vulkan-drivers, o lo instala con apt)
+# Linux (uses the mesa-vulkan-drivers package, or installs it with apt)
 ./tools/setup_swiftshader.sh
 ```
 
-El script imprime la ruta del ICD. Configura y ejecuta los tests:
+The script prints the ICD path. Configure and run the tests:
 
 ```powershell
 cmake --preset windows-msvc-release -DSIM_ENABLE_GPU_TESTS=ON `
@@ -122,93 +118,95 @@ cmake --build --preset windows-msvc-release
 ctest --test-dir build/windows-msvc-release -L gpu --output-on-failure
 ```
 
-> En Windows, `VK_ICD_FILENAMES` **debe** usar barras invertidas; el cargador
-> rechaza las barras normales. Añade además el directorio del ICD al `PATH`.
+> On Windows, `VK_ICD_FILENAMES` **must** use backslashes; the loader rejects
+> forward slashes. Also add the ICD directory to `PATH`.
 
-Modo de ejecución manual del renderer headless:
+Running the headless renderer manually:
 
 ```powershell
 ./build/windows-msvc-release/bin/sim.exe --headless --frames 60 `
-    --scene default --screenshot captura.png
+    --scene default --screenshot capture.png
 ```
 
-El runner headless también soporta `--verify-golden`/`--update-golden`
-(con `--golden-dir`), `--semantic`, `--contact-sheet` y `--debug-draw`. Los
-tests `gpu` incluyen una referencia por escena y otra del *debug draw*
-(`tests/golden/<driver>/grid_debug.png`); las referencias solo se activan tras
-aprobación, hasta entonces esas verificaciones se reportan como omitidas (ver
+The headless runner also supports `--verify-golden`/`--update-golden` (with
+`--golden-dir`), `--semantic`, `--contact-sheet` and `--debug-draw`. The `gpu`
+tests include one reference per scene plus one for the *debug draw*
+(`tests/golden/<driver>/grid_debug.png`); references are only enabled after
+approval, and until then those checks are reported as skipped (see
 `tests/golden/README.md`).
 
-## Ejecución
+## Running
 
-`sim.exe` busca la raíz del proyecto (el directorio que contiene
-`content/base`) partiendo del directorio de trabajo y del directorio del
-ejecutable. Desde ahí monta el contenido, lee la configuración y arranca.
+`sim.exe` looks for the project root (the directory that contains
+`content/base`) starting from the working directory and from the executable's
+directory. From there it mounts the content, reads the configuration and
+starts.
 
 ```powershell
 ./build/windows-msvc-debug/bin/sim.exe
 ```
 
-### Controles por defecto
+### Default controls
 
-| Acción | Tecla |
+| Action | Key |
 |---|---|
-| Acelerar | `W` / `↑` |
-| Frenar | `S` / `↓` |
-| Girar | `A` / `D` / `←` / `→` |
-| Freno de mano | `Espacio` |
-| Salir | `Esc` |
+| Throttle | `W` / `↑` |
+| Brake | `S` / `↓` |
+| Steer | `A` / `D` / `←` / `→` |
+| Handbrake | `Space` |
+| Quit | `Esc` |
 
-Cámara y depuración: `C` alterna los modos **Chase / Orbit / Free** (arrastrar con
-el botón derecho para mirar, rueda para acercar en Orbit; `WASD`/`Q`/`E` para
-volar en Free), y `G` muestra u oculta la rejilla de depuración instanciada.
+Camera and debugging: `C` cycles the **Chase / Orbit / Free** modes (drag with
+the right mouse button to look, wheel to zoom in Orbit; `WASD`/`Q`/`E` to fly
+in Free), and `G` toggles the instanced debug grid.
 
-También funciona con mandos, volantes y pedales detectados por SDL3.
+Gamepads, wheels and pedals detected by SDL3 also work.
 
-## Estructura del repositorio
+## Repository layout
 
 ```
-apps/sim/            Aplicación ejecutable (bucle principal, ImGui, interpolación)
-cmake/               Módulos CMake (helpers, dependencias, Slang, ImGui, FSR)
-content/base/        Contenido oficial (CC BY-SA 4.0)
-mods/                Mods de ejemplo
-plugins/example_native/  Plugin nativo de ejemplo
+apps/sim/            Executable application (main loop, ImGui, interpolation)
+cmake/               CMake modules (helpers, dependencies, Slang, ImGui, FSR)
+content/base/        Official content (CC BY-SA 4.0)
+mods/                Example mods
+plugins/example_native/  Example native plugin
 src/
-  core/              Reloj, jobs, configuración, log, matemáticas
-  platform/          SDL3: contexto, ventana, entrada
-  vfs/               Sistema de ficheros virtual (PhysicsFS)
-  modding/           Manifiestos, versiones, dependencias, gestor de mods
-  scripting/         Sandbox Lua (LuaJIT + sol2) y host de scripts
-  plugin_api/        ABI de plugins nativos + cargador
-  rhi/               Capa de render Vulkan propia
-  render/            Escena, cámara, mallas, shaders (Slang)
-  physics/           Cuerpos rígidos, colisiones, solver
-  vehicle/           Modelo del vehículo
-  telemetry/         Métricas de frame + export CSV
+  core/              Clock, jobs, configuration, logging, math
+  platform/          SDL3: context, window, input
+  vfs/               Virtual file system (PhysicsFS)
+  modding/           Manifests, versions, dependencies, mod manager
+  scripting/         Lua sandbox (LuaJIT + sol2) and script host
+  plugin_api/        Native plugin ABI + loader
+  rhi/               In-house Vulkan render layer
+  render/            Scene, camera, meshes, shaders (Slang)
+  physics/           Rigid bodies, collisions, solver
+  vehicle/           Vehicle model
+  telemetry/         Frame metrics + CSV export
   audio/             miniaudio
-  net/               Esqueleto de red
-tests/               Suite doctest
-docs/                Documentación (español)
+  net/               Network skeleton
+tests/               doctest suite
+docs/                Documentation
 ```
 
-## Documentación
+## Documentation
 
-- [Arquitectura](docs/ARCHITECTURE.md)
-- [Compilación](docs/BUILDING.md)
-- [Física](docs/FISICA.md)
-- [Renderizado](docs/RENDERIZADO.md)
-- [Sistema de mods](docs/MODS.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Building](docs/BUILDING.md)
+- [Physics](docs/FISICA.md)
+- [Rendering](docs/RENDERIZADO.md)
+- [Mod system](docs/MODS.md)
 - [Scripting (Lua)](docs/SCRIPTS.md)
-- [Plugins nativos](docs/PLUGINS.md)
-- [Contenido y licencias](docs/CONTENT.md)
-- [Decisiones de diseño y limitaciones](docs/DECISIONS.md)
-- [Contribuir](docs/CONTRIBUTING.md)
+- [Native plugins](docs/PLUGINS.md)
+- [Content and licensing](docs/CONTENT.md)
+- [Design decisions and limitations](docs/DECISIONS.md)
+- [Conventions](docs/CONVENTIONS.md)
+- [Contributing](docs/CONTRIBUTING.md)
 
-## Licencia
+## License
 
-- Código del motor: **GNU GPL v3.0 o posterior**, con una **excepción de
-  enlazado** (ver [`LICENSE`](LICENSE)).
-- Contenido oficial (`content/base`): **CC BY-SA 4.0**
-  (ver [`content/base/LICENSE.txt`](content/base/LICENSE.txt)).
+- Engine code: **GNU GPL v3.0 or later**, with a **linking exception** (see
+  [`LICENSE`](LICENSE)).
+- Official content (`content/base`): **CC BY-SA 4.0**
+  (see [`content/base/LICENSE.txt`](content/base/LICENSE.txt)).
 
-No se usan marcas, coches ni circuitos reales a propósito.
+Real brands, cars and tracks are deliberately not used.

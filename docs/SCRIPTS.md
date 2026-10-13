@@ -1,21 +1,21 @@
 # Scripting (Lua)
 
-Los mods pueden incluir scripts Lua. El motor usa **LuaJIT** con el enlace de
-**sol2**, pero dentro de un **sandbox** deliberadamente restrictivo.
+Mods can include Lua scripts. The engine uses **LuaJIT** with the **sol2**
+binding, but inside a deliberately restrictive **sandbox**.
 
-## API disponible para los scripts
+## API available to scripts
 
-El host instala una tabla global `sim`:
+The host installs a global `sim` table:
 
-| Función / valor | Descripción |
+| Function / value | Description |
 |---|---|
-| `sim.log(mensaje)` | Escribe en el log con el nombre del mod como etiqueta |
-| `sim.read(ruta)` | Lee un fichero **a través del VFS**; devuelve el texto o `nil` |
-| `sim.register_on_load(funcion)` | Registra la función que se llamará al cargar el mod |
-| `sim.register_on_update(funcion)` | Registra la función que se llamará cada frame, con `dt` |
-| `sim.game_version` | Cadena de versión del juego (p. ej. `"0.1.0"`) |
+| `sim.log(message)` | Writes to the log, tagged with the mod name |
+| `sim.read(path)` | Reads a file **through the VFS**; returns the text or `nil` |
+| `sim.register_on_load(function)` | Registers the function called when the mod loads |
+| `sim.register_on_update(function)` | Registers the function called every frame, with `dt` |
+| `sim.game_version` | Game version string (e.g. `"0.1.0"`) |
 
-Ejemplo (`content/base/scripts/main.lua`):
+Example (`content/base/scripts/main.lua`):
 
 ```lua
 local loaded = false
@@ -26,33 +26,33 @@ sim.register_on_load(function()
 end)
 
 sim.register_on_update(function(dt)
-    -- dt es el tiempo de frame en segundos
+    -- dt is the frame time in seconds
 end)
 ```
 
 ## Sandbox
 
-`LuaSandbox` abre **solo** las bibliotecas seguras: `base`, `coroutine`,
-`math`, `string` y `table`. Las bibliotecas peligrosas (`io`, `os`, `package`,
-`debug`, `ffi`) **no** se abren; además se eliminan de `base` las funciones que
-permitirían escapar del sandbox o cargar bytecode:
+`LuaSandbox` opens **only** the safe libraries: `base`, `coroutine`, `math`,
+`string` and `table`. The dangerous libraries (`io`, `os`, `package`, `debug`,
+`ffi`) are **not** opened; in addition, the functions that would allow escaping
+the sandbox or loading bytecode are removed from `base`:
 
 - `load`, `loadstring`, `loadfile`, `dofile`, `require`, `collectgarbage`
-- `print` (usa `sim.log` en su lugar)
+- `print` (use `sim.log` instead)
 - `string.dump`
 
-Los *chunks* se cargan siempre en **modo texto** (`"t"`), de modo que se
-rechaza bytecode precompilado: no se puede colar código compilado malicioso.
+*Chunks* are always loaded in **text mode** (`"t"`), so precompiled bytecode is
+rejected: malicious compiled code cannot be slipped in.
 
-### Presupuesto de instrucciones
+### Instruction budget
 
-`LuaSandbox` instala un *hook* de depuración con `LUA_MASKCOUNT` cada
-`kHookCount` (1000) instrucciones. Cuando un script supera el presupuesto
-(5 000 000 de instrucciones por defecto), el hook lanza un error de Lua que
-aborta **ese** script sin congelar el simulador. Así un `while true do end` no
-bloquea el juego. El presupuesto se ajusta con `setInstructionBudget()`.
+`LuaSandbox` installs a debug *hook* with `LUA_MASKCOUNT` every `kHookCount`
+(1000) instructions. When a script exceeds the budget (5,000,000 instructions
+by default), the hook raises a Lua error that aborts **that** script without
+freezing the simulator. This way a `while true do end` does not block the game.
+The budget is adjusted with `setInstructionBudget()`.
 
-### JIT engine disabled (English note)
+### JIT engine disabled
 
 LuaJIT does not call debug hooks while executing JIT-compiled traces, so once a
 hot loop such as `while true do end` is compiled the instruction-count hook
@@ -64,27 +64,27 @@ libraries are never opened and their globals are cleared, so scripts cannot
 turn the engine back on. Mod scripts are small gameplay glue, so the
 interpreter's speed is more than enough; safety wins over raw throughput.
 
-## Carga
+## Loading
 
-`ScriptHost::loadScript(modId, ruta)` lee el script del VFS y lo ejecuta. Las
-funciones registradas durante la ejecución se guardan asociadas a ese mod. El
-host expone:
+`ScriptHost::loadScript(modId, path)` reads the script from the VFS and runs
+it. Functions registered during execution are stored associated with that mod.
+The host exposes:
 
-- `callOnLoad()`: ejecuta todos los `on_load` (en orden de carga).
-- `callOnUpdate(dt)`: ejecuta todos los `on_update` con el `dt` del frame.
-- `clear()`: libera todas las funciones Lua; **hay que llamarlo antes** de
-  destruir el sandbox.
+- `callOnLoad()`: runs every `on_load` (in load order).
+- `callOnUpdate(dt)`: runs every `on_update` with the frame `dt`.
+- `clear()`: releases all Lua functions; **it must be called before**
+  destroying the sandbox.
 
-El log usa `core::Log::forMod(modId)`, de forma que los mensajes de cada mod
-quedan etiquetados con su id.
+Logging uses `core::Log::forMod(modId)`, so each mod's messages are tagged with
+its id.
 
-## El `entry_script`
+## The `entry_script`
 
-Un mod declara su script de entrada en `mod.toml`:
+A mod declares its entry script in `mod.toml`:
 
 ```toml
 entry_script = "scripts/main.lua"
 ```
 
-La aplicación carga ese script (a través de `ScriptHost`) después de montar los
-mods. Si un `entry_script` falla, se registra el error y se continúa.
+The application loads that script (through `ScriptHost`) after mounting the
+mods. If an `entry_script` fails, the error is logged and loading continues.

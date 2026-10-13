@@ -1,21 +1,21 @@
-# Contribuir
+# Contributing
 
-Gracias por querer echar una mano. Este proyecto es de la comunidad y se
-mantiene en abierto.
+Thanks for wanting to help. This is a community project developed in the open.
 
-## Principios
+## Principles
 
-- **Sin motores de terceros**: la física y el render son propios. No se aceptan
-  Jolt, Bullet, PhysX, bgfx, Diligent ni Filament.
-- **Sin marcas reales**: nada de coches, circuitos ni marcas reales, ni en
-  código ni en contenido.
-- **Determinismo**: no introduzcas optimizaciones de punto flotante que rompan
-  la reproducibilidad (`-ffast-math`, contracción FMA, etc.).
-- **Código en inglés, documentación en español**.
+- **No third-party engines**: physics and rendering are our own. Jolt, Bullet,
+  PhysX, bgfx, Diligent and Filament are not accepted.
+- **No real brands**: no real cars, tracks or brands, neither in code nor in
+  content.
+- **Determinism**: do not introduce floating-point optimisations that break
+  reproducibility (`-ffast-math`, FMA contraction, etc.).
+- **Everything in English**: code, comments, documentation and commit
+  messages.
 
-## Poner en marcha el entorno
+## Setting up the environment
 
-Sigue [`BUILDING.md`](BUILDING.md). Resumen:
+Follow [`BUILDING.md`](BUILDING.md). In short:
 
 ```powershell
 cmake --preset windows-msvc-debug
@@ -23,8 +23,8 @@ cmake --build --preset windows-msvc-debug
 ctest --test-dir build/windows-msvc-debug --output-on-failure
 ```
 
-Antes de enviar cambios, comprueba **Debug y Release** y que los tests pasan en
-ambos:
+Before submitting changes, check **Debug and Release** and that the tests pass
+in both:
 
 ```powershell
 cmake --preset windows-msvc-release
@@ -32,94 +32,93 @@ cmake --build --preset windows-msvc-release
 ctest --test-dir build/windows-msvc-release --output-on-failure
 ```
 
-### Compilación con avisos como errores
+### Building with warnings as errors
 
-Los avisos están activos por defecto (`SIM_WARNINGS=ON`). Para tratarlos como
-errores:
+Warnings are enabled by default (`SIM_WARNINGS=ON`). To treat them as errors:
 
 ```powershell
 cmake --preset windows-msvc-debug -DSIM_WARNINGS_AS_ERRORS=ON
 ```
 
-## Estilo de código
+## Code style
 
-- **C++20**. Sigue el estilo del código que ya existe.
-- Formato con el `.clang-format` del repositorio.
-- **Sin comentarios innecesarios**: el código debe explicarse solo; comenta solo
-  lo que no es obvio (el "por qué", no el "qué").
-- **Cabecera SPDX** obligatoria al principio de cada fichero fuente:
+- **C++20**. Follow the style of the existing code.
+- Format with the repository's `.clang-format`.
+- **No unnecessary comments**: code should explain itself; only comment what
+  is not obvious (the "why", not the "what").
+- **SPDX header** required at the top of every source file:
 
   ```cpp
   // SPDX-License-Identifier: GPL-3.0-or-later
   // Copyright (C) 2026 The Car Simulator contributors
   ```
 
-  En ficheros de CMake y otros que usan `#` como comentario, la misma cabecera
-  con `#`. En C puro (plugins) con `/* ... */`.
-- Respeta el aislamiento de módulos: la dependencia entre módulos ya está
-  definida en los `CMakeLists.txt`. No añadas dependencias nuevas sin
-  justificarlo.
-- Espacios de nombres: cada módulo vive en `sim::<modulo>`.
+  In CMake files and others that use `#` for comments, the same header with
+  `#`. In plain C (plugins) with `/* ... */`.
+- Respect module isolation: dependencies between modules are already defined
+  in the `CMakeLists.txt` files. Do not add new dependencies without a reason.
+- Namespaces: each module lives in `sim::<module>`.
 
 ## Tests
 
-La suite usa **doctest** y vive en `tests/`. Si añades funcionalidad, añade
-también sus tests. Para registrar un caso:
+The suite uses **doctest** and lives in `tests/`. If you add functionality, add
+its tests too. To register a case:
 
 ```cpp
 #include <doctest/doctest.h>
 
-TEST_CASE("descripción")
+TEST_CASE("description")
 {
     CHECK(1 + 1 == 2);
 }
 ```
 
-## Añadir un módulo o cambiar las dependencias
+## Adding a module or changing dependencies
 
-- Las dependencias externas se declaran en `vcpkg.json`. Al añadir una, actualiza
-  también `cmake/SimDependencies.cmake`.
-- Los módulos nuevos se añaden con `add_subdirectory` y sus opciones en el
-  `CMakeLists.txt` raíz.
-- Los presets y opciones viven en `CMakePresets.json` y `CMakeLists.txt`
+- External dependencies are declared in `vcpkg.json`. When adding one, also
+  update `cmake/SimDependencies.cmake`.
+- New modules are added with `add_subdirectory` and their options in the root
+  `CMakeLists.txt`.
+- Presets and options live in `CMakePresets.json` and `CMakeLists.txt`
   (`SIM_BUILD_TESTS`, `SIM_WARNINGS`, `SIM_WARNINGS_AS_ERRORS`,
   `SIM_ENABLE_PROFILING`, `SIM_ENABLE_SLANG`, `SIM_ENABLE_OPENXR`,
   `SIM_ENABLE_FSR`).
 
-## Flujo de trabajo
+## Workflow
 
-1. Haz un *fork* y crea una rama descriptiva.
-2. Haz cambios pequeños y enfocados; los commits deben poder revisarse.
-3. Añade o actualiza la documentación de `docs/` si el cambio la afecta.
-4. Asegúrate de que Debug, Release y los tests pasan.
-5. Abre una *pull request* explicando **qué** y **por qué**.
+1. Fork the repository and create a descriptive branch.
+2. Make small, focused changes; commits must be reviewable.
+3. Add or update the documentation in `docs/` if the change affects it.
+4. Make sure Debug, Release and the tests pass.
+5. Open a *pull request* explaining **what** and **why**.
 
-La integración continua (`.github/workflows/ci.yml`) compila y ejecuta los tests
-en Linux (GCC y Clang); el trabajo debe pasar antes de fusionarse.
+Continuous integration (`.github/workflows/ci.yml`) builds and runs the tests
+on Linux (GCC and Clang); it must pass before merging.
 
-### Firma de los commits (DCO)
+### Signing off commits (DCO)
 
-Todo commit debe incluir la firma de desarrollador (Developer Certificate of
+Every commit must include the developer sign-off (Developer Certificate of
 Origin):
 
 ```text
-Signed-off-by: Nombre Apellidos <email>
+Signed-off-by: Full Name <email>
 ```
 
-Con Git basta añadir `-s` al confirmar (`git commit -s`); la firma se añade a
-partir de `user.name`/`user.email`. Al firmar afirmas que tienes derecho a
-publicar el cambio bajo la licencia del proyecto. No se aceptan *pull requests*
-cuyos commits carezcan de `Signed-off-by`.
+With Git, add `-s` when committing (`git commit -s`); the sign-off is built
+from `user.name`/`user.email`. By signing off you state that you have the right
+to publish the change under the project's license. *Pull requests* whose
+commits lack `Signed-off-by` are not accepted.
 
-## Añadir contenido
+## Adding content
 
-El contenido nuevo normalmente va en un **mod** (`mods/`), no en el árbol base.
-Para contribuir al contenido oficial (`content/base`), respeta la licencia
-**CC BY-SA 4.0** y no uses marcas reales. Más detalles en
-[`MODS.md`](MODS.md) y [`CONTENT.md`](CONTENT.md).
+New content normally goes into a **mod** (`mods/`), not into the base tree. To
+contribute to the official content (`content/base`), respect the
+**CC BY-SA 4.0** license and do not use real brands. More details in
+[`MODS.md`](MODS.md) and [`CONTENT.md`](CONTENT.md).
 
-## Licencia de las contribuciones
+## License of contributions
 
-Al enviar cambios de código aceptas que se distribuyan bajo **GPL-3.0-or-later**
-con la excepción de enlazado del proyecto. El contenido que envíes a
-`content/base` se distribuye bajo **CC BY-SA 4.0**. Cada mod decide su licencia.
+By submitting code changes you agree that they are distributed under
+**GPL-3.0-or-later** with the project's linking exception. Content you submit
+to `content/base` is distributed under **CC BY-SA 4.0**. Each mod chooses its
+own license.

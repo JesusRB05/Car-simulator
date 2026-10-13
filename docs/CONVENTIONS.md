@@ -1,38 +1,37 @@
-# Convenciones
+# Conventions
 
-Normas que deben cumplir todas las contribuciones. Lo esencial está en este
-archivo; los detalles de cada módulo viven en sus propios documentos
-(«Documentación» en [`README.md`](../README.md)).
+Rules that every contribution must follow. The essentials are in this file;
+the details of each module live in their own documents ("Documentation" in
+[`README.md`](../README.md)).
 
-## Sistema de coordenadas
+## Coordinate system
 
-- Mundo en coordenadas **diestras**: `+X` a la derecha, `+Y` arriba, **`-Z`
-  adelante** en todo el proyecto, **sin excepciones** (render, escenas de física
-  y vehículo).
-- Ángulos en **radianes**, tiempo en **segundos**, distancias en **metros**
-  (unidades SI, nunca otra unidad).
+- **Right-handed** world coordinates: `+X` right, `+Y` up, **`-Z` forward**
+  across the whole project, **with no exceptions** (rendering, physics scenes
+  and vehicle).
+- Angles in **radians**, time in **seconds**, distances in **metres** (SI
+  units, never any other unit).
 - Vehicle: heading `h` is a yaw about `+Y`; heading 0 faces `-Z`, so
   `forward = (-sin h, 0, -cos h)` and `right = (cos h, 0, -sin h)`. Positive
   heading, yaw rate and steer turn **left** (counter-clockwise seen from `+Y`).
   The car's model matrix is just `translate(p) * rotate(h, +Y)`, no axis
   conversion. See [`FISICA.md`](FISICA.md).
 
-## Convención de matrices (render)
+## Matrix convention (rendering)
 
-Hay una sola convención y se aplica en todo el render:
+There is a single convention and it applies to all rendering code:
 
-- **CPU (C++ / GLM):** matrices **column-major**. `glm::mat4` se copia a la GPU
-  **verbatim**; GLM guarda las columnas en memoria (los 16 bytes `[0..15]` son la
-  columna 0).
-- **GPU (Slang):** toda matriz se declara **`column_major float4x4`** y se
-  multiplica como **`mul(M, v)`** (vector columna), exactamente igual que
-  `M * v` en GLM.
-- La subida se centraliza en `writeMatrix()` (`render/Uniforms.hpp`): es un
-  `memcpy` de `glm::mat4` al bloque de uniformes. **Prohibido** transponer,
-  cambiar el orden de filas/columnas o negar coordenadas en el sitio de subida.
-- Estructuras de uniformes: `FrameUniforms` y `ObjectPushConstants` en
-  `render/Uniforms.hpp`. El layout GPU es std140; cada miembro empieza alineado
-  a 16 bytes (matriz = 4 columnas de 16 bytes contiguas).
+- **CPU (C++ / GLM):** **column-major** matrices. `glm::mat4` is copied to the
+  GPU **verbatim**; GLM stores columns in memory (the first 16 bytes are
+  column 0).
+- **GPU (Slang):** every matrix is declared **`column_major float4x4`** and
+  multiplied as **`mul(M, v)`** (column vector), exactly like `M * v` in GLM.
+- Uploads go through `writeMatrix()` (`render/Uniforms.hpp`): a `memcpy` of a
+  `glm::mat4` into the uniform block. Transposing, reordering rows/columns or
+  negating coordinates at the upload site is **forbidden**.
+- Uniform structures: `FrameUniforms` and `ObjectPushConstants` in
+  `render/Uniforms.hpp`. The GPU layout is std140; every member starts 16-byte
+  aligned (a matrix = 4 contiguous 16-byte columns).
 - Screen orientation is defined **exactly once**, in the RHI:
   `CommandList::setViewport` emits a negative-height viewport, so world `+Y`
   points up in the image and world `+X` points right (standard projection, no
@@ -45,26 +44,27 @@ Hay una sola convención y se aplica en todo el render:
   pipeline uses `VK_FRONT_FACE_COUNTER_CLOCKWISE` with back-face culling
   (`tests/test_render_math.cpp` checks every built-in mesh).
 
-## Profundidad (reversed-Z)
+## Depth (reversed-Z)
 
-- Proyección en perspectiva **diestra con profundidad inversa** (reversed-Z):
-  cerca → 1, lejos → 0. Ver `Camera::setPerspective` y
+- **Right-handed perspective projection with reversed depth** (reversed-Z):
+  near → 1, far → 0. See `Camera::setPerspective` and
   [`RENDERIZADO.md`](RENDERIZADO.md).
-- El pipeline compara con `GreaterEqual` y limpia la profundidad a `0.0f`.
+- The pipeline compares with `GreaterEqual` and clears depth to `0.0f`.
 
-## Física
+## Physics
 
-- **Doble precisión** para posiciones y estado del mundo; paso fijo
-  (`1/1000 s` por defecto) y un solo hilo ejecutando el paso (determinismo).
-- Compilación: `-ffast-math` prohibido, FMA contractivo desactivado, MSVC en
-  `/fp:precise`.
-- Ver [`FISICA.md`](FISICA.md) para integrador, articulaciones y suite de tests.
+- **Double precision** for positions and world state; fixed step (`1/1000 s`
+  by default) and a single thread running the step (determinism).
+- Compilation: `-ffast-math` is forbidden, FMA contraction is disabled, MSVC
+  uses `/fp:precise`.
+- See [`FISICA.md`](FISICA.md) for the integrator, joints and test suite.
 
-## Código
+## Code
 
-- C++17 o superior, estilo `clang-format` (`.clang-format` en la raíz).
-- Cabeceras con `#pragma once`, licencia **SPDX GPL-3.0-or-later** en la primera
-  línea de cada archivo.
-- Documentación en español; identificadores, nombres y mensajes en inglés.
-- Shaders en Slang dentro de `src/render/shaders/`; se compilan a SPIR-V con
-  `-emit-spirv-via-glsl`.
+- C++17 or later, `clang-format` style (`.clang-format` at the root).
+- Headers use `#pragma once`; **SPDX GPL-3.0-or-later** license on the first
+  line of every file.
+- Everything in English: documentation, comments, identifiers, names and
+  messages.
+- Slang shaders live in `src/render/shaders/`; they are compiled to SPIR-V
+  with `-emit-spirv-via-glsl`.

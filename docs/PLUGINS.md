@@ -1,17 +1,16 @@
-# Plugins nativos
+# Native plugins
 
-Cuando un mod necesita rendimiento nativo o acceso a código C/C++, puede
-incluir un **plugin**: una biblioteca compartida (`.dll`, `.so`, `.dylib`) que
-implementa una ABI C estable.
+When a mod needs native performance or access to C/C++ code, it can include a
+**plugin**: a shared library (`.dll`, `.so`, `.dylib`) that implements a stable
+C ABI.
 
 ## ABI
 
-La ABI se define en `src/plugin_api/include/plugin_api/plugin_api.h`, que es
-**C puro** (sin construcciones de C++), de modo que un plugin puede escribirse
-en C, C++ o cualquier lenguaje capaz de producir una biblioteca compartida con
-ABI C. Versión actual: **1**.
+The ABI is defined in `src/plugin_api/include/plugin_api/plugin_api.h`, which
+is **plain C** (no C++ constructs), so a plugin can be written in C, C++ or any
+language able to produce a shared library with a C ABI. Current version: **1**.
 
-Un plugin exporta exactamente dos símbolos:
+A plugin exports exactly two symbols:
 
 ```c
 uint32_t sim_plugin_abi_version(void);
@@ -20,70 +19,70 @@ int      sim_plugin_entry(uint32_t host_abi_version,
                           sim_plugin_host* out_host);
 ```
 
-1. El host carga la biblioteca y lee `sim_plugin_abi_version()`.
-2. Compara el valor con `SIM_PLUGIN_ABI_VERSION`. Si no coincide, rechaza el
-   plugin.
-3. Llama a `sim_plugin_entry()` pasándole la **versión de la ABI del host** (por
-   si el plugin quiere rechazar un host que no entiende) y el bloque de
-   servicios `sim_plugin_api`.
-4. El plugin rellena `sim_plugin_host` con sus *callbacks* y devuelve `0` si
-   todo va bien, o un código distinto de cero en caso de error.
+1. The host loads the library and reads `sim_plugin_abi_version()`.
+2. It compares the value with `SIM_PLUGIN_ABI_VERSION`. If they do not match,
+   the plugin is rejected.
+3. It calls `sim_plugin_entry()`, passing the **host ABI version** (in case the
+   plugin wants to reject a host it does not understand) and the
+   `sim_plugin_api` service block.
+4. The plugin fills `sim_plugin_host` with its *callbacks* and returns `0` on
+   success, or a non-zero code on error.
 
-### Servicios que el host ofrece (`sim_plugin_api`)
+### Services offered by the host (`sim_plugin_api`)
 
-| Campo | Descripción |
+| Field | Description |
 |---|---|
-| `abi_version`, `struct_size` | Versión y tamaño de la estructura |
-| `user_data` | Contexto opaco del host; hay que devolverlo en cada llamada |
-| `game_version` | Versión del juego |
-| `log(user_data, nivel, mensaje)` | Escribe en el log del plugin |
-| `vfs_read(user_data, ruta, buffer, tamaño)` | Lee del VFS; devuelve los bytes escritos o `-1` |
-| `plugin_name(user_data)` | Nombre del plugin |
+| `abi_version`, `struct_size` | Version and size of the structure |
+| `user_data` | Opaque host context; must be passed back on every call |
+| `game_version` | Game version |
+| `log(user_data, level, message)` | Writes to the plugin log |
+| `vfs_read(user_data, path, buffer, size)` | Reads from the VFS; returns the bytes written or `-1` |
+| `plugin_name(user_data)` | Plugin name |
 
-### Callbacks que el plugin devuelve (`sim_plugin_host`)
+### Callbacks returned by the plugin (`sim_plugin_host`)
 
-| Campo | Descripción |
+| Field | Description |
 |---|---|
-| `user_data` | Contexto del plugin; se devuelve en los callbacks |
-| `on_update(user_data, dt)` | Una vez por frame, con el delta en segundos |
-| `on_shutdown(user_data)` | Una vez al descargar; puede ser `NULL` |
+| `user_data` | Plugin context; passed back in the callbacks |
+| `on_update(user_data, dt)` | Once per frame, with the delta in seconds |
+| `on_shutdown(user_data)` | Once when unloading; may be `NULL` |
 
-## Compatibilidad entre versiones
+## Compatibility between versions
 
-Las estructuras **solo crecen añadiendo campos al final**. `struct_size` permite
-que ambos lados ignoren los campos que no conocen: un plugin viejo puede cargar
-sobre un host nuevo (y viceversa) mientras se respete esta regla. La
-`abi_version` solo se incrementa ante cambios incompatibles.
+Structures **only grow by appending fields at the end**. `struct_size` lets
+both sides ignore fields they do not know: an old plugin can load on a new host
+(and vice versa) as long as this rule is respected. `abi_version` is only
+incremented for incompatible changes.
 
-## Ejemplo
+## Example
 
-`plugins/example_native/` es un plugin de referencia en C que demuestra la ABI
-de extremo a extremo: informa de su versión ABI, recibe la API, escribe en el
-log, lee `/README.txt` del VFS y cuenta frames en `on_update`. Se compila como
-módulo (`add_library(... MODULE ...)`) sin prefijo `lib`, y su salida va a
-`bin/plugins/`.
+`plugins/example_native/` is a reference C plugin that demonstrates the ABI end
+to end: it reports its ABI version, receives the API, writes to the log, reads
+`/README.txt` from the VFS and counts frames in `on_update`. It is built as a
+module (`add_library(... MODULE ...)`) without the `lib` prefix, and its output
+goes to `bin/plugins/`.
 
-## Carga en tiempo de ejecución
+## Loading at run time
 
-`PluginLoader` carga una biblioteca o un directorio entero (recorriendo los
-ficheros con extensión de biblioteca compartida). Usa `SDL_LoadObject` /
-`SDL_LoadFunction` / `SDL_UnloadObject` para el trabajo multiplataforma.
+`PluginLoader` loads one library or a whole directory (walking the files with a
+shared-library extension). It uses `SDL_LoadObject` / `SDL_LoadFunction` /
+`SDL_UnloadObject` for the cross-platform work.
 
-- Un plugin que falla (no abre, le faltan símbolos, ABI incompatible o
-  `sim_plugin_entry` devuelve error) se registra con su mensaje de error y **no
-  impide** cargar el resto.
-- `update(dt)` llama a todos los `on_update` cargados.
-- `unloadAll()` llama a los `on_shutdown` y descarga las bibliotecas.
+- A plugin that fails (does not open, is missing symbols, has an incompatible
+  ABI or `sim_plugin_entry` returns an error) is recorded with its error
+  message and **does not prevent** the rest from loading.
+- `update(dt)` calls every loaded `on_update`.
+- `unloadAll()` calls the `on_shutdown` callbacks and unloads the libraries.
 
-Cada plugin tiene su propio logger (`core::Log::forPlugin(nombre)`), de modo que
-sus mensajes quedan etiquetados con el nombre del plugin.
+Each plugin has its own logger (`core::Log::forPlugin(name)`), so its messages
+are tagged with the plugin name.
 
-## Escribir un plugin
+## Writing a plugin
 
-1. Incluye `plugin_api/plugin_api.h`.
-2. Exporta `sim_plugin_abi_version` y `sim_plugin_entry` con
+1. Include `plugin_api/plugin_api.h`.
+2. Export `sim_plugin_abi_version` and `sim_plugin_entry` with
    `SIM_PLUGIN_EXPORT`.
-3. Comprueba `host_abi_version` y `api->struct_size` antes de usar la API.
-4. Rellena `out_host` y devuelve `0`.
-5. Compila como biblioteca compartida (módulo) y colócala en la carpeta
-   `plugins/` junto al ejecutable.
+3. Check `host_abi_version` and `api->struct_size` before using the API.
+4. Fill `out_host` and return `0`.
+5. Build it as a shared library (module) and place it in the `plugins/` folder
+   next to the executable.

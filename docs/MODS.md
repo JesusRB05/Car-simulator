@@ -1,137 +1,137 @@
-# Sistema de mods
+# Mod system
 
-El motor está pensado para ser modificable. Los mods **no cambian el binario**:
-se montan sobre el sistema de ficheros virtual (VFS) y, opcionalmente, añaden
-scripts Lua o plugins nativos.
+The engine is designed to be moddable. Mods **do not change the binary**: they
+are mounted on the virtual file system (VFS) and can optionally add Lua scripts
+or native plugins.
 
-## Dónde vive un mod
+## Where a mod lives
 
 ```
 mods/
-  mi_mod/
-    mod.toml            <- manifiesto obligatorio
-    scripts/main.lua    <- opcional (entry_script)
-    ...                 <- cualquier otro contenido (texturas, mallas, datos)
+  my_mod/
+    mod.toml            <- required manifest
+    scripts/main.lua    <- optional (entry_script)
+    ...                 <- any other content (textures, meshes, data)
 ```
 
-Un mod puede ser un **directorio** o un **`.zip`**. El gestor escanea
-`mods/`, y cada entrada es candidata a mod. El contenido oficial
-(`content/base`) es, a efectos del sistema, otro mod más (el "base"), siempre
-presente y de menor prioridad.
+A mod can be a **directory** or a **`.zip`**. The manager scans `mods/`, and
+every entry is a mod candidate. The official content (`content/base`) is, as
+far as the system is concerned, just another mod (the "base" one), always
+present and with the lowest priority.
 
 `ModManager`:
 
-1. Descubre candidatos (contenido base primero, luego los mods ordenados por
-   nombre).
-2. Lee y valida cada `mod.toml`.
-3. Resuelve dependencias y obtiene el orden de carga.
-4. Desmonta todo el VFS y monta el contenido base y, encima, los mods activos.
-5. Persiste la lista de mods activos y genera un informe.
+1. Discovers candidates (base content first, then the mods sorted by name).
+2. Reads and validates each `mod.toml`.
+3. Resolves dependencies and computes the load order.
+4. Unmounts the whole VFS and mounts the base content and, on top of it, the
+   active mods.
+5. Persists the list of active mods and produces a report.
 
-Un mod inválido **nunca** aborta el arranque: se marca como `Invalid` con un
-mensaje claro y el resto sigue cargando.
+An invalid mod **never** aborts start-up: it is marked `Invalid` with a clear
+message and the rest keep loading.
 
 ## `mod.toml`
 
 ```toml
-id = "mi_mod"                 # obligatorio, único
-name = "Mi Mod"               # obligatorio
-version = "1.0.0"             # obligatorio, semver (x.y.z)
-author = "Tu nombre"          # opcional
-license = "CC BY-SA 4.0"      # obligatorio
-description = "Qué hace"      # opcional
-min_game_version = "0.1.0"    # opcional; semver o "*"
-entry_script = "scripts/main.lua"  # opcional
-priority = 10                 # opcional; mayor = se monta más arriba
+id = "my_mod"                 # required, unique
+name = "My Mod"               # required
+version = "1.0.0"             # required, semver (x.y.z)
+author = "Your name"          # optional
+license = "CC BY-SA 4.0"      # required
+description = "What it does"  # optional
+min_game_version = "0.1.0"    # optional; semver or "*"
+entry_script = "scripts/main.lua"  # optional
+priority = 10                 # optional; higher = mounted further up
 dependencies = [
-    "otro_mod",
-    "biblioteca >=1.2.0",
-    "^otra_lib 1.4.0",
+    "other_mod",
+    "library >=1.2.0",
+    "^other_lib 1.4.0",
 ]
 ```
 
-### Campos
+### Fields
 
-| Campo | Obligatorio | Notas |
+| Field | Required | Notes |
 |---|---|---|
-| `id` | Sí | minúsculas, dígitos, `-` y `_`, empezando por letra |
-| `name` | Sí | Nombre para mostrar |
-| `version` | Sí | Semver válido (`major.minor.patch[-prerelease]`) |
-| `license` | Sí | Cadena SPDX o descriptiva |
+| `id` | Yes | lowercase letters, digits, `-` and `_`, starting with a letter |
+| `name` | Yes | Display name |
+| `version` | Yes | Valid semver (`major.minor.patch[-prerelease]`) |
+| `license` | Yes | SPDX or descriptive string |
 | `author` | No | |
 | `description` | No | |
-| `min_game_version` | No | Semver o `"*"`. Si no es parseable, el mod es inválido |
-| `entry_script` | No | Ruta dentro del mod a un script Lua de entrada |
-| `priority` | No | Entero; **mayor prioridad ⇒ se monta más arriba** (sobrescribe) |
-| `dependencies` | No | Lista de `"id"` o `"id <rango de versión>"` |
+| `min_game_version` | No | Semver or `"*"`. If it cannot be parsed, the mod is invalid |
+| `entry_script` | No | Path inside the mod to an entry Lua script |
+| `priority` | No | Integer; **higher priority ⇒ mounted further up** (overrides) |
+| `dependencies` | No | List of `"id"` or `"id <version range>"` |
 
-### Dependencias
+### Dependencies
 
-Son **cadenas**, no tablas. Cada entrada es un `id` opcionalmente seguido de un
-espacio y un rango de versión:
+They are **strings**, not tables. Each entry is an `id` optionally followed by
+a space and a version range:
 
 ```toml
-dependencies = ["base", "ruedas >=2.0.0 <3.0.0"]
+dependencies = ["base", "wheels >=2.0.0 <3.0.0"]
 ```
 
-`resolveMods` (en `DependencyResolver`) construye un orden de carga **topológico
-y estable**: un mod aparece siempre después de sus dependencias. Las
-dependencias de los mods pedidos se activan automáticamente. Se detectan y
-reportan:
+`resolveMods` (in `DependencyResolver`) builds a **topological, stable** load
+order: a mod always comes after its dependencies. Dependencies of the
+requested mods are activated automatically. The following are detected and
+reported:
 
-- dependencias que faltan,
-- rangos de versión no satisfechos,
-- ciclos,
-- ids duplicados entre dos mods (conflicto).
+- missing dependencies,
+- unsatisfied version ranges,
+- cycles,
+- duplicate ids between two mods (conflict).
 
-Los mods afectados por un error quedan deshabilitados; el resto carga igual.
+Mods affected by an error are disabled; the rest load anyway.
 
-## Rangos de versión
+## Version ranges
 
-Sintaxis soportada por `satisfies()` (todos los comparadores se combinan con
-AND; las alternativas se separan con `||`):
+Syntax supported by `satisfies()` (all comparators are combined with AND;
+alternatives are separated with `||`):
 
-| Rango | Significado |
+| Range | Meaning |
 |---|---|
-| `*` | Cualquier versión |
-| `1.2.3`, `=1.2.3` | Coincidencia exacta |
-| `1.2`, `1` | Coincidencia por prefijo |
-| `>=1.2.0`, `>1.2.0` | Comparación |
-| `<=1.2.0`, `<1.2.0` | Comparación |
-| `^1.2.3` | `>=1.2.3` y `<2.0.0` (respetando la regla de `0.x`) |
-| `~1.2.3`, `~1.2` | `>=1.2.3` y `<1.3.0` |
-| `>=1.0.0 <2.0.0` | Varios comparadores |
+| `*` | Any version |
+| `1.2.3`, `=1.2.3` | Exact match |
+| `1.2`, `1` | Prefix match |
+| `>=1.2.0`, `>1.2.0` | Comparison |
+| `<=1.2.0`, `<1.2.0` | Comparison |
+| `^1.2.3` | `>=1.2.3` and `<2.0.0` (following the `0.x` rule) |
+| `~1.2.3`, `~1.2` | `>=1.2.3` and `<1.3.0` |
+| `>=1.0.0 <2.0.0` | Several comparators |
 
-El *build metadata* de semver (`+algo`) se ignora en las comparaciones.
+Semver *build metadata* (`+something`) is ignored in comparisons.
 
-## Prioridad y sobrescritura
+## Priority and overriding
 
-Todos los mods (y el contenido base) se montan en el **mismo punto virtual**
-(`/`). La prioridad de montaje determina quién gana cuando dos mods tienen la
-misma ruta:
+All mods (and the base content) are mounted at the **same virtual point**
+(`/`). The mount priority determines which one wins when two mods have the
+same path:
 
 ```
-base (siempre, la más baja)
-  → mods activos con priority = 0 ...
-  → mods activos con priority mayor (por encima)
+base (always, the lowest)
+  → active mods with priority = 0 ...
+  → active mods with higher priority (on top)
 ```
 
-Como un mod de mayor prioridad se monta **después**, sus ficheros sobrescriben
-los de prioridad menor. Un mod puede reemplazar, por ejemplo, una textura del
-contenido base sin tocar nada del motor.
+Because a higher-priority mod is mounted **later**, its files override those
+of lower priority. A mod can, for example, replace a texture of the base
+content without touching the engine at all.
 
-## Activar y desactivar mods
+## Enabling and disabling mods
 
-Los mods activos se guardan en la configuración del usuario, en la clave
-`mods.active` (una lista de ids). El contenido base se pide siempre, tanto si
-está en la lista como si no.
+Active mods are stored in the user configuration, under the `mods.active` key
+(a list of ids). The base content is always requested, whether or not it is in
+the list.
 
-`ModManager::setModActive(id, activo)` actualiza la lista y recarga. La
-configuración se guarda automáticamente tras cada `reload()`.
+`ModManager::setModActive(id, active)` updates the list and reloads. The
+configuration is saved automatically after every `reload()`.
 
-## Informe
+## Report
 
-`ModReport` (accesible por `ModManager::report()`) describe cada mod descubierto
-con su estado (`Active`, `Disabled`, `Invalid`), dependencias y errores, más una
-lista de mensajes (conflictos, ciclos, ...). `toString()` devuelve un resumen
-legible que el motor escribe en el log.
+`ModReport` (available through `ModManager::report()`) describes every
+discovered mod with its state (`Active`, `Disabled`, `Invalid`), dependencies
+and errors, plus a list of messages (conflicts, cycles, ...). `toString()`
+returns a readable summary that the engine writes to the log.

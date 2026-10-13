@@ -1,41 +1,42 @@
-# Dorados (golden images)
+# Golden images
 
-Referencias de regresión por **driver Vulkan**. Cada subcarpeta reúne los
-dorados **aprobados** por un driver concreto, porque la rasterización difiere
-levemente entre ellos:
+Regression references per **Vulkan driver**. Each subfolder holds the
+**approved** golden images for one specific driver, because rasterization
+differs slightly between drivers:
 
-- `lavapipe/` — Mesa lavapipe (CI en Linux y desarrollo local en Windows).
+- `lavapipe/` — Mesa lavapipe (CI on Linux and local development on Windows).
 
-No se mantienen dorados en el repositorio hasta que una persona los aprueba:
-primero se generan **candidatas** en `screenshots/golden_candidates/` y solo
-pasan a una carpeta de aquí tras la revisión humana.
+No golden images are kept in the repository until a person approves them:
+**candidates** are first generated in `screenshots/golden_candidates/` and only
+move into a folder here after human review.
 
-## Uso
+## Usage
 
-`sim_tests` no los usa; los consumen los tests GPU (`ctest -L gpu`), que leen la
-carpeta del driver seleccionado en configuración:
+`sim_tests` does not use them; they are consumed by the GPU tests
+(`ctest -L gpu`), which read the folder of the driver selected at configure
+time:
 
 ```bat
 cmake --preset windows-msvc-release -DSIM_ENABLE_GPU_TESTS=ON -DSIM_GOLDEN_DRIVER=lavapipe
 ```
 
-## Ciclo de aprobación
+## Approval cycle
 
-1. **Generar candidatas** tras un cambio intencionado (nada de maquillar
-   regresiones):
-   `cmake --build <build> --target update_golden`. Las candidatas se escriben en
-   `screenshots/golden_candidates/`, nunca directamente aquí.
-2. **Revisar** las candidatas y, si se aprueban, copiarlas:
-   `tests/golden/<driver>/<escena>.png`.
-3. Mientras una referencia no está aprobada, su test GPU devuelve **77** y ctest
-   lo reporta como **SKIPPED** (ni pasa ni falla); en cuanto existe el PNG en
-   esta carpeta, pasa a verificarse normalmente.
-4. En CI, la tarea `gpu-linux` genera las candidatas si faltan y las sube como
-   artefacto `golden-candidates`; no marca ningún test como fallido por no tener
-   referencia aprobada.
+1. **Generate candidates** after an intentional change (never to paper over
+   regressions):
+   `cmake --build <build> --target update_golden`. Candidates are written to
+   `screenshots/golden_candidates/`, never directly here.
+2. **Review** the candidates and, if approved, copy them to
+   `tests/golden/<driver>/<scene>.png`.
+3. While a reference is not approved, its GPU test returns **77** and ctest
+   reports it as **SKIPPED** (neither passed nor failed); as soon as the PNG
+   exists in this folder, it is verified normally.
+4. In CI, the `gpu-linux` job generates the candidates if they are missing and
+   uploads them as the `golden-candidates` artifact; it does not mark any test
+   as failed for lacking an approved reference.
 
-La comparación usa tolerancias realistas (máx. 1 % de píxeles distintos,
-PSNR ≥ 30 dB). Ver `apps/sim/src/HeadlessRunner.cpp`.
+The comparison uses realistic tolerances (at most 1 % differing pixels,
+PSNR ≥ 30 dB). See `apps/sim/src/HeadlessRunner.cpp`.
 
-Un nombre `scene_debug.png` es la variante con el overlay de debug draw
-(`--debug-draw`) de esa escena.
+A `scene_debug.png` name is the variant of that scene with the debug-draw
+overlay (`--debug-draw`).
