@@ -201,7 +201,9 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   `Bushing` (`vehicle/Bushing.hpp`) the per-axis pivot compliance (P2.7), whose
   ride and damping are checked against the analytic quarter-car response, and
   `Steering` (`vehicle/Steering.hpp`) the Ackermann angles, the rack ratio and the
-  column torque (P2.8).
+  column torque (P2.8), and `MassProperties` (`vehicle/MassProperties.hpp`) plus
+  `Aerodynamics` (`vehicle/Aerodynamics.hpp`) the parallel-axis mass build-up and
+  the constant-coefficient aero loads (P2.9).
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,

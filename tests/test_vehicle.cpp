@@ -7,6 +7,7 @@
 #include <vector>
 
 // Every interface header is included so that it is compile-checked here.
+#include "vehicle/Aerodynamics.hpp"
 #include "vehicle/AntiRollBar.hpp"
 #include "vehicle/Bushing.hpp"
 #include "vehicle/DoubleWishbone.hpp"
@@ -18,6 +19,7 @@
 #include "vehicle/IVehicleElectronics.hpp"
 #include "vehicle/IVehicleModel.hpp"
 #include "vehicle/MagicFormulaTire.hpp"
+#include "vehicle/MassProperties.hpp"
 #include "vehicle/PlaceholderVehicle.hpp"
 #include "vehicle/SpringDamper.hpp"
 #include "vehicle/Steering.hpp"
@@ -985,6 +987,52 @@ TEST_CASE("the steering gives Ackermann angles and a column torque") {
         // A zero efficiency falls back to 1 instead of dividing by zero.
         CHECK(steeringColumnTorque(wheels, 0.0, 0.0, 0.0) == doctest::Approx(340.0));
     }
+}
+
+TEST_CASE("the mass properties combine with the parallel-axis theorem") {
+    SUBCASE("two point masses on a line") {
+        const std::vector<MassContribution> parts{{1.0, {0.0, 0.0, 0.0}, Mat3(0.0)}, {1.0, {2.0, 0.0, 0.0}, Mat3(0.0)}};
+        const MassProperties p = combineMassProperties(parts);
+        CHECK(p.mass == doctest::Approx(2.0));
+        CHECK(p.centreOfMass.x == doctest::Approx(1.0));
+        CHECK(p.centreOfMass.y == doctest::Approx(0.0));
+        CHECK(p.inertia[0][0] == doctest::Approx(0.0)); // both masses sit on the x axis
+        CHECK(p.inertia[1][1] == doctest::Approx(2.0));
+        CHECK(p.inertia[2][2] == doctest::Approx(2.0));
+    }
+
+    SUBCASE("a contribution's own inertia passes through at its CG") {
+        Mat3 own(0.0);
+        own[0][0] = 1.0;
+        own[1][1] = 2.0;
+        own[2][2] = 3.0;
+        const std::vector<MassContribution> parts{{2.0, {0.0, 0.0, 0.0}, own}};
+        const MassProperties p = combineMassProperties(parts);
+        CHECK(p.mass == doctest::Approx(2.0));
+        CHECK(p.inertia[0][0] == doctest::Approx(1.0));
+        CHECK(p.inertia[1][1] == doctest::Approx(2.0));
+        CHECK(p.inertia[2][2] == doctest::Approx(3.0));
+    }
+
+    SUBCASE("no contributions give nothing") {
+        const MassProperties p = combineMassProperties({});
+        CHECK(p.mass == doctest::Approx(0.0));
+    }
+}
+
+TEST_CASE("the air density and the aero loads follow the closed form") {
+    CHECK(airDensity(101325.0, 288.15) == doctest::Approx(1.225).epsilon(1.0e-3));
+
+    // Air at 10 m/s along +Z, rho = 1.225, C_D = 0.3, C_L = 1.0, A = 2, at 0.5 m up and 1 m back.
+    const AeroLoads l = computeAerodynamicLoads({0.0, 0.0, 10.0}, 1.225, 0.3, 1.0, 2.0, {0.0, 0.5, 1.0}, Vec3(0.0));
+    CHECK(l.force.z == doctest::Approx(36.75));    // drag along the air flow
+    CHECK(l.force.y == doctest::Approx(-122.5));   // positive C_L is downforce
+    CHECK(l.moment.x == doctest::Approx(140.875)); // cop x force about the reference point
+    CHECK(l.moment.y == doctest::Approx(0.0));
+    CHECK(l.moment.z == doctest::Approx(0.0));
+
+    const AeroLoads none = computeAerodynamicLoads({0.0, 0.0, 0.0}, 1.225, 0.3, 1.0, 2.0, {0.0, 0.5, 1.0}, Vec3(0.0));
+    CHECK(glm::length(none.force) == doctest::Approx(0.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {

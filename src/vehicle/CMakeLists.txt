@@ -36,6 +36,11 @@ add_library(sim_vehicle STATIC
     # Steering geometry, Ackermann and column torque (Phase 2, P2.8).
     include/vehicle/Steering.hpp
     src/Steering.cpp
+    # Mass properties and aerodynamics (Phase 2, P2.9).
+    include/vehicle/MassProperties.hpp
+    src/MassProperties.cpp
+    include/vehicle/Aerodynamics.hpp
+    src/Aerodynamics.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)
