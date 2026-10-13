@@ -38,19 +38,42 @@ struct ConstraintRow
     Real impulse = 0.0;         // accumulated impulse (warm started)
     Real lower = -kInfinity;    // impulse clamp (limits / motors)
     Real upper = kInfinity;
+
+    Real positionError = 0.0;   // scalar position error C at prepare() time
+    bool project = false;       // rigid row: corrected by the position projection pass
+
+    bool isBilateral() const { return lower == -kInfinity && upper == kInfinity; }
 };
 
-// Parameters of a "soft step" constraint: an implicit spring-damper that both
-// enforces the velocity constraint and gently removes position error, without
-// the energy injection of an aggressive Baumgarte term. Setting `frequency <= 0`
-// or `stiffness >= 1e18` makes the row effectively rigid (gamma = 0 and bias
-// disabled).
+// Per-joint compliance. Three modes, selected in this order:
+//
+//  * Rigid (`rigid == true` or `stiffness >= 1e18`): the velocity rows have no
+//    softness (gamma = 0) and no bias, so the velocity solve injects no energy,
+//    and the world removes the remaining position error with a projection pass
+//    after the positions are integrated (see PhysicsWorld::step). This is the
+//    mode to use when the joint must not visibly stretch.
+//  * Soft step (`stiffness > 0` or `frequency > 0`): an implicit spring-damper
+//    that enforces the velocity constraint and gently removes position error,
+//    without the energy injection of an aggressive Baumgarte term. An explicit
+//    `stiffness` (N/m or N*m/rad) overrides the frequency-derived one.
+//  * Velocity-only (`frequency <= 0`, `stiffness <= 0`, not rigid): gamma = 0
+//    and no position correction at all. Only meant for motor rows, whose target
+//    is a velocity; a positional joint configured like this drifts.
 struct SoftParams
 {
-    Real frequency = 0.0;    // Hz (0 = rigid)
+    Real frequency = 0.0;     // Hz
     Real dampingRatio = 1.0;  // 1 = critically damped
-    Real stiffness = 0.0;    // N/m or N·m/rad (0 = use frequency-based stiffness)
-    bool rigid = false;      // force rigid constraint
+    Real stiffness = 0.0;     // N/m or N*m/rad (0 = use frequency-based stiffness)
+    bool rigid = false;       // rigid row + position projection
+
+    bool isRigid() const { return rigid || stiffness >= 1e18; }
+
+    static SoftParams makeRigid()
+    {
+        SoftParams params;
+        params.rigid = true;
+        return params;
+    }
 };
 
 // Computes the row's constraint mass  K = J * M^-1 * J^T.
@@ -78,6 +101,10 @@ public:
 
     void warmStart();
     void solveVelocity();
+
+    // True when any row was configured as rigid by the last prepare(), i.e. the
+    // joint takes part in the position projection pass.
+    bool hasProjectedRows() const;
 
     RigidBody* bodyA = nullptr;
     RigidBody* bodyB = nullptr;

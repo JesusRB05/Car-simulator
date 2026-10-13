@@ -3,6 +3,7 @@
 #include "physics/Constraint.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace sim::physics {
 
@@ -28,22 +29,37 @@ void configureRow(ConstraintRow& row, Real invEffectiveMass, Real positionError,
 {
     row.bias = 0.0;
     row.softness = 0.0;
+    row.positionError = positionError;
+    row.project = false;
+    row.effectiveMass = invEffectiveMass > 0.0 ? 1.0 / invEffectiveMass : 0.0;
 
-    const bool forceRigid = soft.rigid || soft.frequency <= 0.0 || soft.stiffness >= 1e18;
-    if (forceRigid || dt <= 0.0 || invEffectiveMass <= 0.0)
+    if (soft.isRigid())
     {
-        row.effectiveMass = invEffectiveMass > 0.0 ? 1.0 / invEffectiveMass : 0.0;
+        // Hard velocity row; the position error is removed by the world's
+        // projection pass instead of a velocity bias, so nothing is injected.
+        row.project = invEffectiveMass > 0.0;
         return;
     }
 
+    const bool hasSpring = soft.stiffness > 0.0 || soft.frequency > 0.0;
+    if (!hasSpring || dt <= 0.0 || invEffectiveMass <= 0.0)
+    {
+        return;  // velocity-only row (motors)
+    }
+
     const Real m = 1.0 / invEffectiveMass;
-    const Real omega = kTwoPiPhysics * soft.frequency;
-    Real k = m * omega * omega;
+    Real k = 0.0;
     if (soft.stiffness > 0.0)
     {
         k = soft.stiffness;
     }
-    const Real d = 2.0 * m * soft.dampingRatio * std::sqrt(k / (m > 0.0 ? m : 1.0));
+    else
+    {
+        const Real omega = kTwoPiPhysics * soft.frequency;
+        k = m * omega * omega;
+    }
+    // Critical damping of the (m, k) oscillator scaled by the damping ratio.
+    const Real d = 2.0 * soft.dampingRatio * std::sqrt(k * m);
     const Real denominator = d + dt * k;
     if (denominator > 0.0)
     {
@@ -113,6 +129,18 @@ void Constraint::rebuildRows(std::size_t count)
 }
 
 void Constraint::carryImpulses() {}
+
+bool Constraint::hasProjectedRows() const
+{
+    for (const ConstraintRow& row : rows)
+    {
+        if (row.project)
+        {
+            return true;
+        }
+    }
+    return false;
+}
 
 void Constraint::warmStart()
 {

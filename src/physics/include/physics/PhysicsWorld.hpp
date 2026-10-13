@@ -45,6 +45,24 @@ public:
     int velocityIterations = 8;
     Real fixedStep = 1.0 / 1000.0;
 
+    // Constraint islands (joints connected through dynamic bodies) whose
+    // bilateral rows fit in this count are solved with a dense LDL^T block
+    // solve instead of plain sequential impulses: the equality rows are solved
+    // exactly every iteration and only bounded rows (motors, limits) are
+    // iterated. This is what keeps large mass ratios (1:1000) and long chains
+    // rigid. 0 disables it and falls back to PGS for every island.
+    int directSolverMaxRows = 128;
+
+    // Position projection for rigid rows (SoftParams::rigid): after the
+    // positions are integrated, up to `positionIterations` Newton passes move
+    // the bodies back onto the constraint manifold (without touching the
+    // velocities, so no energy is injected). A pass stops early once every
+    // rigid row error is below `positionTolerance`; a single pass never moves a
+    // row by more than `maxPositionCorrection`.
+    int positionIterations = 4;
+    Real positionTolerance = 1e-10;   // m or rad
+    Real maxPositionCorrection = 0.2; // m or rad
+
     RigidBody& createBody();
     std::size_t bodyCount() const { return bodies_.size(); }
     RigidBody& body(std::size_t index) { return bodies_[index]; }
@@ -90,6 +108,10 @@ public:
     void restoreSnapshot(const WorldSnapshot& snapshot);
 
 private:
+    std::vector<std::vector<Constraint*>> buildIslands() const;
+    void solveVelocities(const std::vector<std::vector<Constraint*>>& islands);
+    void projectPositions(const std::vector<std::vector<Constraint*>>& islands, Real dt);
+
     std::deque<RigidBody> bodies_;
     std::deque<std::unique_ptr<Constraint>> constraints_;
     std::deque<std::unique_ptr<ForceElement>> forceElements_;
