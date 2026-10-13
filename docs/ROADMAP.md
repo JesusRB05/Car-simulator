@@ -192,8 +192,9 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   scaling factors (`TireScaling`) that turn a base set into a variant.
   `DoubleWishbone` (`vehicle/DoubleWishbone.hpp`) starts the suspension group
   (P2.5): the upright closure solved by a damped Newton over the five links, with
-  camber, toe, the spring motion ratio and the steering-axis alignment (caster,
-  kingpin inclination, scrub radius, mechanical trail) derived from the pose.
+  camber, toe, the spring motion ratio, the steering-axis alignment (caster,
+  kingpin inclination, scrub radius, mechanical trail) and the front-view, side-
+  view and roll centres derived from the pose.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,

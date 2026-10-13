@@ -746,6 +746,53 @@ TEST_CASE("the steering-axis geometry follows the ball joints") {
     CHECK(glm::length(s.steeringAxis - glm::normalize(c.upperBallJoint - c.lowerBallJoint)) < 1e-12);
 }
 
+TEST_CASE("the instant centres and roll centre come out of the arm lines") {
+    SUBCASE("the front-view instant centre follows the arm lines") {
+        const DoubleWishbone suspension(sampleCorner());
+        const CornerState s = suspension.pose(Vec3(0.0), Vec3(0.0));
+        CHECK(s.frontInstantCentre.x == doctest::Approx(21.77069).epsilon(1e-5));
+        CHECK(s.frontInstantCentre.y == doctest::Approx(2.03931).epsilon(1e-5));
+    }
+
+    SUBCASE("the side-view instant centre sets the anti-dive") {
+        DoubleWishboneCorner c = sampleCorner();
+        c.lowerFrontPivot = {0.35, 0.20, -0.10};
+        c.lowerRearPivot = {0.35, 0.20, 0.30};
+        c.upperFrontPivot = {0.45, 0.46, -0.50};
+        c.upperRearPivot = {0.45, 0.46, 0.10};
+        const DoubleWishbone suspension(c);
+        const CornerState s = suspension.pose(Vec3(0.0), Vec3(0.0));
+        CHECK(s.sideInstantCentre.z == doctest::Approx(-2.8).epsilon(1e-6));
+        CHECK(s.sideInstantCentre.y == doctest::Approx(0.20).epsilon(1e-6));
+        CHECK(antiDiveFraction(s, 2.6, 0.5) == doctest::Approx(0.3714286).epsilon(1e-6));
+    }
+
+    SUBCASE("a symmetric pair meets on the centreline") {
+        DoubleWishboneCorner left = sampleCorner();
+        const auto mirror = [](Vec3& v) { v.x = -v.x; };
+        mirror(left.lowerFrontPivot);
+        mirror(left.lowerRearPivot);
+        mirror(left.upperFrontPivot);
+        mirror(left.upperRearPivot);
+        mirror(left.tieRodInner);
+        mirror(left.lowerBallJoint);
+        mirror(left.upperBallJoint);
+        mirror(left.tieRodOuter);
+        mirror(left.wheelCentre);
+        mirror(left.wheelAxle);
+        mirror(left.springUpper);
+        mirror(left.springLower);
+
+        const DoubleWishbone rightSuspension(sampleCorner());
+        const DoubleWishbone leftSuspension(left);
+        const CornerState r = rightSuspension.pose(Vec3(0.0), Vec3(0.0));
+        const CornerState l = leftSuspension.pose(Vec3(0.0), Vec3(0.0));
+        const Vec3 rc = rollCentre(l, r);
+        CHECK(std::abs(rc.x) < 1e-9);
+        CHECK(rc.y == doctest::Approx(-0.077796).epsilon(1e-4));
+    }
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 

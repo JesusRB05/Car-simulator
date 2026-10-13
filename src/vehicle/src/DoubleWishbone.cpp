@@ -72,6 +72,20 @@ bool solve6x6(double j[6][6], double b[6], double d[6]) {
     return true;
 }
 
+// Intersection of two 2D lines given as point plus direction. Returns false when
+// they are parallel.
+bool intersectLines(const glm::dvec2& p1, const glm::dvec2& d1, const glm::dvec2& p2, const glm::dvec2& d2,
+                    glm::dvec2& out) {
+    const double denom = d1.x * d2.y - d1.y * d2.x;
+    if (std::abs(denom) < 1e-12) {
+        return false;
+    }
+    const glm::dvec2 dp = p2 - p1;
+    const double t = (dp.x * d2.y - dp.y * d2.x) / denom;
+    out = p1 + t * d1;
+    return true;
+}
+
 } // namespace
 
 DoubleWishbone::DoubleWishbone(const DoubleWishboneCorner& corner) : corner_(corner) {
@@ -117,6 +131,28 @@ CornerState DoubleWishbone::finalize(const Vec3& translation, const Mat3& rotati
     const Vec3 groundPoint = lowerWorld + t * a;
     state.scrubRadius = groundPoint.x - state.wheelCentre.x;
     state.mechanicalTrail = state.wheelCentre.z - groundPoint.z;
+
+    // Instant centres: the arm lines run from a (moved) ball joint to the fixed
+    // chassis pivot midpoint of that wishbone. The front view is the x-y plane and
+    // the side view is the z-y plane.
+    const Vec3 lowerPivot = 0.5 * (corner_.lowerFrontPivot + corner_.lowerRearPivot);
+    const Vec3 upperPivot = 0.5 * (corner_.upperFrontPivot + corner_.upperRearPivot);
+
+    glm::dvec2 front(0.0);
+    if (intersectLines(glm::dvec2(lowerWorld.x, lowerWorld.y),
+                       glm::dvec2(lowerPivot.x - lowerWorld.x, lowerPivot.y - lowerWorld.y),
+                       glm::dvec2(upperWorld.x, upperWorld.y),
+                       glm::dvec2(upperPivot.x - upperWorld.x, upperPivot.y - upperWorld.y), front)) {
+        state.frontInstantCentre = Vec3(front.x, front.y, 0.0);
+    }
+
+    glm::dvec2 side(0.0);
+    if (intersectLines(glm::dvec2(lowerWorld.z, lowerWorld.y),
+                       glm::dvec2(lowerPivot.z - lowerWorld.z, lowerPivot.y - lowerWorld.y),
+                       glm::dvec2(upperWorld.z, upperWorld.y),
+                       glm::dvec2(upperPivot.z - upperWorld.z, upperPivot.y - upperWorld.y), side)) {
+        state.sideInstantCentre = Vec3(0.0, side.y, side.x);
+    }
     return state;
 }
 
@@ -206,6 +242,28 @@ Real DoubleWishbone::motionRatio(Real travel) const {
     const CornerState low = solveForTravel(travel - h);
     const CornerState high = solveForTravel(travel + h, low);
     return (high.springLength - low.springLength) / (2.0 * h);
+}
+
+Vec3 rollCentre(const CornerState& left, const CornerState& right) {
+    const glm::dvec2 lp(left.frontInstantCentre.x, left.frontInstantCentre.y);
+    const glm::dvec2 lc(left.wheelCentre.x, 0.0);
+    const glm::dvec2 rp(right.frontInstantCentre.x, right.frontInstantCentre.y);
+    const glm::dvec2 rc(right.wheelCentre.x, 0.0);
+
+    glm::dvec2 out(0.0);
+    if (!intersectLines(lp, lc - lp, rp, rc - rp, out)) {
+        return Vec3(0.0);
+    }
+    return Vec3(out.x, out.y, 0.0);
+}
+
+Real antiDiveFraction(const CornerState& corner, Real wheelbase, Real cgHeight) {
+    const Vec3 ic = corner.sideInstantCentre;
+    const Real dz = corner.wheelCentre.z - ic.z;
+    if (std::abs(dz) < 1e-9 || cgHeight <= 0.0) {
+        return 0.0;
+    }
+    return (ic.y / dz) * (wheelbase / cgHeight);
 }
 
 } // namespace sim::vehicle

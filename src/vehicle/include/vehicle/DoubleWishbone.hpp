@@ -63,8 +63,24 @@ struct CornerState {
     Real scrubRadius = 0.0;           // m; axis ground point minus wheel centre (x)
     Real mechanicalTrail = 0.0;       // m; wheel centre minus axis ground point (z)
 
+    // Front-view (x-y plane, z = 0) and side-view (y-z plane, x = 0) instant
+    // centres of the upright, from the arm lines (ball joint to the chassis pivot
+    // midpoint). A parallel arm pair puts the centre at infinity; it is stored as
+    // zero in that case.
+    Vec3 frontInstantCentre{0.0, 0.0, 0.0};
+    Vec3 sideInstantCentre{0.0, 0.0, 0.0};
+
     bool converged = true;
 };
+
+// Roll centre: the meeting of the two lines from each corner's front-view
+// instant centre through its contact patch (returned in the x-y plane).
+Vec3 rollCentre(const CornerState& left, const CornerState& right);
+
+// Anti-dive (front) or anti-squat (rear) fraction from a corner's side-view
+// instant centre: the swing-arm angle times the wheelbase over the centre-of-
+// gravity height. Returns 0 when the geometry gives no finite centre.
+Real antiDiveFraction(const CornerState& corner, Real wheelbase, Real cgHeight);
 
 class DoubleWishbone {
 public:
