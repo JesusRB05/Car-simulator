@@ -21,6 +21,9 @@ add_library(sim_vehicle STATIC
     # Implicit longitudinal wheel-spin integration (Phase 2, P2.1).
     include/vehicle/WheelSpin.hpp
     src/WheelSpin.cpp
+    # Double-wishbone hardpoint kinematics, the multibody reference (Phase 2, P2.5).
+    include/vehicle/DoubleWishbone.hpp
+    src/DoubleWishbone.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

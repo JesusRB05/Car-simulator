@@ -6,6 +6,7 @@
 #include <sstream>
 
 // Every interface header is included so that it is compile-checked here.
+#include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/IAerodynamics.hpp"
 #include "vehicle/IBrakeSystem.hpp"
 #include "vehicle/IDrivetrain.hpp"
@@ -47,6 +48,27 @@ public:
 private:
     Real stiffness_ = 0.0;
 };
+
+// A plausible right-front double wishbone, in the vehicle frame (x right, y up,
+// -z forward). The numbers are round rather than measured; they only need to be
+// a consistent, non-degenerate layout.
+DoubleWishboneCorner sampleCorner() {
+    DoubleWishboneCorner c;
+    c.lowerFrontPivot = {0.35, 0.15, -0.25};
+    c.lowerRearPivot = {0.35, 0.18, 0.25};
+    c.upperFrontPivot = {0.45, 0.45, -0.20};
+    c.upperRearPivot = {0.45, 0.47, 0.20};
+    c.tieRodInner = {0.30, 0.25, 0.20};
+    c.lowerBallJoint = {0.75, 0.20, 0.0};
+    c.upperBallJoint = {0.72, 0.48, 0.0};
+    c.tieRodOuter = {0.68, 0.26, 0.22};
+    c.wheelCentre = {0.80, 0.31, 0.0};
+    c.wheelAxle = {1.0, 0.0, 0.0};
+    c.hasSpring = true;
+    c.springUpper = {0.40, 0.70, 0.0};
+    c.springLower = {0.62, 0.30, 0.0};
+    return c;
+}
 
 } // namespace
 
@@ -646,6 +668,67 @@ TEST_CASE("a braked wheel locks without oscillating") {
     CHECK(reversals == 0);
     CHECK(st.locked);
     CHECK(st.spin == doctest::Approx(0.0));
+}
+
+TEST_CASE("the double wishbone closure solves and reports camber and toe") {
+    const DoubleWishboneCorner corner = sampleCorner();
+    const DoubleWishbone suspension(corner);
+
+    const std::array<Vec3, 5> q = {corner.lowerBallJoint, corner.lowerBallJoint, corner.upperBallJoint,
+                                   corner.upperBallJoint, corner.tieRodOuter};
+    const std::array<Vec3, 5> p = {corner.lowerFrontPivot, corner.lowerRearPivot, corner.upperFrontPivot,
+                                   corner.upperRearPivot, corner.tieRodInner};
+
+    SUBCASE("the design pose is the identity") {
+        const CornerState s = suspension.solveForTravel(0.0);
+        CHECK(s.converged);
+        CHECK(glm::length(s.translation) < 1e-9);
+        CHECK(s.camber == doctest::Approx(0.0).epsilon(1e-9));
+        CHECK(s.toe == doctest::Approx(0.0).epsilon(1e-9));
+    }
+
+    SUBCASE("the closure holds the five link lengths over the travel range") {
+        CornerState s = suspension.solveForTravel(0.0);
+        const auto check = [&](Real travel) {
+            INFO("travel=", travel);
+            s = suspension.solveForTravel(travel, s);
+            REQUIRE(s.converged);
+            CHECK(s.wheelCentre.z == doctest::Approx(corner.wheelCentre.z + travel).epsilon(1e-9));
+            for (int i = 0; i < 5; ++i) {
+                const Vec3 moved = s.rotation * q[static_cast<std::size_t>(i)] + s.translation;
+                CHECK(glm::length(moved - p[static_cast<std::size_t>(i)]) ==
+                      doctest::Approx(suspension.linkLengths()[static_cast<std::size_t>(i)]).epsilon(1e-9));
+            }
+        };
+        for (int k = 1; k <= 12; ++k) {
+            check(0.005 * static_cast<Real>(k));
+        }
+        for (int k = 1; k <= 12; ++k) {
+            check(-0.005 * static_cast<Real>(k));
+        }
+    }
+
+    SUBCASE("the motion ratio matches a finite difference of the solved poses") {
+        const Real travel = 0.03;
+        const Real h = 1e-4;
+        const CornerState low = suspension.solveForTravel(travel - h);
+        const CornerState high = suspension.solveForTravel(travel + h, low);
+        const Real fd = (high.springLength - low.springLength) / (2.0 * h);
+        CHECK(suspension.motionRatio(travel) == doctest::Approx(fd).epsilon(1e-3));
+        CHECK(suspension.motionRatio(travel) > 0.0);
+    }
+
+    SUBCASE("camber and toe read the wheel axis") {
+        const Real gamma = 0.05;
+        const CornerState c = suspension.pose(Vec3(0.0), Vec3(0.0, 0.0, gamma));
+        CHECK(c.camber == doctest::Approx(gamma).epsilon(1e-9));
+        CHECK(c.toe == doctest::Approx(0.0).epsilon(1e-9));
+
+        const Real tau = 0.04;
+        const CornerState t = suspension.pose(Vec3(0.0), Vec3(0.0, tau, 0.0));
+        CHECK(t.toe == doctest::Approx(tau).epsilon(1e-9));
+        CHECK(t.camber == doctest::Approx(0.0).epsilon(1e-9));
+    }
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
