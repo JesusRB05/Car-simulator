@@ -207,7 +207,7 @@ dibuja segmentos de línea en una sola llamada instanciada: cada instancia aport
 sus dos extremos y su color (`debug.slang`), sin búfer de vértices por línea. Se
 dibuja **sin test de profundidad** (`depthTest=false`) como superposición, por lo
 que sirve para rejillas, ejes y gizmos, no como geometría ocluida. En la ventana
-se alterna con `G` (o la casilla «Debug grid» del panel *View*); en headless con
+se alterna con `G` (o las casillas del panel *Debug draw*); en headless con
 `--debug-draw`. En las **escenas de física** la superposición está activa por
 defecto en ambos modos (rejilla + ejes + las líneas propias de la escena), de
 modo que el estado del mundo se vea sin pasos extra.
@@ -222,6 +222,8 @@ la escena. La aplicación le pasa cada evento SDL mediante un enganche, y llama
 `ImGui_ImplVulkan_SetMinImageCount` al recrear la swapchain.
 
 `implot` está disponible para gráficas (por ejemplo, la telemetría).
+
+See [UI.md](UI.md) for the windowed app's menus, panels and keyboard shortcuts.
 
 ## Convenciones
 
