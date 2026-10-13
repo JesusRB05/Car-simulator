@@ -10,23 +10,19 @@
 namespace sim::core {
 
 FixedStepClock::FixedStepClock(double fixedDt, std::uint32_t maxStepsPerFrame)
-    : fixedDt_(fixedDt), maxStepsPerFrame_(maxStepsPerFrame)
-{
+    : fixedDt_(fixedDt), maxStepsPerFrame_(maxStepsPerFrame) {
     SIM_ASSERT(fixedDt > 0.0, "fixed step must be positive");
 }
 
-void FixedStepClock::setFixedDt(double dt)
-{
+void FixedStepClock::setFixedDt(double dt) {
     SIM_ASSERT(dt > 0.0, "fixed step must be positive");
     fixedDt_ = dt;
 }
 
-StepResult FixedStepClock::advance(double frameDelta)
-{
+StepResult FixedStepClock::advance(double frameDelta) {
     StepResult result;
 
-    if (frameDelta < 0.0)
-    {
+    if (frameDelta < 0.0) {
         frameDelta = 0.0;
     }
 
@@ -40,8 +36,7 @@ StepResult FixedStepClock::advance(double frameDelta)
 
     // Guard against unbounded accumulation if the frame rate is chronically
     // below the simulation rate.
-    if (available > steps)
-    {
+    if (available > steps) {
         accumulator_ = std::min(accumulator_, fixedDt_ * static_cast<double>(maxStepsPerFrame_));
     }
 
@@ -51,22 +46,19 @@ StepResult FixedStepClock::advance(double frameDelta)
     return result;
 }
 
-void FixedStepClock::reset(double simTime)
-{
+void FixedStepClock::reset(double simTime) {
     accumulator_ = 0.0;
     simTime_ = simTime;
 }
 
 FrameClock::FrameClock() : lastTime_(now()) {}
 
-double FrameClock::now()
-{
+double FrameClock::now() {
     using clock = std::chrono::steady_clock;
     return std::chrono::duration<double>(clock::now().time_since_epoch()).count();
 }
 
-double FrameClock::tick()
-{
+double FrameClock::tick() {
     const double current = now();
     lastDelta_ = current - lastTime_;
     lastTime_ = current;

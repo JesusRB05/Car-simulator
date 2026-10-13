@@ -12,11 +12,9 @@ namespace sim::physics {
 // with piecewise-linear interpolation. Outside the point range the value is
 // clamped to the nearest endpoint, keeping force curves well behaved. An empty
 // curve evaluates to y = slope * x (used for ordinary linear springs).
-class Curve
-{
+class Curve {
 public:
-    struct Point
-    {
+    struct Point {
         Real x = 0.0;
         Real y = 0.0;
     };

@@ -16,8 +16,7 @@
 
 namespace sim::rhi {
 
-struct DeviceConfig
-{
+struct DeviceConfig {
     bool enableValidation = false;
     // Headless mode renders entirely offscreen: no surface is created, no
     // present support is required and the swapchain extension is not enabled.
@@ -30,8 +29,7 @@ struct DeviceConfig
     std::function<VkSurfaceKHR(VkInstance)> createSurface;
 };
 
-struct QueueIndices
-{
+struct QueueIndices {
     std::uint32_t graphics = 0;
     std::uint32_t compute = 0;
     std::uint32_t transfer = 0;
@@ -41,8 +39,7 @@ struct QueueIndices
 // Owns the Vulkan instance, the chosen physical device, the logical device,
 // every queue used by the engine and the VMA allocator. This is the single
 // point where the Vulkan instance/device lifetime is managed.
-class Device
-{
+class Device {
 public:
     Device(const DeviceConfig& config);
     ~Device();

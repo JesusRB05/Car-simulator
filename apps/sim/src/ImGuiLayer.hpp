@@ -10,15 +10,14 @@
 namespace sim::rhi {
 class Device;
 class Swapchain;
-}
+} // namespace sim::rhi
 
 namespace sim::app {
 
 // Thin owner of the ImGui context and its SDL3 + Vulkan backends. The Vulkan
 // backend is built with IMGUI_IMPL_VULKAN_USE_VOLK (see cmake/ImGuiBackends.cmake)
 // and dynamic rendering, matching the RHI.
-class ImGuiLayer
-{
+class ImGuiLayer {
 public:
     ImGuiLayer(rhi::Device& device, rhi::Swapchain& swapchain, SDL_Window* window);
     ~ImGuiLayer();

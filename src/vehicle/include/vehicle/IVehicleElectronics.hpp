@@ -12,8 +12,7 @@ namespace sim::vehicle {
 using physics::Real;
 
 // Sensor snapshot available to driver aids, gathered once per fixed step.
-struct ElectronicsSensors
-{
+struct ElectronicsSensors {
     std::array<Real, 4> wheelAngularVelocity{}; // rad/s, FL, FR, RL, RR (+ = rolling forward)
     std::array<Real, 4> wheelSlipRatio{};       // dimensionless
     Real yawRate = 0.0;                         // rad/s about +Y (+ = turning left)
@@ -24,16 +23,14 @@ struct ElectronicsSensors
 
 // Per-wheel brake torque adjustments requested by ABS/ESC (N*m added to the
 // base brake torque; negative values release pressure).
-struct BrakeModulation
-{
+struct BrakeModulation {
     std::array<Real, 4> torqueDelta{};
 };
 
 // Driver-aid electronics (ABS, TCS, ESC). The hooks may modify the driver's
 // request before it reaches the drivetrain and brakes. Implementations must be
 // deterministic and depend only on the sensor snapshots and their own state.
-class IVehicleElectronics
-{
+class IVehicleElectronics {
 public:
     virtual ~IVehicleElectronics() = default;
 

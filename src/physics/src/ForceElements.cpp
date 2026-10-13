@@ -4,10 +4,8 @@
 
 namespace sim::physics {
 
-void PointSpringDamper::apply()
-{
-    if (bodyA == nullptr)
-    {
+void PointSpringDamper::apply() {
+    if (bodyA == nullptr) {
         return;
     }
 
@@ -27,16 +25,13 @@ void PointSpringDamper::apply()
 
     const Vec3 forceOnA = magnitude * direction;
     bodyA->applyForceAtWorldPoint(forceOnA, pointA);
-    if (bodyB != nullptr)
-    {
+    if (bodyB != nullptr) {
         bodyB->applyForceAtWorldPoint(-forceOnA, pointB);
     }
 }
 
-void RotationalSpringDamper::apply()
-{
-    if (bodyA == nullptr || bodyB == nullptr)
-    {
+void RotationalSpringDamper::apply() {
+    if (bodyA == nullptr || bodyB == nullptr) {
         return;
     }
 

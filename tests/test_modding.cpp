@@ -10,8 +10,7 @@
 
 using namespace sim::modding;
 
-TEST_CASE("Version parses and orders semantic versions")
-{
+TEST_CASE("Version parses and orders semantic versions") {
     const auto version = Version::parse("1.2.3");
     REQUIRE(version.has_value());
     CHECK(version->major() == 1);
@@ -25,8 +24,7 @@ TEST_CASE("Version parses and orders semantic versions")
     CHECK(Version(1, 0, 0) == Version::parse("1.0.0").value());
 }
 
-TEST_CASE("Version ranges are satisfied as documented")
-{
+TEST_CASE("Version ranges are satisfied as documented") {
     CHECK(satisfies("*", Version(9, 9, 9)));
     CHECK(satisfies("^1.2.0", Version(1, 5, 0)));
     CHECK_FALSE(satisfies("^1.2.0", Version(2, 0, 0)));
@@ -36,8 +34,7 @@ TEST_CASE("Version ranges are satisfied as documented")
     CHECK_FALSE(satisfies(">=1.0.0 <2.0.0", Version(2, 0, 0)));
 }
 
-TEST_CASE("A valid manifest parses and an invalid one is rejected")
-{
+TEST_CASE("A valid manifest parses and an invalid one is rejected") {
     const std::string valid = "id = \"my_mod\"\n"
                               "name = \"My Mod\"\n"
                               "version = \"1.0.0\"\n"
@@ -53,8 +50,7 @@ TEST_CASE("A valid manifest parses and an invalid one is rejected")
     CHECK_FALSE(bad.ok());
 }
 
-TEST_CASE("Dependencies are ordered before their dependents")
-{
+TEST_CASE("Dependencies are ordered before their dependents") {
     ModManifest a;
     a.id = "a";
     a.name = "A";
@@ -75,8 +71,7 @@ TEST_CASE("Dependencies are ordered before their dependents")
     CHECK(indexB < indexA);
 }
 
-TEST_CASE("Dependency cycles are detected")
-{
+TEST_CASE("Dependency cycles are detected") {
     ModManifest c;
     c.id = "c";
     c.name = "C";

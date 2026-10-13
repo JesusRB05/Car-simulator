@@ -8,8 +8,7 @@ namespace sim::render {
 
 // A right-handed perspective camera. World space uses metres, +Y up and -Z
 // forward, matching the engine conventions.
-class Camera
-{
+class Camera {
 public:
     void setPerspective(float fovYDegrees, float aspect, float nearPlane, float farPlane);
     void lookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec3& up = {0.0f, 1.0f, 0.0f});

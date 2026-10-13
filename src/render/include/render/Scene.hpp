@@ -12,8 +12,7 @@
 
 namespace sim::render {
 
-struct Drawable
-{
+struct Drawable {
     std::shared_ptr<Mesh> mesh;
     glm::mat4 transform{1.0f};
     glm::vec4 baseColor{0.8f, 0.8f, 0.8f, 1.0f};
@@ -21,8 +20,7 @@ struct Drawable
 
 // A flat, renderer-facing description of what should be drawn. The simulation
 // fills this each frame from the interpolated physics snapshot.
-class Scene
-{
+class Scene {
 public:
     void clear() { drawables_.clear(); }
     void add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, const glm::vec4& color);

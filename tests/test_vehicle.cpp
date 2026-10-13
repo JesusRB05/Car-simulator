@@ -20,19 +20,16 @@ namespace {
 
 constexpr Real kDt = 1.0 / 1000.0;
 
-void run(IVehicleModel& model, const VehicleInput& input, int steps)
-{
+void run(IVehicleModel& model, const VehicleInput& input, int steps) {
     model.setInput(input);
-    for (int i = 0; i < steps; ++i)
-    {
+    for (int i = 0; i < steps; ++i) {
         REQUIRE(model.step(kDt));
     }
 }
 
 } // namespace
 
-TEST_CASE("PlaceholderVehicle at heading 0 faces and drives towards -Z")
-{
+TEST_CASE("PlaceholderVehicle at heading 0 faces and drives towards -Z") {
     PlaceholderVehicle car;
     car.reset(Vec3(0.0), 0.0);
 
@@ -58,8 +55,7 @@ TEST_CASE("PlaceholderVehicle at heading 0 faces and drives towards -Z")
 // Convention: positive steer (and positive heading/yaw rate about +Y) turns
 // the vehicle to the LEFT, i.e. counter-clockwise seen from above (+Y), so a
 // car starting at heading 0 drifts towards -X.
-TEST_CASE("PlaceholderVehicle positive steer turns left (towards -X)")
-{
+TEST_CASE("PlaceholderVehicle positive steer turns left (towards -X)") {
     PlaceholderVehicle car;
     car.reset(Vec3(0.0), 0.0);
 

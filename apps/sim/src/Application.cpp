@@ -38,16 +38,13 @@ constexpr bool kDefaultValidation = false;
 constexpr bool kDefaultValidation = true;
 #endif
 
-glm::dvec3 toDvec(const physics::Vec3& value)
-{
+glm::dvec3 toDvec(const physics::Vec3& value) {
     return {value.x, value.y, value.z};
 }
 
-std::filesystem::path executableDirectory()
-{
+std::filesystem::path executableDirectory() {
     const char* base = SDL_GetBasePath();
-    if (base == nullptr)
-    {
+    if (base == nullptr) {
         return std::filesystem::current_path();
     }
     // SDL3 owns and caches this string: freeing it would leave later calls
@@ -55,21 +52,16 @@ std::filesystem::path executableDirectory()
     return std::filesystem::path(base);
 }
 
-std::filesystem::path searchForRoot()
-{
+std::filesystem::path searchForRoot() {
     std::vector<std::filesystem::path> starts{std::filesystem::current_path(), executableDirectory()};
-    for (const std::filesystem::path& start : starts)
-    {
+    for (const std::filesystem::path& start : starts) {
         std::filesystem::path dir = start;
-        for (int depth = 0; depth < 8 && !dir.empty(); ++depth)
-        {
-            if (std::filesystem::exists(dir / "content" / "base"))
-            {
+        for (int depth = 0; depth < 8 && !dir.empty(); ++depth) {
+            if (std::filesystem::exists(dir / "content" / "base")) {
                 return dir;
             }
             const std::filesystem::path parent = dir.parent_path();
-            if (parent == dir)
-            {
+            if (parent == dir) {
                 break;
             }
             dir = parent;
@@ -78,15 +70,13 @@ std::filesystem::path searchForRoot()
     return executableDirectory();
 }
 
-bool keyDown(const platform::InputManager* input, SDL_Scancode scancode)
-{
+bool keyDown(const platform::InputManager* input, SDL_Scancode scancode) {
     return input != nullptr && input->keyDown(scancode);
 }
 
 } // namespace
 
-double Application::wallNow()
-{
+double Application::wallNow() {
     using namespace std::chrono;
     return duration<double>(steady_clock::now().time_since_epoch()).count();
 }
@@ -94,16 +84,13 @@ double Application::wallNow()
 Application::Application() = default;
 Application::~Application() = default;
 
-std::filesystem::path Application::locateRoot() const
-{
+std::filesystem::path Application::locateRoot() const {
     return searchForRoot();
 }
 
-bool Application::initialise()
-{
+bool Application::initialise() {
     sdl_ = std::make_unique<platform::SdlContext>();
-    if (!sdl_->valid())
-    {
+    if (!sdl_->valid()) {
         return false;
     }
 
@@ -152,10 +139,10 @@ bool Application::initialise()
     const double fixedDt = config_->getDouble("physics.fixed_dt", 1.0 / 1000.0);
     physicsClock_.setFixedDt(fixedDt);
     vehicle_.reset(physics::Vec3(0.0, 0.0, 0.0), 0.0);
-    for (std::size_t i = 0; i < wheelOffsets_.size() && i < vehicle_.wheels().size(); ++i)
-    {
+    for (std::size_t i = 0; i < wheelOffsets_.size() && i < vehicle_.wheels().size(); ++i) {
         const physics::Vec3 local = vehicle_.wheels()[i].localPosition;
-        wheelOffsets_[i] = glm::vec3(static_cast<float>(local.x), static_cast<float>(local.y), static_cast<float>(local.z));
+        wheelOffsets_[i] =
+            glm::vec3(static_cast<float>(local.x), static_cast<float>(local.y), static_cast<float>(local.z));
     }
 
     vsync_ = config_->getBool("render.vsync", true);
@@ -195,8 +182,7 @@ bool Application::initialise()
 
     lua_ = std::make_unique<scripting::LuaSandbox>();
     scripts_ = std::make_unique<scripting::ScriptHost>(*lua_, *vfs_);
-    if (vfs_->exists("scripts/main.lua"))
-    {
+    if (vfs_->exists("scripts/main.lua")) {
         scripts_->loadScript("base", "scripts/main.lua");
         scripts_->callOnLoad();
     }
@@ -211,12 +197,10 @@ bool Application::initialise()
     return true;
 }
 
-void Application::shutdown()
-{
+void Application::shutdown() {
     stopPhysicsThread();
 
-    if (scripts_ != nullptr)
-    {
+    if (scripts_ != nullptr) {
         scripts_->clear();
     }
     scripts_.reset();
@@ -226,8 +210,7 @@ void Application::shutdown()
     telemetry_.reset();
 
     scene_.clear();
-    if (device_ != nullptr)
-    {
+    if (device_ != nullptr) {
         device_->waitIdle();
     }
 
@@ -255,40 +238,32 @@ void Application::shutdown()
     core::Log::shutdown();
 }
 
-void Application::startPhysicsThread()
-{
+void Application::startPhysicsThread() {
     physicsRunning_.store(true, std::memory_order_release);
     physicsThread_ = std::thread([this] { physicsLoop(); });
 }
 
-void Application::stopPhysicsThread()
-{
-    if (!physicsThread_.joinable())
-    {
+void Application::stopPhysicsThread() {
+    if (!physicsThread_.joinable()) {
         return;
     }
     physicsRunning_.store(false, std::memory_order_release);
     physicsThread_.join();
 }
 
-void Application::physicsLoop()
-{
+void Application::physicsLoop() {
     const double dt = physicsClock_.fixedDt();
     double last = wallNow();
 
-    while (physicsRunning_.load(std::memory_order_acquire))
-    {
-        if (snapshotSaveRequest_.exchange(false))
-        {
+    while (physicsRunning_.load(std::memory_order_acquire)) {
+        if (snapshotSaveRequest_.exchange(false)) {
             std::lock_guard<std::mutex> lock(snapshotMutex_);
             savedWorld_ = world_.saveSnapshot();
             snapshotValid_.store(true, std::memory_order_release);
         }
-        if (snapshotRestoreRequest_.exchange(false))
-        {
+        if (snapshotRestoreRequest_.exchange(false)) {
             std::lock_guard<std::mutex> lock(snapshotMutex_);
-            if (snapshotValid_.load(std::memory_order_acquire))
-            {
+            if (snapshotValid_.load(std::memory_order_acquire)) {
                 world_.restoreSnapshot(savedWorld_);
             }
         }
@@ -296,19 +271,16 @@ void Application::physicsLoop()
         const double now = wallNow();
         double frameDelta = now - last;
         last = now;
-        if (frameDelta < 0.0)
-        {
+        if (frameDelta < 0.0) {
             frameDelta = 0.0;
         }
-        if (frameDelta > 0.25)
-        {
+        if (frameDelta > 0.25) {
             frameDelta = 0.25;
         }
 
         const core::StepResult result = physicsClock_.advance(frameDelta);
 
-        if (result.steps > 0)
-        {
+        if (result.steps > 0) {
             vehicle::VehicleInput input;
             input.throttle = inputThrottle_.load(std::memory_order_relaxed);
             input.brake = inputBrake_.load(std::memory_order_relaxed);
@@ -317,8 +289,7 @@ void Application::physicsLoop()
             vehicle_.setInput(input);
 
             const double startMs = wallNow();
-            for (std::uint32_t i = 0; i < result.steps; ++i)
-            {
+            for (std::uint32_t i = 0; i < result.steps; ++i) {
                 vehicle_.step(dt);
                 world_.step(dt);
             }
@@ -334,15 +305,12 @@ void Application::physicsLoop()
             snapshot.speed = vehicle_.speed();
             snapshot.rpm = vehicle_.engineRpm();
             snapshot.steer = vehicle_.steerAngle();
-            for (std::size_t i = 0; i < snapshot.wheelSpin.size(); ++i)
-            {
+            for (std::size_t i = 0; i < snapshot.wheelSpin.size(); ++i) {
                 snapshot.wheelSpin[i] = vehicle_.wheels()[i].spinAngle;
             }
-            for (std::size_t i = 0; i < world_.bodyCount(); ++i)
-            {
+            for (std::size_t i = 0; i < world_.bodyCount(); ++i) {
                 const physics::RigidBody& body = world_.body(i);
-                if (!body.isDynamic())
-                {
+                if (!body.isDynamic()) {
                     continue;
                 }
                 snapshot.kineticEnergy += body.kineticEnergy();
@@ -356,8 +324,7 @@ void Application::physicsLoop()
     }
 }
 
-void Application::pumpInput()
-{
+void Application::pumpInput() {
     input_->refresh();
 
     double throttle = 0.0;
@@ -365,42 +332,32 @@ void Application::pumpInput()
     double steer = 0.0;
     bool handbrake = false;
 
-    if (keyDown(input_.get(), SDL_SCANCODE_W) || keyDown(input_.get(), SDL_SCANCODE_UP))
-    {
+    if (keyDown(input_.get(), SDL_SCANCODE_W) || keyDown(input_.get(), SDL_SCANCODE_UP)) {
         throttle = 1.0;
     }
-    if (keyDown(input_.get(), SDL_SCANCODE_S) || keyDown(input_.get(), SDL_SCANCODE_DOWN))
-    {
+    if (keyDown(input_.get(), SDL_SCANCODE_S) || keyDown(input_.get(), SDL_SCANCODE_DOWN)) {
         brake = 1.0;
     }
-    if (keyDown(input_.get(), SDL_SCANCODE_A) || keyDown(input_.get(), SDL_SCANCODE_LEFT))
-    {
+    if (keyDown(input_.get(), SDL_SCANCODE_A) || keyDown(input_.get(), SDL_SCANCODE_LEFT)) {
         steer += 1.0;
     }
-    if (keyDown(input_.get(), SDL_SCANCODE_D) || keyDown(input_.get(), SDL_SCANCODE_RIGHT))
-    {
+    if (keyDown(input_.get(), SDL_SCANCODE_D) || keyDown(input_.get(), SDL_SCANCODE_RIGHT)) {
         steer -= 1.0;
     }
     handbrake = keyDown(input_.get(), SDL_SCANCODE_SPACE);
 
-    for (const platform::InputDevice& device : input_->devices())
-    {
-        if (!device.isGamepad || device.axes.size() < 2)
-        {
+    for (const platform::InputDevice& device : input_->devices()) {
+        if (!device.isGamepad || device.axes.size() < 2) {
             continue;
         }
         const double axisSteer = static_cast<double>(device.axes[0]);
         const double axisThrottle = static_cast<double>(-device.axes[1]);
-        if (std::abs(axisSteer) > 0.08)
-        {
+        if (std::abs(axisSteer) > 0.08) {
             steer -= axisSteer;
         }
-        if (axisThrottle > 0.05)
-        {
+        if (axisThrottle > 0.05) {
             throttle = std::max(throttle, axisThrottle);
-        }
-        else if (axisThrottle < -0.05)
-        {
+        } else if (axisThrottle < -0.05) {
             brake = std::max(brake, -axisThrottle);
         }
         break;
@@ -412,49 +369,43 @@ void Application::pumpInput()
     inputHandbrake_.store(handbrake, std::memory_order_relaxed);
 }
 
-void Application::gatherSnapshots(SimSnapshot& interpolated)
-{
+void Application::gatherSnapshots(SimSnapshot& interpolated) {
     SimSnapshot snapshot;
-    while (snapshots_.pop(snapshot))
-    {
+    while (snapshots_.pop(snapshot)) {
         previous_ = current_;
         current_ = snapshot;
         hasSnapshot_ = true;
     }
 
-    if (!hasSnapshot_)
-    {
+    if (!hasSnapshot_) {
         interpolated = SimSnapshot{};
         return;
     }
 
     const double dt = physicsClock_.fixedDt();
     double alpha = 0.0;
-    if (dt > 0.0)
-    {
+    if (dt > 0.0) {
         alpha = std::clamp((wallNow() - current_.wallTime) / dt, 0.0, 1.0);
     }
 
     interpolated = current_;
     interpolated.simTime = previous_.simTime + (current_.simTime - previous_.simTime) * alpha;
-    interpolated.vehiclePosition = previous_.vehiclePosition + (current_.vehiclePosition - previous_.vehiclePosition) * alpha;
+    interpolated.vehiclePosition =
+        previous_.vehiclePosition + (current_.vehiclePosition - previous_.vehiclePosition) * alpha;
     interpolated.heading = previous_.heading + (current_.heading - previous_.heading) * alpha;
     interpolated.speed = previous_.speed + (current_.speed - previous_.speed) * alpha;
     interpolated.rpm = previous_.rpm + (current_.rpm - previous_.rpm) * alpha;
     interpolated.steer = previous_.steer + (current_.steer - previous_.steer) * alpha;
-    for (std::size_t i = 0; i < interpolated.wheelSpin.size(); ++i)
-    {
+    for (std::size_t i = 0; i < interpolated.wheelSpin.size(); ++i) {
         interpolated.wheelSpin[i] = previous_.wheelSpin[i] + (current_.wheelSpin[i] - previous_.wheelSpin[i]) * alpha;
     }
 }
 
-void Application::stepDriveScene(double delta)
-{
+void Application::stepDriveScene(double delta) {
     // The drive keys take priority over the UI shortcuts; ImGui widgets that
     // want the keyboard (text fields) still win.
     drive::DriveKeys keys;
-    if (!ImGui::GetIO().WantCaptureKeyboard)
-    {
+    if (!ImGui::GetIO().WantCaptureKeyboard) {
         keys.throttle = keyDown(input_.get(), SDL_SCANCODE_W) || keyDown(input_.get(), SDL_SCANCODE_UP);
         keys.brake = keyDown(input_.get(), SDL_SCANCODE_S) || keyDown(input_.get(), SDL_SCANCODE_DOWN);
         keys.left = keyDown(input_.get(), SDL_SCANCODE_A) || keyDown(input_.get(), SDL_SCANCODE_LEFT);
@@ -465,15 +416,12 @@ void Application::stepDriveScene(double delta)
     drive_->advance(delta); // the fixed 1 ms step is internal; no pause / time scale
 }
 
-void Application::stepScenePhysics(double delta)
-{
-    if (driveActive())
-    {
+void Application::stepScenePhysics(double delta) {
+    if (driveActive()) {
         stepDriveScene(delta);
         return;
     }
-    if (sceneWorld_ == nullptr || ui_ == nullptr || ui_->paused())
-    {
+    if (sceneWorld_ == nullptr || ui_ == nullptr || ui_->paused()) {
         return;
     }
     // The time scale only changes how much wall time is fed to the fixed-step
@@ -483,87 +431,70 @@ void Application::stepScenePhysics(double delta)
     sceneWorld_->advance(wall * static_cast<double>(ui_->timeScale()));
 }
 
-void Application::loadScene(const std::string& name)
-{
+void Application::loadScene(const std::string& name) {
     sceneName_ = name;
     sceneWorld_.reset();
-    if (drive_ != nullptr)
-    {
+    if (drive_ != nullptr) {
         // Leaving the drive scene hands the camera back to sceneCamera_. Its
         // meshes may still be in flight on the GPU: drop every reference first.
         scene_.clear();
         device_->waitIdle();
         drive_.reset();
     }
-    if (ui_ != nullptr)
-    {
+    if (ui_ != nullptr) {
         ui_->resetHistory();
     }
-    if (name.empty())
-    {
+    if (name.empty()) {
         return;
     }
-    if (drive::isDriveScene(name))
-    {
+    if (drive::isDriveScene(name)) {
         drive_ = std::make_unique<drive::DriveScene>(*device_);
         drive_->snapCamera();
         return;
     }
 
     // Build once with the curated camera, then adopt it as the orbit start.
-    const float aspect = swapchain_->extent().height > 0
-                             ? static_cast<float>(swapchain_->extent().width) / static_cast<float>(swapchain_->extent().height)
-                             : 16.0f / 9.0f;
-    if (isPhysicsScene(name))
-    {
+    const float aspect = swapchain_->extent().height > 0 ? static_cast<float>(swapchain_->extent().width) /
+                                                               static_cast<float>(swapchain_->extent().height)
+                                                         : 16.0f / 9.0f;
+    if (isPhysicsScene(name)) {
         sceneWorld_ = std::make_unique<physics::PhysicsWorld>();
         buildPhysicsWorld(name, *sceneWorld_);
         buildSceneFromWorld(*sceneWorld_, scene_, cubeMesh_, sphereMesh_, cylinderMesh_, groundMesh_);
         physicsSceneCamera(name, scene_, aspect);
-    }
-    else
-    {
+    } else {
         buildScene(name, scene_, cubeMesh_, groundMesh_);
     }
     glm::vec3 center(0.0f);
     float radius = 1.0f;
-    if (!sceneBounds(scene_, groundMesh_.get(), center, radius))
-    {
+    if (!sceneBounds(scene_, groundMesh_.get(), center, radius)) {
         center = glm::vec3(0.0f);
     }
     sceneCamera_.fromCamera(scene_.camera(), center);
 }
 
-void Application::frameScene()
-{
+void Application::frameScene() {
     glm::vec3 center(0.0f);
     float radius = 1.0f;
-    if (!sceneName_.empty() && sceneBounds(scene_, groundMesh_.get(), center, radius))
-    {
+    if (!sceneName_.empty() && sceneBounds(scene_, groundMesh_.get(), center, radius)) {
         sceneCamera_.frame(center, radius);
     }
 }
 
-void Application::updateScene(const SimSnapshot& interpolated)
-{
-    const float aspect = swapchain_->extent().height > 0
-                             ? static_cast<float>(swapchain_->extent().width) / static_cast<float>(swapchain_->extent().height)
-                             : 16.0f / 9.0f;
+void Application::updateScene(const SimSnapshot& interpolated) {
+    const float aspect = swapchain_->extent().height > 0 ? static_cast<float>(swapchain_->extent().width) /
+                                                               static_cast<float>(swapchain_->extent().height)
+                                                         : 16.0f / 9.0f;
 
-    if (driveActive())
-    {
+    if (driveActive()) {
         drive_->buildScene(scene_, aspect, frameDelta_);
         return;
     }
 
-    if (!sceneName_.empty())
-    {
-        if (sceneWorld_ != nullptr)
-        {
+    if (!sceneName_.empty()) {
+        if (sceneWorld_ != nullptr) {
             buildSceneFromWorld(*sceneWorld_, scene_, cubeMesh_, sphereMesh_, cylinderMesh_, groundMesh_);
-        }
-        else
-        {
+        } else {
             buildScene(sceneName_, scene_, cubeMesh_, groundMesh_);
         }
         sceneCamera_.apply(scene_.camera(), aspect);
@@ -587,15 +518,14 @@ void Application::updateScene(const SimSnapshot& interpolated)
     scene_.add(cubeMesh_, base * glm::scale(glm::mat4(1.0f), glm::vec3(1.9f, 1.1f, 4.2f)),
                glm::vec4(0.80f, 0.15f, 0.12f, 1.0f));
 
-    for (std::size_t i = 0; i < wheelOffsets_.size(); ++i)
-    {
+    for (std::size_t i = 0; i < wheelOffsets_.size(); ++i) {
         glm::mat4 wheel = base * glm::translate(glm::mat4(1.0f), wheelOffsets_[i]);
-        if (i < 2)
-        {
+        if (i < 2) {
             wheel = wheel * glm::rotate(glm::mat4(1.0f), steer, glm::vec3(0.0f, 1.0f, 0.0f));
         }
         // Rolling forward (towards -Z) is a rotation about body -X.
-        wheel = wheel * glm::rotate(glm::mat4(1.0f), static_cast<float>(interpolated.wheelSpin[i]), glm::vec3(-1.0f, 0.0f, 0.0f));
+        wheel = wheel * glm::rotate(glm::mat4(1.0f), static_cast<float>(interpolated.wheelSpin[i]),
+                                    glm::vec3(-1.0f, 0.0f, 0.0f));
         wheel = wheel * glm::scale(glm::mat4(1.0f), glm::vec3(0.68f));
         scene_.add(cubeMesh_, wheel, glm::vec4(0.08f, 0.08f, 0.09f, 1.0f));
     }
@@ -603,21 +533,16 @@ void Application::updateScene(const SimSnapshot& interpolated)
     scene_.camera().setPerspective(sceneCamera_.fovDegrees, aspect, 0.1f, 1000.0f);
 
     const glm::vec3 focus = position + glm::vec3(0.0f, 0.8f, 0.0f);
-    if (cameraMode_ == CameraMode::Orbit)
-    {
+    if (cameraMode_ == CameraMode::Orbit) {
         const float cp = std::cos(orbitPitch_);
         const glm::vec3 offset(orbitDistance_ * cp * std::sin(orbitYaw_), orbitDistance_ * std::sin(orbitPitch_),
                                orbitDistance_ * cp * std::cos(orbitYaw_));
         scene_.camera().lookAt(focus + offset, focus, glm::vec3(0.0f, 1.0f, 0.0f));
-    }
-    else if (cameraMode_ == CameraMode::Free)
-    {
+    } else if (cameraMode_ == CameraMode::Free) {
         const glm::vec3 direction(std::cos(freePitch_) * std::sin(freeYaw_), std::sin(freePitch_),
                                   std::cos(freePitch_) * std::cos(freeYaw_));
         scene_.camera().lookAt(freePosition_, freePosition_ + direction, glm::vec3(0.0f, 1.0f, 0.0f));
-    }
-    else
-    {
+    } else {
         // Vehicle forward is body -Z rotated by heading about +Y (heading 0 faces -Z).
         const glm::vec3 forward(-std::sin(heading), 0.0f, -std::cos(heading));
         const glm::vec3 eye = position - forward * 8.0f + glm::vec3(0.0f, 3.4f, 0.0f);
@@ -625,106 +550,83 @@ void Application::updateScene(const SimSnapshot& interpolated)
     }
 }
 
-void Application::handleCameraKeys()
-{
+void Application::handleCameraKeys() {
     ImGuiIO& io = ImGui::GetIO();
 
-    if (driveActive())
-    {
-        if (!io.WantTextInput)
-        {
-            if (ImGui::IsKeyPressed(ImGuiKey_C, false))
-            {
+    if (driveActive()) {
+        if (!io.WantTextInput) {
+            if (ImGui::IsKeyPressed(ImGuiKey_C, false)) {
                 drive_->cycleCamera();
             }
-            if (ImGui::IsKeyPressed(ImGuiKey_R, false) && !io.KeyCtrl)
-            {
+            if (ImGui::IsKeyPressed(ImGuiKey_R, false) && !io.KeyCtrl) {
                 drive_->reset();
             }
-            if (ImGui::IsKeyPressed(ImGuiKey_G, false) && !io.KeyCtrl)
-            {
+            if (ImGui::IsKeyPressed(ImGuiKey_G, false) && !io.KeyCtrl) {
                 ui_->debugFlags().driveForces = !ui_->debugFlags().driveForces;
             }
         }
-        if (!io.WantCaptureMouse)
-        {
+        if (!io.WantCaptureMouse) {
             const bool looking = ImGui::IsMouseDown(ImGuiMouseButton_Right);
             drive_->orbitInput(looking ? io.MouseDelta.x : 0.0f, looking ? io.MouseDelta.y : 0.0f, io.MouseWheel);
         }
         return;
     }
 
-    if (ImGui::IsKeyPressed(ImGuiKey_C, false))
-    {
-        cameraMode_ = cameraMode_ == CameraMode::Chase    ? CameraMode::Orbit
-                      : cameraMode_ == CameraMode::Orbit  ? CameraMode::Free
-                                                          : CameraMode::Chase;
+    if (ImGui::IsKeyPressed(ImGuiKey_C, false)) {
+        cameraMode_ = cameraMode_ == CameraMode::Chase   ? CameraMode::Orbit
+                      : cameraMode_ == CameraMode::Orbit ? CameraMode::Free
+                                                         : CameraMode::Chase;
     }
 
-    if (!sceneName_.empty())
-    {
+    if (!sceneName_.empty()) {
         return; // inspection scenes: SimUi drives sceneCamera_
     }
 
     const bool looking = ImGui::IsMouseDown(ImGuiMouseButton_Right) && !io.WantCaptureMouse;
-    if (looking)
-    {
+    if (looking) {
         orbitYaw_ -= io.MouseDelta.x * 0.006f;
         orbitPitch_ = std::clamp(orbitPitch_ - io.MouseDelta.y * 0.006f, -1.45f, 1.45f);
         freeYaw_ -= io.MouseDelta.x * 0.006f;
         freePitch_ = std::clamp(freePitch_ - io.MouseDelta.y * 0.006f, -1.45f, 1.45f);
     }
 
-    if (cameraMode_ == CameraMode::Orbit)
-    {
+    if (cameraMode_ == CameraMode::Orbit) {
         orbitDistance_ = std::clamp(orbitDistance_ - io.MouseWheel * 1.5f, 2.0f, 250.0f);
-    }
-    else if (cameraMode_ == CameraMode::Free && !io.WantCaptureKeyboard)
-    {
+    } else if (cameraMode_ == CameraMode::Free && !io.WantCaptureKeyboard) {
         const glm::vec3 forward(std::cos(freePitch_) * std::sin(freeYaw_), std::sin(freePitch_),
                                 std::cos(freePitch_) * std::cos(freeYaw_));
         const glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
         const float speed = 14.0f * static_cast<float>(io.DeltaTime);
-        if (ImGui::IsKeyDown(ImGuiKey_W))
-        {
+        if (ImGui::IsKeyDown(ImGuiKey_W)) {
             freePosition_ += forward * speed;
         }
-        if (ImGui::IsKeyDown(ImGuiKey_S))
-        {
+        if (ImGui::IsKeyDown(ImGuiKey_S)) {
             freePosition_ -= forward * speed;
         }
-        if (ImGui::IsKeyDown(ImGuiKey_A))
-        {
+        if (ImGui::IsKeyDown(ImGuiKey_A)) {
             freePosition_ -= right * speed;
         }
-        if (ImGui::IsKeyDown(ImGuiKey_D))
-        {
+        if (ImGui::IsKeyDown(ImGuiKey_D)) {
             freePosition_ += right * speed;
         }
-        if (ImGui::IsKeyDown(ImGuiKey_Q))
-        {
+        if (ImGui::IsKeyDown(ImGuiKey_Q)) {
             freePosition_.y -= speed;
         }
-        if (ImGui::IsKeyDown(ImGuiKey_E))
-        {
+        if (ImGui::IsKeyDown(ImGuiKey_E)) {
             freePosition_.y += speed;
         }
     }
 }
 
-void Application::drawUi()
-{
+void Application::drawUi() {
     SimUiFrame frame;
     frame.activeScene = sceneName_;
     frame.driveActive = driveActive();
     frame.world = sceneWorld_.get();
-    if (sceneWorld_ != nullptr)
-    {
+    if (sceneWorld_ != nullptr) {
         frame.hasEnergy = true;
         frame.totalEnergy = physicsSceneEnergy(sceneName_, *sceneWorld_);
-    }
-    else if (sceneName_.empty() && current_.bodyCount > 0)
-    {
+    } else if (sceneName_.empty() && current_.bodyCount > 0) {
         frame.hasEnergy = true;
         frame.totalEnergy = current_.kineticEnergy + current_.potentialEnergy;
     }
@@ -735,20 +637,16 @@ void Application::drawUi()
     frame.viewportHeight = static_cast<float>(swapchain_->extent().height);
 
     const SimUiActions actions = ui_->draw(frame, sceneCamera_);
-    if (driveActive())
-    {
+    if (driveActive()) {
         drive_->drawHud();
     }
-    if (actions.quit)
-    {
+    if (actions.quit) {
         window_->requestClose();
     }
-    if (actions.loadScene)
-    {
+    if (actions.loadScene) {
         loadScene(actions.scene);
     }
-    if (actions.reset && sceneWorld_ != nullptr)
-    {
+    if (actions.reset && sceneWorld_ != nullptr) {
         const glm::vec3 target = sceneCamera_.target;
         const float yaw = sceneCamera_.yaw;
         const float pitch = sceneCamera_.pitch;
@@ -760,24 +658,19 @@ void Application::drawUi()
         sceneCamera_.pitch = pitch;
         sceneCamera_.distance = distance;
     }
-    if (actions.step && sceneWorld_ != nullptr)
-    {
+    if (actions.step && sceneWorld_ != nullptr) {
         sceneWorld_->step(sceneWorld_->fixedStep);
     }
-    if (actions.frameScene)
-    {
+    if (actions.frameScene) {
         frameScene();
     }
-    if (actions.loadScene || actions.reset || actions.step)
-    {
+    if (actions.loadScene || actions.reset || actions.step) {
         updateScene(current_); // show the new state this frame
     }
 
     PanelVisibility& panels = ui_->panels();
-    if (panels.vehicle)
-    {
-        if (ImGui::Begin("Vehicle", &panels.vehicle))
-        {
+    if (panels.vehicle) {
+        if (ImGui::Begin("Vehicle", &panels.vehicle)) {
             ImGui::Text("Speed: %.1f km/h", current_.speed * 3.6);
             ImGui::Text("RPM: %.0f", current_.rpm);
             ImGui::Text("Sim time: %.2f s", current_.simTime);
@@ -790,20 +683,17 @@ void Application::drawUi()
             ImGui::Separator();
             const char* modeNames[] = {"Chase", "Orbit", "Free"};
             int mode = static_cast<int>(cameraMode_);
-            if (ImGui::Combo("Camera (C)", &mode, modeNames, 3))
-            {
+            if (ImGui::Combo("Camera (C)", &mode, modeNames, 3)) {
                 cameraMode_ = static_cast<CameraMode>(mode);
             }
 
             ImGui::Separator();
-            if (ImGui::Button("Save snapshot"))
-            {
+            if (ImGui::Button("Save snapshot")) {
                 snapshotSaveRequest_.store(true, std::memory_order_relaxed);
             }
             ImGui::SameLine();
             ImGui::BeginDisabled(!snapshotValid_.load(std::memory_order_relaxed));
-            if (ImGui::Button("Restore snapshot"))
-            {
+            if (ImGui::Button("Restore snapshot")) {
                 snapshotRestoreRequest_.store(true, std::memory_order_relaxed);
             }
             ImGui::EndDisabled();
@@ -812,60 +702,50 @@ void Application::drawUi()
         ImGui::End();
     }
 
-    if (panels.mods)
-    {
-        if (ImGui::Begin("Mods", &panels.mods))
-        {
+    if (panels.mods) {
+        if (ImGui::Begin("Mods", &panels.mods)) {
             const modding::ModReport& report = mods_->report();
-            for (const modding::ModStatus& mod : report.mods)
-            {
-                const char* state = mod.state == modding::ModState::Active ? "active"
+            for (const modding::ModStatus& mod : report.mods) {
+                const char* state = mod.state == modding::ModState::Active     ? "active"
                                     : mod.state == modding::ModState::Disabled ? "disabled"
-                                                                                : "invalid";
+                                                                               : "invalid";
                 ImGui::BulletText("%s %s [%s]", mod.name.c_str(), mod.version.c_str(), state);
             }
-            if (report.mods.empty())
-            {
+            if (report.mods.empty()) {
                 ImGui::TextUnformatted("No mods found.");
             }
         }
         ImGui::End();
     }
 
-    if (panels.input)
-    {
-        if (ImGui::Begin("Input", &panels.input))
-        {
+    if (panels.input) {
+        if (ImGui::Begin("Input", &panels.input)) {
             ImGui::Text("Devices: %zu", input_->joystickCount());
-            for (std::size_t index = 0; index < input_->devices().size(); ++index)
-            {
+            for (std::size_t index = 0; index < input_->devices().size(); ++index) {
                 const platform::InputDevice& device = input_->devices()[index];
                 ImGui::PushID(static_cast<int>(index));
                 ImGui::BulletText("%s%s", device.name.c_str(),
-                                  device.isGamepad ? " (gamepad)"
+                                  device.isGamepad          ? " (gamepad)"
                                   : device.axes.size() >= 4 ? " (wheel/pedals)"
                                                             : " (joystick)");
-                if (ImGui::TreeNode("Details"))
-                {
-                    for (std::size_t axis = 0; axis < device.axes.size(); ++axis)
-                    {
+                if (ImGui::TreeNode("Details")) {
+                    for (std::size_t axis = 0; axis < device.axes.size(); ++axis) {
                         ImGui::Text("Axis %zu", axis);
                         ImGui::SameLine();
                         ImGui::ProgressBar((device.axes[axis] + 1.0f) * 0.5f, ImVec2(-1.0f, 0.0f));
                     }
                     ImGui::Text("Buttons (%zu)", device.buttons.size());
-                    for (std::size_t button = 0; button < device.buttons.size(); ++button)
-                    {
+                    for (std::size_t button = 0; button < device.buttons.size(); ++button) {
                         ImGui::SameLine();
                         const bool pressed = device.buttons[button];
-                        ImGui::TextColored(pressed ? ImVec4(0.3f, 1.0f, 0.3f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f), "%zu", button);
+                        ImGui::TextColored(pressed ? ImVec4(0.3f, 1.0f, 0.3f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f),
+                                           "%zu", button);
                     }
                     ImGui::TreePop();
                 }
                 ImGui::PopID();
             }
-            if (input_->devices().empty())
-            {
+            if (input_->devices().empty()) {
                 ImGui::TextUnformatted("No wheels, pedals or gamepads connected.");
             }
             ImGui::Separator();
@@ -876,31 +756,23 @@ void Application::drawUi()
     }
 }
 
-void Application::drawDebugOverlay(rhi::CommandList& commandList)
-{
-    if (debugDraw_ == nullptr || ui_ == nullptr)
-    {
+void Application::drawDebugOverlay(rhi::CommandList& commandList) {
+    if (debugDraw_ == nullptr || ui_ == nullptr) {
         return;
     }
     const DebugDrawFlags& flags = ui_->debugFlags();
     debugDraw_->clear();
-    if (driveActive())
-    {
-        if (flags.driveForces)
-        {
+    if (driveActive()) {
+        if (flags.driveForces) {
             drive_->drawDebug(*debugDraw_);
         }
-    }
-    else if (flags.grid)
-    {
+    } else if (flags.grid) {
         debugDraw_->addGrid(20.0f, 1.0f, {0.55f, 0.58f, 0.62f, 1.0f}, {0.75f, 0.30f, 0.20f, 1.0f});
     }
-    if (!driveActive() && flags.worldAxes)
-    {
+    if (!driveActive() && flags.worldAxes) {
         debugDraw_->addAxes({0.0f, 0.02f, 0.0f}, 3.0f);
     }
-    if (sceneWorld_ != nullptr)
-    {
+    if (sceneWorld_ != nullptr) {
         PhysicsDebugOptions options;
         options.reference = flags.reference;
         options.joints = flags.joints;
@@ -909,8 +781,7 @@ void Application::drawDebugOverlay(rhi::CommandList& commandList)
         options.velocities = flags.velocities;
         drawPhysicsSceneDebug(sceneName_, *sceneWorld_, *debugDraw_, options);
     }
-    if (debugDraw_->empty())
-    {
+    if (debugDraw_->empty()) {
         return;
     }
     rhi::ColorAttachment overlay = frame_->swapchainAttachment();
@@ -918,50 +789,40 @@ void Application::drawDebugOverlay(rhi::CommandList& commandList)
     debugDraw_->render(commandList, scene_.camera(), overlay);
 }
 
-int Application::run()
-{
-    if (!initialise())
-    {
+int Application::run() {
+    if (!initialise()) {
         core::Log::get()->critical("initialisation failed");
         return 1;
     }
 
     auto log = core::Log::get();
 
-    if (!startupScene_.empty() && startupScene_ != "driving")
-    {
+    if (!startupScene_.empty() && startupScene_ != "driving") {
         const std::vector<SceneInfo>& catalog = sceneCatalog();
         const bool known = std::any_of(catalog.begin(), catalog.end(),
                                        [&](const SceneInfo& info) { return info.name == startupScene_; });
-        if (known)
-        {
+        if (known) {
             loadScene(startupScene_);
-        }
-        else
-        {
+        } else {
             log->warn("unknown scene '{}', starting the interactive driving scene", startupScene_);
         }
     }
 
-    while (running_)
-    {
+    while (running_) {
         const double frameStart = wallNow();
         telemetry_->beginFrame(frameStart);
 
         frameClock_.tick();
         double delta = frameClock_.lastDelta();
-        if (delta <= 0.0)
-        {
+        if (delta <= 0.0) {
             delta = 1.0 / 60.0;
         }
         frameDelta_ = delta;
 
-        if (!window_->pumpEvents())
-        {
+        if (!window_->pumpEvents()) {
             running_ = false;
         }
-        if (window_->shouldClose())
-        {
+        if (window_->shouldClose()) {
             running_ = false;
         }
 
@@ -978,13 +839,11 @@ int Application::run()
         updateScene(interpolated);
 
         const bool resized = window_->wasResized() || swapchain_->framebufferResized();
-        if (resized)
-        {
+        if (resized) {
             int width = 0;
             int height = 0;
             window_->getDrawableSize(width, height);
-            if (width > 0 && height > 0)
-            {
+            if (width > 0 && height > 0) {
                 swapchain_->recreate({static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)}, vsync_);
                 swapchain_->clearResizedFlag();
                 window_->clearResized();
@@ -994,8 +853,7 @@ int Application::run()
             }
         }
 
-        if (!frame_->begin())
-        {
+        if (!frame_->begin()) {
             telemetry_->endFrame(wallNow());
             continue;
         }
@@ -1010,7 +868,8 @@ int Application::run()
         renderer_->updateFrameUniforms(frame_->slot(), scene_.camera(), scene_.lightDirection(), scene_.lightColor());
         gpuTimer_->begin(commandList, frame_->slot());
         const glm::vec4& sky = scene_.skyColor();
-        renderer_->renderScene(commandList, scene_, frame_->swapchainAttachment(rhi::LoadOp::Clear, sky.r, sky.g, sky.b, sky.a),
+        renderer_->renderScene(commandList, scene_,
+                               frame_->swapchainAttachment(rhi::LoadOp::Clear, sky.r, sky.g, sky.b, sky.a),
                                frame_->slot());
         gpuTimer_->end(commandList, frame_->slot());
         lastGpuMs_ = gpuMs;
@@ -1021,7 +880,8 @@ int Application::run()
 
         frame_->submitAndPresent();
 
-        telemetry_->recordPhysics(physicsTimeMs_.load(std::memory_order_relaxed), physicsSteps_.load(std::memory_order_relaxed));
+        telemetry_->recordPhysics(physicsTimeMs_.load(std::memory_order_relaxed),
+                                  physicsSteps_.load(std::memory_order_relaxed));
         telemetry_->recordRender((uiStart - renderStart) * 1000.0);
         telemetry_->recordGpu(gpuMs);
         telemetry_->recordUi((uiEnd - uiStart) * 1000.0);

@@ -19,32 +19,26 @@ constexpr std::string_view kPattern = "%^[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] %v%$";
 
 } // namespace
 
-void Log::init(const Config& config)
-{
+void Log::init(const Config& config) {
     std::lock_guard lock(g_logMutex);
-    if (g_initialised)
-    {
+    if (g_initialised) {
         return;
     }
 
     std::vector<spdlog::sink_ptr> sinks;
-    if (config.console)
-    {
+    if (config.console) {
         auto console = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
         sinks.push_back(console);
     }
-    if (config.file)
-    {
-        if (config.logFile.has_parent_path())
-        {
+    if (config.file) {
+        if (config.logFile.has_parent_path()) {
             std::error_code ec;
             std::filesystem::create_directories(config.logFile.parent_path(), ec);
         }
         auto file = std::make_shared<spdlog::sinks::basic_file_sink_mt>(config.logFile.string(), true);
         sinks.push_back(file);
     }
-    if (sinks.empty())
-    {
+    if (sinks.empty()) {
         sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
     }
 
@@ -62,11 +56,9 @@ void Log::init(const Config& config)
                         sinks.size());
 }
 
-void Log::shutdown()
-{
+void Log::shutdown() {
     std::lock_guard lock(g_logMutex);
-    if (!g_initialised)
-    {
+    if (!g_initialised) {
         return;
     }
     spdlog::shutdown();
@@ -74,32 +66,26 @@ void Log::shutdown()
     g_initialised = false;
 }
 
-void Log::setLevel(spdlog::level::level_enum level)
-{
+void Log::setLevel(spdlog::level::level_enum level) {
     spdlog::set_level(level);
 }
 
-void Log::setPattern(std::string_view pattern)
-{
+void Log::setPattern(std::string_view pattern) {
     spdlog::set_pattern(std::string(pattern));
 }
 
-std::shared_ptr<spdlog::logger> Log::get()
-{
+std::shared_ptr<spdlog::logger> Log::get() {
     return spdlog::default_logger();
 }
 
-std::shared_ptr<spdlog::logger> Log::get(std::string_view name)
-{
+std::shared_ptr<spdlog::logger> Log::get(std::string_view name) {
     const std::string key(name);
-    if (auto existing = spdlog::get(key))
-    {
+    if (auto existing = spdlog::get(key)) {
         return existing;
     }
 
     std::lock_guard lock(g_logMutex);
-    if (auto existing = spdlog::get(key))
-    {
+    if (auto existing = spdlog::get(key)) {
         return existing;
     }
 
@@ -111,13 +97,11 @@ std::shared_ptr<spdlog::logger> Log::get(std::string_view name)
     return logger;
 }
 
-std::shared_ptr<spdlog::logger> Log::forMod(std::string_view modId)
-{
+std::shared_ptr<spdlog::logger> Log::forMod(std::string_view modId) {
     return get("mod:" + std::string(modId));
 }
 
-std::shared_ptr<spdlog::logger> Log::forPlugin(std::string_view pluginId)
-{
+std::shared_ptr<spdlog::logger> Log::forPlugin(std::string_view pluginId) {
     return get("plugin:" + std::string(pluginId));
 }
 

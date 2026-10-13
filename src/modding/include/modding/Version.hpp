@@ -9,8 +9,7 @@
 namespace sim::modding {
 
 // Semantic version (semver 2.0.0). Build metadata is ignored for comparisons.
-class Version
-{
+class Version {
 public:
     Version() = default;
     Version(int major, int minor, int patch, std::string prerelease = {});

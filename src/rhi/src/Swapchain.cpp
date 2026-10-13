@@ -10,19 +10,16 @@
 namespace sim::rhi {
 
 Swapchain::Swapchain(Device& device, const SwapchainDesc& desc)
-    : device_(device), surface_(device.surface()), vsync_(desc.vsync)
-{
+    : device_(device), surface_(device.surface()), vsync_(desc.vsync) {
     extent_ = chooseExtent(desc.extent);
     create();
 }
 
-Swapchain::~Swapchain()
-{
+Swapchain::~Swapchain() {
     destroy();
 }
 
-void Swapchain::create()
-{
+void Swapchain::create() {
     VkSurfaceCapabilitiesKHR capabilities{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device_.physicalDevice(), surface_, &capabilities);
 
@@ -30,8 +27,7 @@ void Swapchain::create()
     const VkPresentModeKHR presentMode = choosePresentMode(vsync_);
 
     std::uint32_t imageCount = capabilities.minImageCount + 1;
-    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount)
-    {
+    if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount) {
         imageCount = capabilities.maxImageCount;
     }
 
@@ -46,14 +42,11 @@ void Swapchain::create()
     createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
     const std::uint32_t families[] = {device_.graphicsFamily(), device_.presentFamily()};
-    if (device_.graphicsFamily() != device_.presentFamily())
-    {
+    if (device_.graphicsFamily() != device_.presentFamily()) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = families;
-    }
-    else
-    {
+    } else {
         createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
 
@@ -64,8 +57,7 @@ void Swapchain::create()
     createInfo.oldSwapchain = swapchain_;
 
     VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
-    if (vkCreateSwapchainKHR(device_.handle(), &createInfo, nullptr, &newSwapchain) != VK_SUCCESS)
-    {
+    if (vkCreateSwapchainKHR(device_.handle(), &createInfo, nullptr, &newSwapchain) != VK_SUCCESS) {
         throw std::runtime_error("failed to create the swapchain");
     }
 
@@ -81,8 +73,7 @@ void Swapchain::create()
     vkGetSwapchainImagesKHR(device_.handle(), swapchain_, &actualCount, images_.data());
 
     imageViews_.resize(actualCount);
-    for (std::uint32_t i = 0; i < actualCount; ++i)
-    {
+    for (std::uint32_t i = 0; i < actualCount; ++i) {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = images_[i];
@@ -90,65 +81,54 @@ void Swapchain::create()
         viewInfo.format = format_;
         viewInfo.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
 
-        if (vkCreateImageView(device_.handle(), &viewInfo, nullptr, &imageViews_[i]) != VK_SUCCESS)
-        {
+        if (vkCreateImageView(device_.handle(), &viewInfo, nullptr, &imageViews_[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to create a swapchain image view");
         }
     }
 
-    core::Log::get("rhi")->info("swapchain {}x{}, {} images, {} present mode", extent_.width, extent_.height, actualCount,
-                                presentMode == VK_PRESENT_MODE_FIFO_KHR ? "FIFO" : "low-latency");
+    core::Log::get("rhi")->info("swapchain {}x{}, {} images, {} present mode", extent_.width, extent_.height,
+                                actualCount, presentMode == VK_PRESENT_MODE_FIFO_KHR ? "FIFO" : "low-latency");
 }
 
-void Swapchain::destroy()
-{
-    for (VkImageView view : imageViews_)
-    {
+void Swapchain::destroy() {
+    for (VkImageView view : imageViews_) {
         vkDestroyImageView(device_.handle(), view, nullptr);
     }
     imageViews_.clear();
     images_.clear();
 
-    if (swapchain_ != VK_NULL_HANDLE)
-    {
+    if (swapchain_ != VK_NULL_HANDLE) {
         vkDestroySwapchainKHR(device_.handle(), swapchain_, nullptr);
         swapchain_ = VK_NULL_HANDLE;
     }
 }
 
-void Swapchain::recreate(Extent2D extent, bool vsync)
-{
+void Swapchain::recreate(Extent2D extent, bool vsync) {
     device_.waitIdle();
     extent_ = chooseExtent(extent);
     vsync_ = vsync;
-    if (extent_.width == 0 || extent_.height == 0)
-    {
+    if (extent_.width == 0 || extent_.height == 0) {
         return; // Minimised: keep the old swapchain until it can be sized again.
     }
     create();
 }
 
-VkSurfaceFormatKHR Swapchain::chooseSurfaceFormat() const
-{
+VkSurfaceFormatKHR Swapchain::chooseSurfaceFormat() const {
     std::uint32_t count = 0;
     vkGetPhysicalDeviceSurfaceFormatsKHR(device_.physicalDevice(), surface_, &count, nullptr);
     std::vector<VkSurfaceFormatKHR> formats(count);
     vkGetPhysicalDeviceSurfaceFormatsKHR(device_.physicalDevice(), surface_, &count, formats.data());
 
-    for (const VkSurfaceFormatKHR& format : formats)
-    {
-        if (format.format == VK_FORMAT_B8G8R8A8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-        {
+    for (const VkSurfaceFormatKHR& format : formats) {
+        if (format.format == VK_FORMAT_B8G8R8A8_SRGB && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
             return format;
         }
     }
     return formats.front();
 }
 
-VkPresentModeKHR Swapchain::choosePresentMode(bool vsync) const
-{
-    if (vsync)
-    {
+VkPresentModeKHR Swapchain::choosePresentMode(bool vsync) const {
+    if (vsync) {
         return VK_PRESENT_MODE_FIFO_KHR;
     }
 
@@ -157,53 +137,44 @@ VkPresentModeKHR Swapchain::choosePresentMode(bool vsync) const
     std::vector<VkPresentModeKHR> modes(count);
     vkGetPhysicalDeviceSurfacePresentModesKHR(device_.physicalDevice(), surface_, &count, modes.data());
 
-    for (VkPresentModeKHR mode : modes)
-    {
-        if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
-        {
+    for (VkPresentModeKHR mode : modes) {
+        if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
             return mode;
         }
     }
-    for (VkPresentModeKHR mode : modes)
-    {
-        if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
-        {
+    for (VkPresentModeKHR mode : modes) {
+        if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
             return mode;
         }
     }
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 
-Extent2D Swapchain::chooseExtent(Extent2D requested) const
-{
+Extent2D Swapchain::chooseExtent(Extent2D requested) const {
     VkSurfaceCapabilitiesKHR capabilities{};
     vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device_.physicalDevice(), surface_, &capabilities);
 
-    if (capabilities.currentExtent.width != 0xFFFFFFFFu)
-    {
+    if (capabilities.currentExtent.width != 0xFFFFFFFFu) {
         return {capabilities.currentExtent.width, capabilities.currentExtent.height};
     }
     return {std::clamp(requested.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
             std::clamp(requested.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)};
 }
 
-bool Swapchain::acquireNextImage(VkSemaphore signalSemaphore, std::uint32_t& outImageIndex)
-{
-    const VkResult result = vkAcquireNextImageKHR(device_.handle(), swapchain_, UINT64_MAX, signalSemaphore, VK_NULL_HANDLE, &outImageIndex);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
+bool Swapchain::acquireNextImage(VkSemaphore signalSemaphore, std::uint32_t& outImageIndex) {
+    const VkResult result = vkAcquireNextImageKHR(device_.handle(), swapchain_, UINT64_MAX, signalSemaphore,
+                                                  VK_NULL_HANDLE, &outImageIndex);
+    if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         framebufferResized_ = true;
         return false;
     }
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
-    {
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         throw std::runtime_error("failed to acquire a swapchain image");
     }
     return true;
 }
 
-bool Swapchain::present(VkSemaphore waitSemaphore, std::uint32_t imageIndex)
-{
+bool Swapchain::present(VkSemaphore waitSemaphore, std::uint32_t imageIndex) {
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
@@ -213,13 +184,11 @@ bool Swapchain::present(VkSemaphore waitSemaphore, std::uint32_t imageIndex)
     presentInfo.pImageIndices = &imageIndex;
 
     const VkResult result = vkQueuePresentKHR(device_.presentQueue(), &presentInfo);
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-    {
+    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         framebufferResized_ = true;
         return false;
     }
-    if (result != VK_SUCCESS)
-    {
+    if (result != VK_SUCCESS) {
         throw std::runtime_error("failed to present the swapchain image");
     }
     return true;

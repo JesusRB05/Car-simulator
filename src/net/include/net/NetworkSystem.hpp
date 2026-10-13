@@ -12,8 +12,7 @@ namespace sim::net {
 // is complete and the application can already query a status string; no
 // sockets are opened yet. The planned design is an authoritative fixed-step
 // server with client-side prediction and rollback.
-class NetworkSystem
-{
+class NetworkSystem {
 public:
     bool start(std::uint16_t port);
     void stop();

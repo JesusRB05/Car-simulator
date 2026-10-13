@@ -6,10 +6,8 @@
 
 namespace sim::rhi {
 
-std::uint32_t vertexFormatSize(VertexFormat format)
-{
-    switch (format)
-    {
+std::uint32_t vertexFormatSize(VertexFormat format) {
+    switch (format) {
     case VertexFormat::Float:
     case VertexFormat::Int:
     case VertexFormat::UInt:
@@ -30,10 +28,8 @@ std::uint32_t vertexFormatSize(VertexFormat format)
     return 0;
 }
 
-VkFormat toVkFormat(Format format)
-{
-    switch (format)
-    {
+VkFormat toVkFormat(Format format) {
+    switch (format) {
     case Format::R8G8B8A8Unorm:
         return VK_FORMAT_R8G8B8A8_UNORM;
     case Format::R8G8B8A8Srgb:
@@ -62,10 +58,8 @@ VkFormat toVkFormat(Format format)
     return VK_FORMAT_UNDEFINED;
 }
 
-VkFormat toVkVertexFormat(VertexFormat format)
-{
-    switch (format)
-    {
+VkFormat toVkVertexFormat(VertexFormat format) {
+    switch (format) {
     case VertexFormat::Float:
         return VK_FORMAT_R32_SFLOAT;
     case VertexFormat::Float2:
@@ -94,44 +88,34 @@ VkFormat toVkVertexFormat(VertexFormat format)
     return VK_FORMAT_UNDEFINED;
 }
 
-VkBufferUsageFlags toVkBufferUsage(BufferUsage usage)
-{
+VkBufferUsageFlags toVkBufferUsage(BufferUsage usage) {
     VkBufferUsageFlags flags = 0;
-    if (hasFlag(usage, BufferUsage::Vertex))
-    {
+    if (hasFlag(usage, BufferUsage::Vertex)) {
         flags |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
     }
-    if (hasFlag(usage, BufferUsage::Index))
-    {
+    if (hasFlag(usage, BufferUsage::Index)) {
         flags |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
     }
-    if (hasFlag(usage, BufferUsage::Uniform))
-    {
+    if (hasFlag(usage, BufferUsage::Uniform)) {
         flags |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     }
-    if (hasFlag(usage, BufferUsage::Storage))
-    {
+    if (hasFlag(usage, BufferUsage::Storage)) {
         flags |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     }
-    if (hasFlag(usage, BufferUsage::Indirect))
-    {
+    if (hasFlag(usage, BufferUsage::Indirect)) {
         flags |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT;
     }
-    if (hasFlag(usage, BufferUsage::TransferSrc))
-    {
+    if (hasFlag(usage, BufferUsage::TransferSrc)) {
         flags |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
     }
-    if (hasFlag(usage, BufferUsage::TransferDst))
-    {
+    if (hasFlag(usage, BufferUsage::TransferDst)) {
         flags |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     }
     return flags;
 }
 
-VmaMemoryUsage toVmaMemoryUsage(MemoryUsage usage)
-{
-    switch (usage)
-    {
+VmaMemoryUsage toVmaMemoryUsage(MemoryUsage usage) {
+    switch (usage) {
     case MemoryUsage::GpuOnly:
         return VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
     case MemoryUsage::CpuToGpu:
@@ -142,40 +126,31 @@ VmaMemoryUsage toVmaMemoryUsage(MemoryUsage usage)
     return VMA_MEMORY_USAGE_AUTO;
 }
 
-VkImageUsageFlags toVkImageUsage(ImageUsage usage)
-{
+VkImageUsageFlags toVkImageUsage(ImageUsage usage) {
     VkImageUsageFlags flags = 0;
-    if (hasFlag(usage, ImageUsage::Sampled))
-    {
+    if (hasFlag(usage, ImageUsage::Sampled)) {
         flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
     }
-    if (hasFlag(usage, ImageUsage::Storage))
-    {
+    if (hasFlag(usage, ImageUsage::Storage)) {
         flags |= VK_IMAGE_USAGE_STORAGE_BIT;
     }
-    if (hasFlag(usage, ImageUsage::ColorAttachment))
-    {
+    if (hasFlag(usage, ImageUsage::ColorAttachment)) {
         flags |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
-    if (hasFlag(usage, ImageUsage::DepthStencilAttachment))
-    {
+    if (hasFlag(usage, ImageUsage::DepthStencilAttachment)) {
         flags |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
     }
-    if (hasFlag(usage, ImageUsage::TransferSrc))
-    {
+    if (hasFlag(usage, ImageUsage::TransferSrc)) {
         flags |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     }
-    if (hasFlag(usage, ImageUsage::TransferDst))
-    {
+    if (hasFlag(usage, ImageUsage::TransferDst)) {
         flags |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }
     return flags;
 }
 
-VkImageLayout toVkImageLayout(ImageLayout layout)
-{
-    switch (layout)
-    {
+VkImageLayout toVkImageLayout(ImageLayout layout) {
+    switch (layout) {
     case ImageLayout::ColorAttachment:
         return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     case ImageLayout::DepthAttachment:
@@ -196,10 +171,8 @@ VkImageLayout toVkImageLayout(ImageLayout layout)
     return VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
-VkDescriptorType toVkDescriptorType(DescriptorType type)
-{
-    switch (type)
-    {
+VkDescriptorType toVkDescriptorType(DescriptorType type) {
+    switch (type) {
     case DescriptorType::UniformBuffer:
         return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     case DescriptorType::StorageBuffer:
@@ -210,10 +183,8 @@ VkDescriptorType toVkDescriptorType(DescriptorType type)
     return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 }
 
-VkCompareOp toVkCompareOp(CompareOp op)
-{
-    switch (op)
-    {
+VkCompareOp toVkCompareOp(CompareOp op) {
+    switch (op) {
     case CompareOp::Never:
         return VK_COMPARE_OP_NEVER;
     case CompareOp::Less:
@@ -234,10 +205,8 @@ VkCompareOp toVkCompareOp(CompareOp op)
     return VK_COMPARE_OP_LESS_OR_EQUAL;
 }
 
-VkCullModeFlags toVkCullMode(CullMode mode)
-{
-    switch (mode)
-    {
+VkCullModeFlags toVkCullMode(CullMode mode) {
+    switch (mode) {
     case CullMode::None:
         return VK_CULL_MODE_NONE;
     case CullMode::Front:
@@ -248,10 +217,8 @@ VkCullModeFlags toVkCullMode(CullMode mode)
     return VK_CULL_MODE_BACK_BIT;
 }
 
-VkPrimitiveTopology toVkTopology(PrimitiveTopology topology)
-{
-    switch (topology)
-    {
+VkPrimitiveTopology toVkTopology(PrimitiveTopology topology) {
+    switch (topology) {
     case PrimitiveTopology::TriangleList:
         return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     case PrimitiveTopology::TriangleStrip:
@@ -262,11 +229,10 @@ VkPrimitiveTopology toVkTopology(PrimitiveTopology topology)
     return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 }
 
-void applyBlendMode(BlendMode mode, VkPipelineColorBlendAttachmentState& outBlend)
-{
-    outBlend.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-    switch (mode)
-    {
+void applyBlendMode(BlendMode mode, VkPipelineColorBlendAttachmentState& outBlend) {
+    outBlend.colorWriteMask =
+        VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    switch (mode) {
     case BlendMode::Opaque:
         outBlend.blendEnable = VK_FALSE;
         break;
@@ -291,10 +257,8 @@ void applyBlendMode(BlendMode mode, VkPipelineColorBlendAttachmentState& outBlen
     }
 }
 
-std::string formatName(Format format)
-{
-    switch (format)
-    {
+std::string formatName(Format format) {
+    switch (format) {
     case Format::R8G8B8A8Unorm:
         return "R8G8B8A8_UNORM";
     case Format::R8G8B8A8Srgb:

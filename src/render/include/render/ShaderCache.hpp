@@ -18,8 +18,7 @@ namespace sim::render {
 
 // Loads SPIR-V shader modules from the virtual file system and caches them by
 // path. Returns nullptr (and logs) when a shader is missing or invalid.
-class ShaderCache
-{
+class ShaderCache {
 public:
     ShaderCache(rhi::Device& device, vfs::VirtualFileSystem& vfs);
 

@@ -13,8 +13,7 @@ namespace {
 const char kBudgetKey = 'B';
 constexpr int kHookCount = 1000;
 
-std::string popString(lua_State* state)
-{
+std::string popString(lua_State* state) {
     const char* text = lua_tostring(state, -1);
     std::string result = text != nullptr ? text : "unknown Lua error";
     lua_pop(state, 1);
@@ -23,8 +22,7 @@ std::string popString(lua_State* state)
 
 } // namespace
 
-LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(state_)
-{
+LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(state_) {
     budgetState_ = new Budget();
     lua_pushlightuserdata(state_, const_cast<char*>(&kBudgetKey));
     lua_pushlightuserdata(state_, budgetState_);
@@ -42,8 +40,7 @@ LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(
 
     // Remove everything that could escape the sandbox or load bytecode.
     sol::table globals = view_.globals();
-    for (const char* name : {"load", "loadstring", "loadfile", "dofile", "require", "collectgarbage", "print"})
-    {
+    for (const char* name : {"load", "loadstring", "loadfile", "dofile", "require", "collectgarbage", "print"}) {
         globals[name] = sol::nil;
     }
     globals["string"]["dump"] = sol::nil;
@@ -55,42 +52,35 @@ LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(
     globals["jit"] = sol::nil;
 }
 
-LuaSandbox::~LuaSandbox()
-{
+LuaSandbox::~LuaSandbox() {
     // The Lua state itself is closed by owner_ after view_ is destroyed.
     delete budgetState_;
     budgetState_ = nullptr;
 }
 
-void LuaSandbox::instructionHook(lua_State* state, lua_Debug* /*debug*/)
-{
+void LuaSandbox::instructionHook(lua_State* state, lua_Debug* /*debug*/) {
     lua_pushlightuserdata(state, const_cast<char*>(&kBudgetKey));
     lua_rawget(state, LUA_REGISTRYINDEX);
     auto* budget = static_cast<Budget*>(lua_touserdata(state, -1));
     lua_pop(state, 1);
-    if (budget == nullptr)
-    {
+    if (budget == nullptr) {
         return;
     }
     budget->used += static_cast<std::uint64_t>(kHookCount);
-    if (budget->limit != 0 && budget->used >= budget->limit)
-    {
+    if (budget->limit != 0 && budget->used >= budget->limit) {
         luaL_error(state, "script exceeded its instruction budget (%d)", static_cast<int>(budget->limit));
     }
 }
 
-void LuaSandbox::log(std::string_view message) const
-{
-    if (logSink_)
-    {
+void LuaSandbox::log(std::string_view message) const {
+    if (logSink_) {
         logSink_(message);
         return;
     }
     core::Log::get("lua")->info("{}", message);
 }
 
-bool LuaSandbox::run(std::string_view code, std::string_view chunkName, std::string& error)
-{
+bool LuaSandbox::run(std::string_view code, std::string_view chunkName, std::string& error) {
     budgetState_->limit = budget_;
     budgetState_->used = 0;
     lua_sethook(state_, &LuaSandbox::instructionHook, LUA_MASKCOUNT, kHookCount);
@@ -98,8 +88,7 @@ bool LuaSandbox::run(std::string_view code, std::string_view chunkName, std::str
     // "t" mode rejects precompiled bytecode: only text chunks are accepted.
     const std::string name(chunkName);
     const int status = luaL_loadbufferx(state_, code.data(), code.size(), name.c_str(), "t");
-    if (status != LUA_OK)
-    {
+    if (status != LUA_OK) {
         error = popString(state_);
         lua_sethook(state_, nullptr, 0, 0);
         return false;
@@ -110,16 +99,14 @@ bool LuaSandbox::run(std::string_view code, std::string_view chunkName, std::str
 
     lua_sethook(state_, nullptr, 0, 0);
 
-    if (!result.valid())
-    {
+    if (!result.valid()) {
         error = result.get<sol::error>().what();
         return false;
     }
     return true;
 }
 
-bool LuaSandbox::call(sol::protected_function& function)
-{
+bool LuaSandbox::call(sol::protected_function& function) {
     budgetState_->limit = budget_;
     budgetState_->used = 0;
     lua_sethook(state_, &LuaSandbox::instructionHook, LUA_MASKCOUNT, kHookCount);
@@ -128,16 +115,14 @@ bool LuaSandbox::call(sol::protected_function& function)
 
     lua_sethook(state_, nullptr, 0, 0);
 
-    if (!result.valid())
-    {
+    if (!result.valid()) {
         core::Log::get("lua")->error("callback error: {}", result.get<sol::error>().what());
         return false;
     }
     return true;
 }
 
-bool LuaSandbox::call(sol::protected_function& function, double argument)
-{
+bool LuaSandbox::call(sol::protected_function& function, double argument) {
     budgetState_->limit = budget_;
     budgetState_->used = 0;
     lua_sethook(state_, &LuaSandbox::instructionHook, LUA_MASKCOUNT, kHookCount);
@@ -146,8 +131,7 @@ bool LuaSandbox::call(sol::protected_function& function, double argument)
 
     lua_sethook(state_, nullptr, 0, 0);
 
-    if (!result.valid())
-    {
+    if (!result.valid()) {
         core::Log::get("lua")->error("callback error: {}", result.get<sol::error>().what());
         return false;
     }

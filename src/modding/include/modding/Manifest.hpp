@@ -11,15 +11,13 @@
 
 namespace sim::modding {
 
-struct Dependency
-{
+struct Dependency {
     std::string id;
     std::string versionRange = "*";
 };
 
 // Parsed contents of a mod's `mod.toml`. See docs/MODDING.md for the schema.
-struct ModManifest
-{
+struct ModManifest {
     std::string id;
     std::string name;
     Version version;
@@ -32,8 +30,7 @@ struct ModManifest
     std::string entryScript;
 };
 
-struct ManifestResult
-{
+struct ManifestResult {
     std::optional<ModManifest> manifest;
     std::vector<std::string> errors;
 

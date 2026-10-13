@@ -41,8 +41,10 @@ void physicsSceneCamera(const std::string& name, sim::render::Scene& scene, floa
 // mesh per body, sized by its physics shape; static bodies grey, dynamic bodies
 // hue-coded so the joints read at a glance).
 void buildSceneFromWorld(const sim::physics::PhysicsWorld& world, sim::render::Scene& scene,
-                         const std::shared_ptr<sim::render::Mesh>& cube, const std::shared_ptr<sim::render::Mesh>& sphere,
-                         const std::shared_ptr<sim::render::Mesh>& cylinder, const std::shared_ptr<sim::render::Mesh>& ground);
+                         const std::shared_ptr<sim::render::Mesh>& cube,
+                         const std::shared_ptr<sim::render::Mesh>& sphere,
+                         const std::shared_ptr<sim::render::Mesh>& cylinder,
+                         const std::shared_ptr<sim::render::Mesh>& ground);
 
 // Total mechanical energy of a physics scene: kinetic energy plus gravitational
 // potential of every dynamic body, plus the elastic energy of the scene's
@@ -50,8 +52,7 @@ void buildSceneFromWorld(const sim::physics::PhysicsWorld& world, sim::render::S
 double physicsSceneEnergy(const std::string& name, const sim::physics::PhysicsWorld& world);
 
 // Layers of the physics debug overlay, toggled from the interactive UI.
-struct PhysicsDebugOptions
-{
+struct PhysicsDebugOptions {
     bool reference = true;  // analytic reference curves (projectile parabola)
     bool joints = true;     // rods, arms and constraint links
     bool springs = true;    // spring coils
@@ -66,10 +67,11 @@ struct PhysicsDebugOptions
 // Scene-specific debug overlay lines (analytic projectiles, joints/rods, spring
 // coils, body and spin axes) driven by the current world state. This overload
 // is the fixed overlay used by the headless captures.
-void drawPhysicsSceneDebug(const std::string& name, const sim::physics::PhysicsWorld& world, sim::render::DebugDraw& draw);
+void drawPhysicsSceneDebug(const std::string& name, const sim::physics::PhysicsWorld& world,
+                           sim::render::DebugDraw& draw);
 
 // Same overlay with individually selectable layers.
-void drawPhysicsSceneDebug(const std::string& name, const sim::physics::PhysicsWorld& world, sim::render::DebugDraw& draw,
-                           const PhysicsDebugOptions& options);
+void drawPhysicsSceneDebug(const std::string& name, const sim::physics::PhysicsWorld& world,
+                           sim::render::DebugDraw& draw, const PhysicsDebugOptions& options);
 
 } // namespace sim::app

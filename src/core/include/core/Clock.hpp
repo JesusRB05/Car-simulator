@@ -7,11 +7,10 @@
 namespace sim::core {
 
 // Result of advancing a fixed-step simulation clock for one rendered frame.
-struct StepResult
-{
-    std::uint32_t steps = 0;  // number of fixed steps to simulate this frame
-    double alpha = 0.0;       // interpolation factor in [0, 1) between the last two states
-    double simTime = 0.0;     // simulated time after the steps have been applied
+struct StepResult {
+    std::uint32_t steps = 0; // number of fixed steps to simulate this frame
+    double alpha = 0.0;      // interpolation factor in [0, 1) between the last two states
+    double simTime = 0.0;    // simulated time after the steps have been applied
 };
 
 // Fixed-step clock. The render loop feeds it the real frame time; it returns
@@ -20,8 +19,7 @@ struct StepResult
 //
 // The clock clamps the amount of catch-up work to avoid the "spiral of death"
 // after a long stall (window drag, breakpoint, ...).
-class FixedStepClock
-{
+class FixedStepClock {
 public:
     explicit FixedStepClock(double fixedDt = 1.0 / 1000.0, std::uint32_t maxStepsPerFrame = 8);
 
@@ -43,8 +41,7 @@ private:
 };
 
 // Wall-clock helper for frame timing, based on std::chrono::steady_clock.
-class FrameClock
-{
+class FrameClock {
 public:
     FrameClock();
 

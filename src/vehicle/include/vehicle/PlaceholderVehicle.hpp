@@ -13,8 +13,7 @@ using physics::Quat;
 using physics::Real;
 using physics::Vec3;
 
-struct Wheel
-{
+struct Wheel {
     // Wheel centre in the body frame (+X right, +Y up, -Z forward).
     Vec3 localPosition{0.0};
     Real radius = 0.34;
@@ -25,8 +24,7 @@ struct Wheel
     bool steered = false;
 };
 
-struct VehicleConfig
-{
+struct VehicleConfig {
     Real mass = 1250.0;           // kg
     Real wheelBase = 2.65;        // m
     Real trackWidth = 1.55;       // m
@@ -47,8 +45,7 @@ struct VehicleConfig
 //
 // Uses the project-wide frame: heading 0 faces -Z, positive heading/steer
 // turns left (counter-clockwise seen from +Y).
-class PlaceholderVehicle final : public IVehicleModel
-{
+class PlaceholderVehicle final : public IVehicleModel {
 public:
     explicit PlaceholderVehicle(const VehicleConfig& config = {});
 

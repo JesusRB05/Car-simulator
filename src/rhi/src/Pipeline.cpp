@@ -11,12 +11,10 @@
 namespace sim::rhi {
 
 DescriptorSetLayout::DescriptorSetLayout(Device& device, const std::vector<DescriptorBinding>& bindings)
-    : device_(&device), bindings_(bindings)
-{
+    : device_(&device), bindings_(bindings) {
     std::vector<VkDescriptorSetLayoutBinding> vkBindings;
     vkBindings.reserve(bindings.size());
-    for (const DescriptorBinding& binding : bindings)
-    {
+    for (const DescriptorBinding& binding : bindings) {
         VkDescriptorSetLayoutBinding vk{};
         vk.binding = binding.binding;
         vk.descriptorType = toVkDescriptorType(binding.type);
@@ -30,31 +28,26 @@ DescriptorSetLayout::DescriptorSetLayout(Device& device, const std::vector<Descr
     info.bindingCount = static_cast<std::uint32_t>(vkBindings.size());
     info.pBindings = vkBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.handle(), &info, nullptr, &layout_) != VK_SUCCESS)
-    {
+    if (vkCreateDescriptorSetLayout(device.handle(), &info, nullptr, &layout_) != VK_SUCCESS) {
         throw std::runtime_error("failed to create a descriptor set layout");
     }
 }
 
-DescriptorSetLayout::~DescriptorSetLayout()
-{
-    if (layout_ != VK_NULL_HANDLE)
-    {
+DescriptorSetLayout::~DescriptorSetLayout() {
+    if (layout_ != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(device_->handle(), layout_, nullptr);
     }
 }
 
-DescriptorPool::DescriptorPool(Device& device, std::uint32_t maxSets, const std::vector<DescriptorBinding>& bindings) : device_(&device)
-{
+DescriptorPool::DescriptorPool(Device& device, std::uint32_t maxSets, const std::vector<DescriptorBinding>& bindings)
+    : device_(&device) {
     std::map<DescriptorType, std::uint32_t> counts;
-    for (const DescriptorBinding& binding : bindings)
-    {
+    for (const DescriptorBinding& binding : bindings) {
         counts[binding.type] += binding.count;
     }
 
     std::vector<VkDescriptorPoolSize> sizes;
-    for (const auto& [type, count] : counts)
-    {
+    for (const auto& [type, count] : counts) {
         VkDescriptorPoolSize size{};
         size.type = toVkDescriptorType(type);
         size.descriptorCount = count * maxSets;
@@ -68,22 +61,18 @@ DescriptorPool::DescriptorPool(Device& device, std::uint32_t maxSets, const std:
     info.poolSizeCount = static_cast<std::uint32_t>(sizes.size());
     info.pPoolSizes = sizes.data();
 
-    if (vkCreateDescriptorPool(device.handle(), &info, nullptr, &pool_) != VK_SUCCESS)
-    {
+    if (vkCreateDescriptorPool(device.handle(), &info, nullptr, &pool_) != VK_SUCCESS) {
         throw std::runtime_error("failed to create a descriptor pool");
     }
 }
 
-DescriptorPool::~DescriptorPool()
-{
-    if (pool_ != VK_NULL_HANDLE)
-    {
+DescriptorPool::~DescriptorPool() {
+    if (pool_ != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(device_->handle(), pool_, nullptr);
     }
 }
 
-VkDescriptorSet DescriptorPool::allocate(const DescriptorSetLayout& layout)
-{
+VkDescriptorSet DescriptorPool::allocate(const DescriptorSetLayout& layout) {
     VkDescriptorSetLayout layouts[] = {layout.handle()};
     VkDescriptorSetAllocateInfo info{};
     info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -92,20 +81,17 @@ VkDescriptorSet DescriptorPool::allocate(const DescriptorSetLayout& layout)
     info.pSetLayouts = layouts;
 
     VkDescriptorSet set = VK_NULL_HANDLE;
-    if (vkAllocateDescriptorSets(device_->handle(), &info, &set) != VK_SUCCESS)
-    {
+    if (vkAllocateDescriptorSets(device_->handle(), &info, &set) != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate a descriptor set");
     }
     return set;
 }
 
-void DescriptorPool::reset()
-{
+void DescriptorPool::reset() {
     vkResetDescriptorPool(device_->handle(), pool_, 0);
 }
 
-void DescriptorSet::writeBuffer(std::uint32_t binding, VkBuffer buffer, VkDeviceSize size, VkDeviceSize offset) const
-{
+void DescriptorSet::writeBuffer(std::uint32_t binding, VkBuffer buffer, VkDeviceSize size, VkDeviceSize offset) const {
     VkDescriptorBufferInfo bufferInfo{};
     bufferInfo.buffer = buffer;
     bufferInfo.offset = offset;
@@ -122,8 +108,7 @@ void DescriptorSet::writeBuffer(std::uint32_t binding, VkBuffer buffer, VkDevice
     vkUpdateDescriptorSets(device_->handle(), 1, &write, 0, nullptr);
 }
 
-void DescriptorSet::writeImage(std::uint32_t binding, VkSampler sampler, VkImageView view, VkImageLayout layout) const
-{
+void DescriptorSet::writeImage(std::uint32_t binding, VkSampler sampler, VkImageView view, VkImageLayout layout) const {
     VkDescriptorImageInfo imageInfo{};
     imageInfo.sampler = sampler;
     imageInfo.imageView = view;
@@ -143,12 +128,10 @@ void DescriptorSet::writeImage(std::uint32_t binding, VkSampler sampler, VkImage
 namespace {
 
 VkPipelineLayout createPipelineLayout(VkDevice device, const std::vector<const DescriptorSetLayout*>& layouts,
-                                      std::uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages)
-{
+                                      std::uint32_t pushConstantSize, VkShaderStageFlags pushConstantStages) {
     std::vector<VkDescriptorSetLayout> setLayouts;
     setLayouts.reserve(layouts.size());
-    for (const DescriptorSetLayout* layout : layouts)
-    {
+    for (const DescriptorSetLayout* layout : layouts) {
         setLayouts.push_back(layout != nullptr ? layout->handle() : VK_NULL_HANDLE);
     }
 
@@ -165,8 +148,7 @@ VkPipelineLayout createPipelineLayout(VkDevice device, const std::vector<const D
     info.pPushConstantRanges = pushConstantSize > 0 ? &pushRange : nullptr;
 
     VkPipelineLayout layout = VK_NULL_HANDLE;
-    if (vkCreatePipelineLayout(device, &info, nullptr, &layout) != VK_SUCCESS)
-    {
+    if (vkCreatePipelineLayout(device, &info, nullptr, &layout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create a pipeline layout");
     }
     return layout;
@@ -174,8 +156,7 @@ VkPipelineLayout createPipelineLayout(VkDevice device, const std::vector<const D
 
 } // namespace
 
-GraphicsPipeline::GraphicsPipeline(Device& device, const GraphicsPipelineDesc& desc) : device_(&device)
-{
+GraphicsPipeline::GraphicsPipeline(Device& device, const GraphicsPipelineDesc& desc) : device_(&device) {
     VkShaderStageFlagBits vertexStageBit = VK_SHADER_STAGE_VERTEX_BIT;
 
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
@@ -191,8 +172,7 @@ GraphicsPipeline::GraphicsPipeline(Device& device, const GraphicsPipelineDesc& d
     stages[1].pName = desc.fragmentStage.entryPoint;
 
     std::vector<VkVertexInputBindingDescription> bindings;
-    for (const VertexBinding& binding : desc.vertexBindings)
-    {
+    for (const VertexBinding& binding : desc.vertexBindings) {
         VkVertexInputBindingDescription vk{};
         vk.binding = binding.binding;
         vk.stride = binding.stride;
@@ -201,8 +181,7 @@ GraphicsPipeline::GraphicsPipeline(Device& device, const GraphicsPipelineDesc& d
     }
 
     std::vector<VkVertexInputAttributeDescription> attributes;
-    for (const VertexAttribute& attribute : desc.vertexAttributes)
-    {
+    for (const VertexAttribute& attribute : desc.vertexAttributes) {
         VkVertexInputAttributeDescription vk{};
         vk.location = attribute.location;
         vk.binding = attribute.binding;
@@ -267,14 +246,14 @@ GraphicsPipeline::GraphicsPipeline(Device& device, const GraphicsPipelineDesc& d
     renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
     renderingInfo.colorAttachmentCount = static_cast<std::uint32_t>(desc.colorFormats.size());
     std::vector<VkFormat> colorFormats;
-    for (Format format : desc.colorFormats)
-    {
+    for (Format format : desc.colorFormats) {
         colorFormats.push_back(toVkFormat(format));
     }
     renderingInfo.pColorAttachmentFormats = colorFormats.empty() ? nullptr : colorFormats.data();
     renderingInfo.depthAttachmentFormat = toVkFormat(desc.depthFormat);
 
-    layout_ = createPipelineLayout(device.handle(), desc.descriptorLayouts, desc.pushConstantSize, desc.pushConstantStages);
+    layout_ =
+        createPipelineLayout(device.handle(), desc.descriptorLayouts, desc.pushConstantSize, desc.pushConstantStages);
 
     VkGraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -291,57 +270,51 @@ GraphicsPipeline::GraphicsPipeline(Device& device, const GraphicsPipelineDesc& d
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = layout_;
 
-    if (vkCreateGraphicsPipelines(device.handle(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_) != VK_SUCCESS)
-    {
+    if (vkCreateGraphicsPipelines(device.handle(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_) !=
+        VK_SUCCESS) {
         vkDestroyPipelineLayout(device.handle(), layout_, nullptr);
         layout_ = VK_NULL_HANDLE;
         throw std::runtime_error("failed to create a graphics pipeline");
     }
 }
 
-GraphicsPipeline::~GraphicsPipeline()
-{
-    if (pipeline_ != VK_NULL_HANDLE)
-    {
+GraphicsPipeline::~GraphicsPipeline() {
+    if (pipeline_ != VK_NULL_HANDLE) {
         vkDestroyPipeline(device_->handle(), pipeline_, nullptr);
     }
-    if (layout_ != VK_NULL_HANDLE)
-    {
+    if (layout_ != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device_->handle(), layout_, nullptr);
     }
 }
 
-ComputePipeline::ComputePipeline(Device& device, const ComputePipelineDesc& desc) : device_(&device)
-{
+ComputePipeline::ComputePipeline(Device& device, const ComputePipelineDesc& desc) : device_(&device) {
     VkPipelineShaderStageCreateInfo stage{};
     stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
     stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
     stage.module = desc.computeStage.module != nullptr ? desc.computeStage.module->handle() : VK_NULL_HANDLE;
     stage.pName = desc.computeStage.entryPoint;
 
-    layout_ = createPipelineLayout(device.handle(), desc.descriptorLayouts, desc.pushConstantSize, VK_SHADER_STAGE_COMPUTE_BIT);
+    layout_ = createPipelineLayout(device.handle(), desc.descriptorLayouts, desc.pushConstantSize,
+                                   VK_SHADER_STAGE_COMPUTE_BIT);
 
     VkComputePipelineCreateInfo pipelineInfo{};
     pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
     pipelineInfo.stage = stage;
     pipelineInfo.layout = layout_;
 
-    if (vkCreateComputePipelines(device.handle(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_) != VK_SUCCESS)
-    {
+    if (vkCreateComputePipelines(device.handle(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline_) !=
+        VK_SUCCESS) {
         vkDestroyPipelineLayout(device.handle(), layout_, nullptr);
         layout_ = VK_NULL_HANDLE;
         throw std::runtime_error("failed to create a compute pipeline");
     }
 }
 
-ComputePipeline::~ComputePipeline()
-{
-    if (pipeline_ != VK_NULL_HANDLE)
-    {
+ComputePipeline::~ComputePipeline() {
+    if (pipeline_ != VK_NULL_HANDLE) {
         vkDestroyPipeline(device_->handle(), pipeline_, nullptr);
     }
-    if (layout_ != VK_NULL_HANDLE)
-    {
+    if (layout_ != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device_->handle(), layout_, nullptr);
     }
 }

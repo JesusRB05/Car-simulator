@@ -8,27 +8,24 @@
 namespace sim::render {
 namespace {
 
-rhi::BufferUsage vertexUsage()
-{
+rhi::BufferUsage vertexUsage() {
     return rhi::BufferUsage::Vertex | rhi::BufferUsage::TransferDst;
 }
 
-rhi::BufferUsage indexUsage()
-{
+rhi::BufferUsage indexUsage() {
     return rhi::BufferUsage::Index | rhi::BufferUsage::TransferDst;
 }
 
 } // namespace
 
 Mesh::Mesh(rhi::Device& device, const std::vector<Vertex>& vertices, const std::vector<std::uint32_t>& indices)
-    : vertexBuffer_(device, vertices.data(), vertices.size() * sizeof(Vertex), vertexUsage(), rhi::MemoryUsage::CpuToGpu),
-      indexBuffer_(device, indices.data(), indices.size() * sizeof(std::uint32_t), indexUsage(), rhi::MemoryUsage::CpuToGpu),
-      indexCount_(static_cast<std::uint32_t>(indices.size()))
-{
-}
+    : vertexBuffer_(device, vertices.data(), vertices.size() * sizeof(Vertex), vertexUsage(),
+                    rhi::MemoryUsage::CpuToGpu),
+      indexBuffer_(device, indices.data(), indices.size() * sizeof(std::uint32_t), indexUsage(),
+                   rhi::MemoryUsage::CpuToGpu),
+      indexCount_(static_cast<std::uint32_t>(indices.size())) {}
 
-MeshData cubeData()
-{
+MeshData cubeData() {
     const glm::vec3 faceNormals[6] = {{0, 0, 1}, {0, 0, -1}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}};
     const glm::vec3 corners[8] = {{-1, -1, -1}, {1, -1, -1}, {1, 1, -1}, {-1, 1, -1},
                                   {-1, -1, 1},  {1, -1, 1},  {1, 1, 1},  {-1, 1, 1}};
@@ -37,11 +34,9 @@ MeshData cubeData()
 
     std::vector<Vertex> vertices;
     std::vector<std::uint32_t> indices;
-    for (int face = 0; face < 6; ++face)
-    {
+    for (int face = 0; face < 6; ++face) {
         const std::uint32_t base = static_cast<std::uint32_t>(vertices.size());
-        for (int corner = 0; corner < 4; ++corner)
-        {
+        for (int corner = 0; corner < 4; ++corner) {
             Vertex vertex;
             vertex.position = corners[faces[face][corner]] * 0.5f;
             vertex.normal = faceNormals[face];
@@ -59,37 +54,34 @@ MeshData cubeData()
     return {std::move(vertices), std::move(indices)};
 }
 
-MeshData sphereData()
-{
+MeshData sphereData() {
     // Unit UV sphere (radius 1, centred at the origin). Positions equal their
     // normals on a unit sphere, so the Lambert shading is smooth.
     const int slices = 24;
     const int stacks = 14;
     std::vector<Vertex> vertices;
     std::vector<std::uint32_t> indices;
-    for (int stack = 0; stack <= stacks; ++stack)
-    {
+    for (int stack = 0; stack <= stacks; ++stack) {
         const float phi = static_cast<float>(stack) * 3.14159265358979f / static_cast<float>(stacks);
         // Exact poles: sin(pi) in float is a tiny negative number that would
         // fold the bottom-pole triangles inside out.
         const bool pole = stack == 0 || stack == stacks;
         const float sinPhi = pole ? 0.0f : std::sin(phi);
         const float cosPhi = stack == 0 ? 1.0f : (stack == stacks ? -1.0f : std::cos(phi));
-        for (int slice = 0; slice <= slices; ++slice)
-        {
+        for (int slice = 0; slice <= slices; ++slice) {
             const float theta = static_cast<float>(slice) * 6.28318530717959f / static_cast<float>(slices);
             Vertex vertex;
             vertex.position = {sinPhi * std::cos(theta), cosPhi, sinPhi * std::sin(theta)};
             vertex.normal = vertex.position;
-            vertex.uv = {static_cast<float>(slice) / static_cast<float>(slices), static_cast<float>(stack) / static_cast<float>(stacks)};
+            vertex.uv = {static_cast<float>(slice) / static_cast<float>(slices),
+                         static_cast<float>(stack) / static_cast<float>(stacks)};
             vertices.push_back(vertex);
         }
     }
-    for (int stack = 0; stack < stacks; ++stack)
-    {
-        for (int slice = 0; slice < slices; ++slice)
-        {
-            const std::uint32_t a = static_cast<std::uint32_t>(stack) * (slices + 1) + static_cast<std::uint32_t>(slice);
+    for (int stack = 0; stack < stacks; ++stack) {
+        for (int slice = 0; slice < slices; ++slice) {
+            const std::uint32_t a =
+                static_cast<std::uint32_t>(stack) * (slices + 1) + static_cast<std::uint32_t>(slice);
             const std::uint32_t b = a + 1;
             const std::uint32_t c = a + static_cast<std::uint32_t>(slices) + 2;
             const std::uint32_t d = a + static_cast<std::uint32_t>(slices) + 1;
@@ -104,8 +96,7 @@ MeshData sphereData()
     return {std::move(vertices), std::move(indices)};
 }
 
-MeshData cylinderData()
-{
+MeshData cylinderData() {
     // Unit cylinder: radius 1, half-height 1, axis +Y. Side normals are radial;
     // both caps point up/down so the Lambert shading reads the disc correctly.
     const int slices = 24;
@@ -115,12 +106,12 @@ MeshData cylinderData()
     // capNormalY = 0 builds a side ring with radial normals; +-1 builds a cap
     // ring whose normals point straight up or down.
     const auto ring = [&](float y, float capNormalY) {
-        for (int slice = 0; slice <= slices; ++slice)
-        {
+        for (int slice = 0; slice <= slices; ++slice) {
             const float theta = static_cast<float>(slice) * 6.28318530717959f / static_cast<float>(slices);
             Vertex vertex;
             vertex.position = {std::cos(theta), y, std::sin(theta)};
-            vertex.normal = capNormalY != 0.0f ? glm::vec3(0.0f, capNormalY, 0.0f) : glm::vec3(std::cos(theta), 0.0f, std::sin(theta));
+            vertex.normal = capNormalY != 0.0f ? glm::vec3(0.0f, capNormalY, 0.0f)
+                                               : glm::vec3(std::cos(theta), 0.0f, std::sin(theta));
             vertex.uv = {static_cast<float>(slice) / static_cast<float>(slices), y * 0.5f + 0.5f};
             vertices.push_back(vertex);
         }
@@ -131,11 +122,11 @@ MeshData cylinderData()
     ring(1.0f, 0.0f);
     ring(-1.0f, 0.0f);
 
-    for (int slice = 0; slice < slices; ++slice)
-    {
+    for (int slice = 0; slice < slices; ++slice) {
         const std::uint32_t a = sideOffset + static_cast<std::uint32_t>(slice);
         const std::uint32_t b = a + 1;
-        const std::uint32_t c = sideOffset + static_cast<std::uint32_t>(slices) + 1 + static_cast<std::uint32_t>(slice) + 1;
+        const std::uint32_t c =
+            sideOffset + static_cast<std::uint32_t>(slices) + 1 + static_cast<std::uint32_t>(slice) + 1;
         const std::uint32_t d = sideOffset + static_cast<std::uint32_t>(slices) + 1 + static_cast<std::uint32_t>(slice);
         indices.push_back(a);
         indices.push_back(b);
@@ -151,16 +142,14 @@ MeshData cylinderData()
     const std::uint32_t bottomRing = static_cast<std::uint32_t>(slices) + 1;
     const std::uint32_t topCenter = static_cast<std::uint32_t>(vertices.size());
     vertices.push_back({{0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.5f, 0.5f}});
-    for (int slice = 0; slice < slices; ++slice)
-    {
+    for (int slice = 0; slice < slices; ++slice) {
         indices.push_back(topCenter);
         indices.push_back(topRing + static_cast<std::uint32_t>(slice) + 1);
         indices.push_back(topRing + static_cast<std::uint32_t>(slice));
     }
     const std::uint32_t bottomCenter = static_cast<std::uint32_t>(vertices.size());
     vertices.push_back({{0.0f, -1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.5f, 0.5f}});
-    for (int slice = 0; slice < slices; ++slice)
-    {
+    for (int slice = 0; slice < slices; ++slice) {
         indices.push_back(bottomCenter);
         indices.push_back(bottomRing + static_cast<std::uint32_t>(slice));
         indices.push_back(bottomRing + static_cast<std::uint32_t>(slice) + 1);
@@ -169,8 +158,7 @@ MeshData cylinderData()
     return {std::move(vertices), std::move(indices)};
 }
 
-MeshData groundPlaneData(float halfSize)
-{
+MeshData groundPlaneData(float halfSize) {
     std::vector<Vertex> vertices = {
         {{-halfSize, 0.0f, -halfSize}, {0, 1, 0}, {0, 0}},
         {{halfSize, 0.0f, -halfSize}, {0, 1, 0}, {1, 0}},
@@ -182,26 +170,22 @@ MeshData groundPlaneData(float halfSize)
     return {std::move(vertices), std::move(indices)};
 }
 
-std::shared_ptr<Mesh> Mesh::makeCube(rhi::Device& device)
-{
+std::shared_ptr<Mesh> Mesh::makeCube(rhi::Device& device) {
     const MeshData data = cubeData();
     return std::make_shared<Mesh>(device, data.vertices, data.indices);
 }
 
-std::shared_ptr<Mesh> Mesh::makeSphere(rhi::Device& device)
-{
+std::shared_ptr<Mesh> Mesh::makeSphere(rhi::Device& device) {
     const MeshData data = sphereData();
     return std::make_shared<Mesh>(device, data.vertices, data.indices);
 }
 
-std::shared_ptr<Mesh> Mesh::makeCylinder(rhi::Device& device)
-{
+std::shared_ptr<Mesh> Mesh::makeCylinder(rhi::Device& device) {
     const MeshData data = cylinderData();
     return std::make_shared<Mesh>(device, data.vertices, data.indices);
 }
 
-std::shared_ptr<Mesh> Mesh::makeGroundPlane(rhi::Device& device, float halfSize)
-{
+std::shared_ptr<Mesh> Mesh::makeGroundPlane(rhi::Device& device, float halfSize) {
     const MeshData data = groundPlaneData(halfSize);
     return std::make_shared<Mesh>(device, data.vertices, data.indices);
 }

@@ -8,8 +8,7 @@
 
 namespace sim::render {
 
-void Camera::setPerspective(float fovYDegrees, float aspect, float nearPlane, float farPlane)
-{
+void Camera::setPerspective(float fovYDegrees, float aspect, float nearPlane, float farPlane) {
     // Reversed-Z projection for Vulkan's [0, 1] clip depth. Mapping the near
     // plane to depth 1 and the far plane to depth 0 (instead of the usual
     // 0/1) distributes floating-point precision near the camera, which is
@@ -27,8 +26,7 @@ void Camera::setPerspective(float fovYDegrees, float aspect, float nearPlane, fl
     projection_[2][3] = -1.0f;
 }
 
-void Camera::lookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec3& up)
-{
+void Camera::lookAt(const glm::vec3& eye, const glm::vec3& target, const glm::vec3& up) {
     position_ = eye;
     // glm::lookAt builds a right-handed view matrix with -Z forward.
     view_ = glm::lookAt(eye, target, up);

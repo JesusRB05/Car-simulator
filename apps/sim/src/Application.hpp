@@ -25,8 +25,8 @@
 #include "platform/Sdl.hpp"
 #include "platform/Window.hpp"
 #include "plugin_api/PluginLoader.hpp"
-#include "render/Renderer.hpp"
 #include "render/DebugDraw.hpp"
+#include "render/Renderer.hpp"
 #include "render/Scene.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Frame.hpp"
@@ -53,8 +53,7 @@ class DriveScene;
 
 // One physics state, produced by the physics thread and consumed by the render
 // thread. Copied through a lock-free single-producer/single-consumer ring.
-struct SimSnapshot
-{
+struct SimSnapshot {
     double simTime = 0.0;
     double wallTime = 0.0;
     int steps = 0;
@@ -71,23 +70,19 @@ struct SimSnapshot
     int bodyCount = 0;
 };
 
-class SnapshotRing
-{
+class SnapshotRing {
 public:
     static constexpr std::size_t kCapacity = 128;
 
-    void push(const SimSnapshot& snapshot)
-    {
+    void push(const SimSnapshot& snapshot) {
         const std::uint64_t write = write_.load(std::memory_order_relaxed);
         buffer_[write % kCapacity] = snapshot;
         write_.store(write + 1, std::memory_order_release);
     }
 
-    bool pop(SimSnapshot& out)
-    {
+    bool pop(SimSnapshot& out) {
         const std::uint64_t read = read_.load(std::memory_order_relaxed);
-        if (read >= write_.load(std::memory_order_acquire))
-        {
+        if (read >= write_.load(std::memory_order_acquire)) {
             return false;
         }
         out = buffer_[read % kCapacity];
@@ -101,8 +96,7 @@ private:
     std::atomic<std::uint64_t> read_{0};
 };
 
-class Application
-{
+class Application {
 public:
     Application();
     ~Application();
@@ -137,8 +131,7 @@ private:
     void stepDriveScene(double delta);
     bool driveActive() const { return drive_ != nullptr; }
 
-    enum class CameraMode
-    {
+    enum class CameraMode {
         Chase,
         Orbit,
         Free,

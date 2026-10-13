@@ -17,13 +17,13 @@ const rhi::DescriptorBinding kUniformBinding{0, rhi::DescriptorType::UniformBuff
 } // namespace
 
 DebugDraw::DebugDraw(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32_t maxInstances)
-    : device_(device), vfs_(vfs), shaders_(device, vfs), maxInstances_(maxInstances)
-{
+    : device_(device), vfs_(vfs), shaders_(device, vfs), maxInstances_(maxInstances) {
     layout_ = std::make_unique<rhi::DescriptorSetLayout>(device_, std::vector<rhi::DescriptorBinding>{kUniformBinding});
     pool_ = std::make_unique<rhi::DescriptorPool>(device_, 1, layout_->bindings());
 
     uniformBuffer_ = std::make_unique<rhi::Buffer>(device_, sizeof(glm::mat4), rhi::BufferUsage::Uniform);
-    instanceBuffer_ = std::make_unique<rhi::Buffer>(device_, sizeof(Instance) * maxInstances_, rhi::BufferUsage::Vertex);
+    instanceBuffer_ =
+        std::make_unique<rhi::Buffer>(device_, sizeof(Instance) * maxInstances_, rhi::BufferUsage::Vertex);
 
     rhi::DescriptorSet set(&device_, pool_->allocate(*layout_));
     set.writeBuffer(0, uniformBuffer_->handle(), sizeof(glm::mat4));
@@ -34,23 +34,19 @@ DebugDraw::DebugDraw(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint
 
 DebugDraw::~DebugDraw() = default;
 
-void DebugDraw::ensureTargets(rhi::Format colorFormat, rhi::Extent2D extent)
-{
+void DebugDraw::ensureTargets(rhi::Format colorFormat, rhi::Extent2D extent) {
     extent_ = extent;
-    if (pipeline_ != nullptr && colorFormat == colorFormat_)
-    {
+    if (pipeline_ != nullptr && colorFormat == colorFormat_) {
         return;
     }
     colorFormat_ = colorFormat;
     createPipeline(colorFormat, extent);
 }
 
-void DebugDraw::createPipeline(rhi::Format colorFormat, rhi::Extent2D)
-{
+void DebugDraw::createPipeline(rhi::Format colorFormat, rhi::Extent2D) {
     const rhi::ShaderModule* vertex = shaders_.get("shaders/debug.vertex.spv");
     const rhi::ShaderModule* fragment = shaders_.get("shaders/debug.fragment.spv");
-    if (vertex == nullptr || fragment == nullptr)
-    {
+    if (vertex == nullptr || fragment == nullptr) {
         core::Log::get("render")->error("debug draw: missing shaders/debug.{vertex,fragment}.spv");
         pipeline_.reset();
         return;
@@ -74,28 +70,23 @@ void DebugDraw::createPipeline(rhi::Format colorFormat, rhi::Extent2D)
     pipeline_ = std::make_unique<rhi::GraphicsPipeline>(device_, desc);
 }
 
-void DebugDraw::addLine(const glm::vec3& start, const glm::vec3& end, const glm::vec4& color)
-{
-    if (instances_.size() >= maxInstances_)
-    {
+void DebugDraw::addLine(const glm::vec3& start, const glm::vec3& end, const glm::vec4& color) {
+    if (instances_.size() >= maxInstances_) {
         return;
     }
     instances_.push_back({start, end, color});
 }
 
-void DebugDraw::addAxes(const glm::vec3& origin, float length)
-{
+void DebugDraw::addAxes(const glm::vec3& origin, float length) {
     addLine(origin, origin + glm::vec3(length, 0.0f, 0.0f), {1.0f, 0.25f, 0.25f, 1.0f});
     addLine(origin, origin + glm::vec3(0.0f, length, 0.0f), {0.25f, 1.0f, 0.25f, 1.0f});
     addLine(origin, origin + glm::vec3(0.0f, 0.0f, length), {0.3f, 0.5f, 1.0f, 1.0f});
 }
 
-void DebugDraw::addGrid(float halfSize, float step, const glm::vec4& lineColor, const glm::vec4& axisColor)
-{
+void DebugDraw::addGrid(float halfSize, float step, const glm::vec4& lineColor, const glm::vec4& axisColor) {
     const int steps = static_cast<int>(halfSize / step);
     const float extent = static_cast<float>(steps) * step;
-    for (int i = -steps; i <= steps; ++i)
-    {
+    for (int i = -steps; i <= steps; ++i) {
         const float offset = static_cast<float>(i) * step;
         const glm::vec4 color = i == 0 ? axisColor : lineColor;
         addLine({-extent, 0.0f, offset}, {extent, 0.0f, offset}, color);
@@ -103,25 +94,21 @@ void DebugDraw::addGrid(float halfSize, float step, const glm::vec4& lineColor, 
     }
 }
 
-void DebugDraw::render(rhi::CommandList& commandList, const Camera& camera, const rhi::ColorAttachment& colorAttachment)
-{
-    if (instances_.empty())
-    {
+void DebugDraw::render(rhi::CommandList& commandList, const Camera& camera,
+                       const rhi::ColorAttachment& colorAttachment) {
+    if (instances_.empty()) {
         return;
     }
-    if (pipeline_ == nullptr)
-    {
+    if (pipeline_ == nullptr) {
         createPipeline(colorFormat_, extent_);
-        if (pipeline_ == nullptr)
-        {
+        if (pipeline_ == nullptr) {
             instances_.clear();
             return;
         }
     }
 
     const std::uint32_t count = static_cast<std::uint32_t>(instances_.size());
-    struct
-    {
+    struct {
         alignas(16) glm::mat4 viewProjection;
     } frame{};
     writeMatrix(camera.viewProjection(), &frame.viewProjection);

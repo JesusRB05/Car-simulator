@@ -13,16 +13,14 @@
 
 namespace sim::rhi {
 
-struct DescriptorBinding
-{
+struct DescriptorBinding {
     std::uint32_t binding = 0;
     DescriptorType type = DescriptorType::UniformBuffer;
     std::uint32_t count = 1;
     VkShaderStageFlags stages = VK_SHADER_STAGE_ALL;
 };
 
-class DescriptorSetLayout
-{
+class DescriptorSetLayout {
 public:
     DescriptorSetLayout(Device& device, const std::vector<DescriptorBinding>& bindings);
     ~DescriptorSetLayout();
@@ -39,8 +37,7 @@ private:
     std::vector<DescriptorBinding> bindings_;
 };
 
-class DescriptorPool
-{
+class DescriptorPool {
 public:
     DescriptorPool(Device& device, std::uint32_t maxSets, const std::vector<DescriptorBinding>& bindings);
     ~DescriptorPool();
@@ -57,8 +54,7 @@ private:
 };
 
 // Thin, updatable wrapper around a VkDescriptorSet.
-class DescriptorSet
-{
+class DescriptorSet {
 public:
     DescriptorSet() = default;
     DescriptorSet(Device* device, VkDescriptorSet set) : device_(device), set_(set) {}
@@ -67,21 +63,20 @@ public:
     VkDescriptorSet handle() const { return set_; }
 
     void writeBuffer(std::uint32_t binding, VkBuffer buffer, VkDeviceSize size, VkDeviceSize offset = 0) const;
-    void writeImage(std::uint32_t binding, VkSampler sampler, VkImageView view, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const;
+    void writeImage(std::uint32_t binding, VkSampler sampler, VkImageView view,
+                    VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const;
 
 private:
     Device* device_ = nullptr;
     VkDescriptorSet set_ = VK_NULL_HANDLE;
 };
 
-struct ShaderStageDesc
-{
+struct ShaderStageDesc {
     const ShaderModule* module = nullptr;
     const char* entryPoint = "main";
 };
 
-struct GraphicsPipelineDesc
-{
+struct GraphicsPipelineDesc {
     std::vector<VertexBinding> vertexBindings;
     std::vector<VertexAttribute> vertexAttributes;
     ShaderStageDesc vertexStage{};
@@ -99,8 +94,7 @@ struct GraphicsPipelineDesc
     VkShaderStageFlags pushConstantStages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 };
 
-class GraphicsPipeline
-{
+class GraphicsPipeline {
 public:
     GraphicsPipeline(Device& device, const GraphicsPipelineDesc& desc);
     ~GraphicsPipeline();
@@ -117,15 +111,13 @@ private:
     VkPipelineLayout layout_ = VK_NULL_HANDLE;
 };
 
-struct ComputePipelineDesc
-{
+struct ComputePipelineDesc {
     ShaderStageDesc computeStage{};
     std::vector<const DescriptorSetLayout*> descriptorLayouts;
     std::uint32_t pushConstantSize = 0;
 };
 
-class ComputePipeline
-{
+class ComputePipeline {
 public:
     ComputePipeline(Device& device, const ComputePipelineDesc& desc);
     ~ComputePipeline();

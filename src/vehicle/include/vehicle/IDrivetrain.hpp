@@ -11,8 +11,7 @@ namespace sim::vehicle {
 using physics::Real;
 
 // Driver-side drivetrain controls.
-struct DrivetrainInput
-{
+struct DrivetrainInput {
     Real throttle = 0.0; // [0, 1]
     Real clutch = 0.0;   // [0, 1], 1 = pedal fully pressed (disengaged)
     int gear = 0;        // -1 = reverse, 0 = neutral, 1..N = forward gears
@@ -22,8 +21,7 @@ struct DrivetrainInput
 // torques. The drivetrain owns the rotating inertias up to the differential
 // outputs; wheel spin is integrated by the vehicle/tyre coupling and fed back
 // through setWheelAngularVelocity(). Wheels are indexed FL, FR, RL, RR.
-class IDrivetrain
-{
+class IDrivetrain {
 public:
     virtual ~IDrivetrain() = default;
 

@@ -6,8 +6,7 @@
 
 namespace sim::net {
 
-bool NetworkSystem::start(std::uint16_t port)
-{
+bool NetworkSystem::start(std::uint16_t port) {
     port_ = port;
     // Networking is not implemented yet; report that plainly.
     running_ = false;
@@ -16,14 +15,12 @@ bool NetworkSystem::start(std::uint16_t port)
     return false;
 }
 
-void NetworkSystem::stop()
-{
+void NetworkSystem::stop() {
     running_ = false;
     status_ = "offline";
 }
 
-void NetworkSystem::update(double /*deltaSeconds*/)
-{
+void NetworkSystem::update(double /*deltaSeconds*/) {
     // No-op until networking lands.
 }
 

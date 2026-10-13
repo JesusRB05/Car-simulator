@@ -12,37 +12,30 @@
 
 namespace sim::audio {
 
-struct EngineStorage
-{
+struct EngineStorage {
     ma_engine engine{};
 };
 
-struct AudioEngine::Sound
-{
+struct AudioEngine::Sound {
     std::vector<ma_uint8> data;
     ma_decoder decoder{};
     ma_sound sound{};
     bool decoderReady = false;
     bool soundReady = false;
 
-    ~Sound()
-    {
-        if (soundReady)
-        {
+    ~Sound() {
+        if (soundReady) {
             ma_sound_uninit(&sound);
         }
-        if (decoderReady)
-        {
+        if (decoderReady) {
             ma_decoder_uninit(&decoder);
         }
     }
 };
 
-AudioEngine::AudioEngine() : engine_(std::make_unique<EngineStorage>())
-{
+AudioEngine::AudioEngine() : engine_(std::make_unique<EngineStorage>()) {
     ma_engine_config config = ma_engine_config_init();
-    if (ma_engine_init(&config, &engine_->engine) != MA_SUCCESS)
-    {
+    if (ma_engine_init(&config, &engine_->engine) != MA_SUCCESS) {
         core::Log::get("audio")->warn("failed to initialise the audio engine; audio will be silent");
         running_ = false;
         return;
@@ -51,29 +44,23 @@ AudioEngine::AudioEngine() : engine_(std::make_unique<EngineStorage>())
     core::Log::get("audio")->info("audio engine ready");
 }
 
-AudioEngine::~AudioEngine()
-{
+AudioEngine::~AudioEngine() {
     stopAll();
     sounds_.clear();
-    if (running_)
-    {
+    if (running_) {
         ma_engine_uninit(&engine_->engine);
     }
 }
 
-void AudioEngine::setMasterVolume(float volume)
-{
-    if (running_)
-    {
+void AudioEngine::setMasterVolume(float volume) {
+    if (running_) {
         ma_engine_set_volume(&engine_->engine, volume);
     }
 }
 
-AudioEngine::SoundHandle AudioEngine::loadSound(vfs::VirtualFileSystem& vfs, std::string_view virtualPath)
-{
+AudioEngine::SoundHandle AudioEngine::loadSound(vfs::VirtualFileSystem& vfs, std::string_view virtualPath) {
     const auto bytes = vfs.readBinary(virtualPath);
-    if (!bytes || bytes->empty())
-    {
+    if (!bytes || bytes->empty()) {
         core::Log::get("audio")->error("sound '{}' was not found", virtualPath);
         return kInvalidSound;
     }
@@ -83,17 +70,15 @@ AudioEngine::SoundHandle AudioEngine::loadSound(vfs::VirtualFileSystem& vfs, std
     std::memcpy(sound->data.data(), bytes->data(), bytes->size());
 
     ma_decoder_config decoderConfig = ma_decoder_config_init(ma_format_f32, 0, 0);
-    if (ma_decoder_init_memory(sound->data.data(), sound->data.size(), &decoderConfig, &sound->decoder) != MA_SUCCESS)
-    {
+    if (ma_decoder_init_memory(sound->data.data(), sound->data.size(), &decoderConfig, &sound->decoder) != MA_SUCCESS) {
         core::Log::get("audio")->error("failed to decode '{}'", virtualPath);
         return kInvalidSound;
     }
     sound->decoderReady = true;
 
-    if (running_)
-    {
-        if (ma_sound_init_from_data_source(&engine_->engine, &sound->decoder, 0, nullptr, &sound->sound) != MA_SUCCESS)
-        {
+    if (running_) {
+        if (ma_sound_init_from_data_source(&engine_->engine, &sound->decoder, 0, nullptr, &sound->sound) !=
+            MA_SUCCESS) {
             ma_decoder_uninit(&sound->decoder);
             return kInvalidSound;
         }
@@ -104,15 +89,12 @@ AudioEngine::SoundHandle AudioEngine::loadSound(vfs::VirtualFileSystem& vfs, std
     return static_cast<SoundHandle>(sounds_.size());
 }
 
-void AudioEngine::play(SoundHandle handle, float volume, bool loop)
-{
-    if (handle == kInvalidSound || handle > sounds_.size() || !running_)
-    {
+void AudioEngine::play(SoundHandle handle, float volume, bool loop) {
+    if (handle == kInvalidSound || handle > sounds_.size() || !running_) {
         return;
     }
     Sound& sound = *sounds_[handle - 1];
-    if (!sound.soundReady)
-    {
+    if (!sound.soundReady) {
         return;
     }
     ma_sound_set_volume(&sound.sound, volume);
@@ -121,36 +103,28 @@ void AudioEngine::play(SoundHandle handle, float volume, bool loop)
     ma_sound_start(&sound.sound);
 }
 
-void AudioEngine::stop(SoundHandle handle)
-{
-    if (handle == kInvalidSound || handle > sounds_.size() || !running_)
-    {
+void AudioEngine::stop(SoundHandle handle) {
+    if (handle == kInvalidSound || handle > sounds_.size() || !running_) {
         return;
     }
     Sound& sound = *sounds_[handle - 1];
-    if (sound.soundReady)
-    {
+    if (sound.soundReady) {
         ma_sound_stop(&sound.sound);
     }
 }
 
-void AudioEngine::stopAll()
-{
-    if (!running_)
-    {
+void AudioEngine::stopAll() {
+    if (!running_) {
         return;
     }
-    for (auto& sound : sounds_)
-    {
-        if (sound->soundReady)
-        {
+    for (auto& sound : sounds_) {
+        if (sound->soundReady) {
             ma_sound_stop(&sound->sound);
         }
     }
 }
 
-void AudioEngine::update()
-{
+void AudioEngine::update() {
     // miniaudio runs on its own thread; nothing to do here yet.
 }
 

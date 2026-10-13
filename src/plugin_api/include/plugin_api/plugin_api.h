@@ -27,8 +27,7 @@
 #include <stdint.h>
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #define SIM_PLUGIN_ABI_VERSION 1u
@@ -41,44 +40,41 @@ extern "C"
 #define SIM_PLUGIN_EXPORT __attribute__((visibility("default")))
 #endif
 
-    typedef enum sim_log_level
-    {
-        SIM_LOG_TRACE = 0,
-        SIM_LOG_DEBUG = 1,
-        SIM_LOG_INFO = 2,
-        SIM_LOG_WARN = 3,
-        SIM_LOG_ERROR = 4,
-        SIM_LOG_CRITICAL = 5
-    } sim_log_level;
+typedef enum sim_log_level {
+    SIM_LOG_TRACE = 0,
+    SIM_LOG_DEBUG = 1,
+    SIM_LOG_INFO = 2,
+    SIM_LOG_WARN = 3,
+    SIM_LOG_ERROR = 4,
+    SIM_LOG_CRITICAL = 5
+} sim_log_level;
 
-    /* Services provided by the game to the plugin. */
-    typedef struct sim_plugin_api
-    {
-        uint32_t abi_version;
-        size_t struct_size;
-        /* Opaque context owned by the host; always passed back to callbacks. */
-        void* user_data;
-        const char* game_version;
-        /* Writes a message to the plugin's named logger. */
-        void (*log)(void* user_data, sim_log_level level, const char* message);
-        /* Reads a file through the game VFS. Returns bytes written, or -1. */
-        int64_t (*vfs_read)(void* user_data, const char* path, void* buffer, size_t buffer_size);
-        /* Returns the host-provided name of the calling plugin. */
-        const char* (*plugin_name)(void* user_data);
-    } sim_plugin_api;
+/* Services provided by the game to the plugin. */
+typedef struct sim_plugin_api {
+    uint32_t abi_version;
+    size_t struct_size;
+    /* Opaque context owned by the host; always passed back to callbacks. */
+    void* user_data;
+    const char* game_version;
+    /* Writes a message to the plugin's named logger. */
+    void (*log)(void* user_data, sim_log_level level, const char* message);
+    /* Reads a file through the game VFS. Returns bytes written, or -1. */
+    int64_t (*vfs_read)(void* user_data, const char* path, void* buffer, size_t buffer_size);
+    /* Returns the host-provided name of the calling plugin. */
+    const char* (*plugin_name)(void* user_data);
+} sim_plugin_api;
 
-    /* Callbacks the plugin hands back to the game. */
-    typedef struct sim_plugin_host
-    {
-        /* Opaque plugin-owned context, passed back into the callbacks below. */
-        void* user_data;
-        /* Called once per rendered frame with the frame delta in seconds. */
-        void (*on_update)(void* user_data, double delta_seconds);
-        /* Called once when the plugin is unloaded. May be NULL. */
-        void (*on_shutdown)(void* user_data);
-    } sim_plugin_host;
+/* Callbacks the plugin hands back to the game. */
+typedef struct sim_plugin_host {
+    /* Opaque plugin-owned context, passed back into the callbacks below. */
+    void* user_data;
+    /* Called once per rendered frame with the frame delta in seconds. */
+    void (*on_update)(void* user_data, double delta_seconds);
+    /* Called once when the plugin is unloaded. May be NULL. */
+    void (*on_shutdown)(void* user_data);
+} sim_plugin_host;
 
-    typedef int (*sim_plugin_entry_fn)(uint32_t host_abi_version, const sim_plugin_api* api, sim_plugin_host* out_host);
+typedef int (*sim_plugin_entry_fn)(uint32_t host_abi_version, const sim_plugin_api* api, sim_plugin_host* out_host);
 
 #ifdef __cplusplus
 }

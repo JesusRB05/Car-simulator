@@ -14,8 +14,7 @@ namespace sim::render {
 // A minimal, linear render graph. Each pass records work into the frame's
 // command list in registration order. It exists so passes can be added and
 // reordered without touching the frame loop.
-class RenderGraph
-{
+class RenderGraph {
 public:
     using PassFunction = std::function<void(rhi::CommandList&)>;
 

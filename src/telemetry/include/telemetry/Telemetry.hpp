@@ -12,8 +12,7 @@ class VirtualFileSystem;
 
 namespace sim::telemetry {
 
-struct FrameSample
-{
+struct FrameSample {
     double frameTimeMs = 0.0;
     double physicsTimeMs = 0.0;
     double renderTimeMs = 0.0;
@@ -26,8 +25,7 @@ struct FrameSample
 
 // A rolling record of frame timings. The application fills one sample per
 // rendered frame; ImGui panels and the CSV exporter read from it.
-class Telemetry
-{
+class Telemetry {
 public:
     explicit Telemetry(std::size_t capacity = 600);
 

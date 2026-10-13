@@ -12,8 +12,7 @@ using physics::Real;
 
 // Brake system: pedal and handbrake positions in, per-wheel brake torque
 // capacity out. Wheels are indexed FL, FR, RL, RR.
-class IBrakeSystem
-{
+class IBrakeSystem {
 public:
     virtual ~IBrakeSystem() = default;
 

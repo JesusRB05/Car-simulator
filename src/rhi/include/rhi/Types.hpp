@@ -8,8 +8,7 @@
 
 namespace sim::rhi {
 
-enum class Format : std::uint32_t
-{
+enum class Format : std::uint32_t {
     Undefined = 0,
     R8G8B8A8Unorm,
     R8G8B8A8Srgb,
@@ -24,8 +23,7 @@ enum class Format : std::uint32_t
     D32SfloatS8Uint,
 };
 
-enum class BufferUsage : std::uint32_t
-{
+enum class BufferUsage : std::uint32_t {
     None = 0,
     Vertex = 1u << 0,
     Index = 1u << 1,
@@ -36,24 +34,20 @@ enum class BufferUsage : std::uint32_t
     TransferDst = 1u << 6,
 };
 
-constexpr BufferUsage operator|(BufferUsage a, BufferUsage b)
-{
+constexpr BufferUsage operator|(BufferUsage a, BufferUsage b) {
     return static_cast<BufferUsage>(static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
 }
-constexpr bool hasFlag(BufferUsage value, BufferUsage flag)
-{
+constexpr bool hasFlag(BufferUsage value, BufferUsage flag) {
     return (static_cast<std::uint32_t>(value) & static_cast<std::uint32_t>(flag)) != 0;
 }
 
-enum class MemoryUsage
-{
+enum class MemoryUsage {
     GpuOnly,
     CpuToGpu,
     GpuToCpu,
 };
 
-enum class ImageUsage : std::uint32_t
-{
+enum class ImageUsage : std::uint32_t {
     None = 0,
     Sampled = 1u << 0,
     Storage = 1u << 1,
@@ -63,17 +57,14 @@ enum class ImageUsage : std::uint32_t
     TransferDst = 1u << 5,
 };
 
-constexpr ImageUsage operator|(ImageUsage a, ImageUsage b)
-{
+constexpr ImageUsage operator|(ImageUsage a, ImageUsage b) {
     return static_cast<ImageUsage>(static_cast<std::uint32_t>(a) | static_cast<std::uint32_t>(b));
 }
-constexpr bool hasFlag(ImageUsage value, ImageUsage flag)
-{
+constexpr bool hasFlag(ImageUsage value, ImageUsage flag) {
     return (static_cast<std::uint32_t>(value) & static_cast<std::uint32_t>(flag)) != 0;
 }
 
-enum class ImageLayout
-{
+enum class ImageLayout {
     Undefined,
     ColorAttachment,
     DepthAttachment,
@@ -84,8 +75,7 @@ enum class ImageLayout
     General,
 };
 
-enum class VertexFormat
-{
+enum class VertexFormat {
     Float,
     Float2,
     Float3,
@@ -102,43 +92,37 @@ enum class VertexFormat
 
 std::uint32_t vertexFormatSize(VertexFormat format);
 
-struct VertexAttribute
-{
+struct VertexAttribute {
     std::uint32_t location = 0;
     std::uint32_t binding = 0;
     VertexFormat format = VertexFormat::Float3;
     std::uint32_t offset = 0;
 };
 
-struct VertexBinding
-{
+struct VertexBinding {
     std::uint32_t binding = 0;
     std::uint32_t stride = 0;
     bool perInstance = false;
 };
 
-struct Extent2D
-{
+struct Extent2D {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
 };
 
-enum class PrimitiveTopology
-{
+enum class PrimitiveTopology {
     TriangleList,
     TriangleStrip,
     LineList,
 };
 
-enum class CullMode
-{
+enum class CullMode {
     None,
     Front,
     Back,
 };
 
-enum class CompareOp
-{
+enum class CompareOp {
     Never,
     Less,
     Equal,
@@ -149,30 +133,26 @@ enum class CompareOp
     Always,
 };
 
-enum class BlendMode
-{
+enum class BlendMode {
     Opaque,
     AlphaBlend,
     Additive,
 };
 
-enum class LoadOp
-{
+enum class LoadOp {
     Load,
     Clear,
     DontCare,
 };
 
-struct ColorAttachment
-{
+struct ColorAttachment {
     std::uint64_t image = 0; // VkImageView handle
     ImageLayout layout = ImageLayout::ColorAttachment;
     LoadOp loadOp = LoadOp::Clear;
     float clearColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
 };
 
-struct DepthAttachment
-{
+struct DepthAttachment {
     std::uint64_t image = 0; // VkImageView handle
     ImageLayout layout = ImageLayout::DepthAttachment;
     LoadOp loadOp = LoadOp::Clear;
@@ -180,8 +160,7 @@ struct DepthAttachment
     std::uint32_t clearStencil = 0;
 };
 
-enum class DescriptorType
-{
+enum class DescriptorType {
     UniformBuffer,
     StorageBuffer,
     CombinedImageSampler,

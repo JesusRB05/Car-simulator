@@ -16,8 +16,7 @@ namespace sim::rhi {
 // of queries is kept per frame in flight; the previous result for a slot is read
 // back when that slot is reused (its fence has already signalled), so reading
 // never stalls the pipeline.
-class GpuTimer
-{
+class GpuTimer {
 public:
     GpuTimer(Device& device, std::uint32_t slots);
     ~GpuTimer();

@@ -13,20 +13,18 @@ namespace sim::platform {
 // Live state of one input device (keyboard is handled separately). Wheels,
 // pedals and gamepads all appear here as SDL joysticks; `isGamepad` marks the
 // ones SDL recognises as standard gamepads.
-struct InputDevice
-{
+struct InputDevice {
     SDL_JoystickID instanceId = 0;
     SDL_Joystick* joystick = nullptr;
     std::string name;
     bool isGamepad = false;
-    std::vector<float> axes;    // normalised to [-1, 1]
+    std::vector<float> axes; // normalised to [-1, 1]
     std::vector<bool> buttons;
 };
 
 // Tracks keyboard state and enumerates / hot-plugs joysticks, wheels and
 // gamepads. The ImGui input panel renders directly from this.
-class InputManager
-{
+class InputManager {
 public:
     InputManager();
     ~InputManager();

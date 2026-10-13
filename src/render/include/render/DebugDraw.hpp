@@ -27,8 +27,7 @@ namespace sim::render {
 // instanced line-list draw. It draws over the scene without depth testing, so
 // it is meant as an overlay (grids, axes, collision shapes) rather than depth
 // corrected geometry.
-class DebugDraw
-{
+class DebugDraw {
 public:
     DebugDraw(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32_t maxInstances = 16384);
     ~DebugDraw();
@@ -53,8 +52,7 @@ public:
     void render(rhi::CommandList& commandList, const Camera& camera, const rhi::ColorAttachment& colorAttachment);
 
 private:
-    struct Instance
-    {
+    struct Instance {
         glm::vec3 start{0.0f};
         glm::vec3 end{0.0f};
         glm::vec4 color{1.0f};

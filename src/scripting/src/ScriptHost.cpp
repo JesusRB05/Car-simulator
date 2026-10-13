@@ -8,13 +8,11 @@
 
 namespace sim::scripting {
 
-ScriptHost::ScriptHost(LuaSandbox& sandbox, vfs::VirtualFileSystem& vfs) : sandbox_(sandbox), vfs_(vfs)
-{
+ScriptHost::ScriptHost(LuaSandbox& sandbox, vfs::VirtualFileSystem& vfs) : sandbox_(sandbox), vfs_(vfs) {
     installApi();
 }
 
-void ScriptHost::installApi()
-{
+void ScriptHost::installApi() {
     sol::state_view view = sandbox_.view();
 
     // Everything lives in a `sim` table. (set_function("sim.log", ...) would
@@ -23,24 +21,18 @@ void ScriptHost::installApi()
     // windowed app at startup.)
     sol::table sim = view.create_named_table("sim");
 
-    sim.set_function("log", [this](std::string message) {
-        core::Log::forMod(currentMod_)->info("{}", message);
-    });
+    sim.set_function("log", [this](std::string message) { core::Log::forMod(currentMod_)->info("{}", message); });
 
-    sim.set_function("read", [this](std::string path) -> std::optional<std::string> {
-        return vfs_.readText(path);
-    });
+    sim.set_function("read", [this](std::string path) -> std::optional<std::string> { return vfs_.readText(path); });
 
     sim.set_function("register_on_load", [this](sol::protected_function function) {
-        if (onLoadTarget_ != nullptr)
-        {
+        if (onLoadTarget_ != nullptr) {
             onLoadTarget_->push_back(std::move(function));
         }
     });
 
     sim.set_function("register_on_update", [this](sol::protected_function function) {
-        if (onUpdateTarget_ != nullptr)
-        {
+        if (onUpdateTarget_ != nullptr) {
             onUpdateTarget_->push_back(std::move(function));
         }
     });
@@ -48,12 +40,10 @@ void ScriptHost::installApi()
     sim["game_version"] = std::string(core::kVersionString);
 }
 
-bool ScriptHost::loadScript(std::string_view modId, std::string_view virtualPath)
-{
+bool ScriptHost::loadScript(std::string_view modId, std::string_view virtualPath) {
     const std::string path(virtualPath);
     auto text = vfs_.readText(path);
-    if (!text)
-    {
+    if (!text) {
         core::Log::forMod(modId)->error("entry script '{}' not found in the VFS", path);
         return false;
     }
@@ -69,8 +59,7 @@ bool ScriptHost::loadScript(std::string_view modId, std::string_view virtualPath
 
     std::string error;
     const bool ok = sandbox_.run(*text, path, error);
-    if (!ok)
-    {
+    if (!ok) {
         core::Log::forMod(modId)->error("error in '{}': {}", path, error);
     }
 
@@ -79,32 +68,25 @@ bool ScriptHost::loadScript(std::string_view modId, std::string_view virtualPath
     return ok;
 }
 
-void ScriptHost::callOnLoad()
-{
-    for (Entry& entry : entries_)
-    {
+void ScriptHost::callOnLoad() {
+    for (Entry& entry : entries_) {
         currentMod_ = entry.modId;
-        for (auto& function : entry.onLoad)
-        {
+        for (auto& function : entry.onLoad) {
             sandbox_.call(function);
         }
     }
 }
 
-void ScriptHost::callOnUpdate(double deltaSeconds)
-{
-    for (Entry& entry : entries_)
-    {
+void ScriptHost::callOnUpdate(double deltaSeconds) {
+    for (Entry& entry : entries_) {
         currentMod_ = entry.modId;
-        for (auto& function : entry.onUpdate)
-        {
+        for (auto& function : entry.onUpdate) {
             sandbox_.call(function, deltaSeconds);
         }
     }
 }
 
-void ScriptHost::clear()
-{
+void ScriptHost::clear() {
     entries_.clear();
     onLoadTarget_ = nullptr;
     onUpdateTarget_ = nullptr;

@@ -15,8 +15,7 @@ namespace sim::core {
 // Thin, typed wrapper over a TOML document used for user configuration.
 // Keys use dot notation ("mods.active") to address nested tables. Only the
 // application layer reads and writes this file; it is never part of the VFS.
-class Config
-{
+class Config {
 public:
     explicit Config(std::filesystem::path file);
 

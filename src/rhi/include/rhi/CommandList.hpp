@@ -16,8 +16,7 @@ namespace sim::rhi {
 
 // A single primary command buffer together with its own pool. The typical use
 // is: begin() -> record -> end() -> submit through Frame or the queue helpers.
-class CommandList
-{
+class CommandList {
 public:
     explicit CommandList(Device& device, bool transient = true);
     ~CommandList();
@@ -30,14 +29,16 @@ public:
     void begin();
     void end();
 
-    void beginRendering(const std::vector<ColorAttachment>& colorAttachments, const DepthAttachment* depth, Extent2D area);
+    void beginRendering(const std::vector<ColorAttachment>& colorAttachments, const DepthAttachment* depth,
+                        Extent2D area);
     void endRendering();
 
     void bindPipeline(const GraphicsPipeline& pipeline);
     void bindComputePipeline(const ComputePipeline& pipeline);
     void bindDescriptorSet(VkPipelineLayout layout, std::uint32_t set, VkDescriptorSet descriptorSet,
                            const std::vector<std::uint32_t>& dynamicOffsets = {});
-    void pushConstants(VkPipelineLayout layout, VkShaderStageFlags stages, std::uint32_t offset, std::uint32_t size, const void* data);
+    void pushConstants(VkPipelineLayout layout, VkShaderStageFlags stages, std::uint32_t offset, std::uint32_t size,
+                       const void* data);
 
     void bindVertexBuffer(const Buffer& buffer, std::uint32_t binding = 0);
     void bindIndexBuffer(const Buffer& buffer, bool use32Bit = true);
@@ -52,7 +53,8 @@ public:
     void dispatch(std::uint32_t groupX, std::uint32_t groupY, std::uint32_t groupZ);
 
     // Synchronisation2 image layout transition (the caller picks the aspect).
-    void transitionImage(VkImage image, ImageLayout from, ImageLayout to, VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT);
+    void transitionImage(VkImage image, ImageLayout from, ImageLayout to,
+                         VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT);
     void copyBuffer(VkBuffer source, VkBuffer destination, VkDeviceSize size);
     // Copies a colour image into host-visible memory. The image must already be
     // in the TransferSrc layout (transition it with transitionImage first).

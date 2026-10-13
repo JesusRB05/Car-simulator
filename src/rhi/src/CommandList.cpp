@@ -9,10 +9,8 @@
 namespace sim::rhi {
 namespace {
 
-VkPipelineStageFlags2 stageFor(ImageLayout layout)
-{
-    switch (layout)
-    {
+VkPipelineStageFlags2 stageFor(ImageLayout layout) {
+    switch (layout) {
     case ImageLayout::ColorAttachment:
         return VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     case ImageLayout::DepthAttachment:
@@ -29,10 +27,8 @@ VkPipelineStageFlags2 stageFor(ImageLayout layout)
     }
 }
 
-VkAccessFlags2 accessFor(ImageLayout layout)
-{
-    switch (layout)
-    {
+VkAccessFlags2 accessFor(ImageLayout layout) {
+    switch (layout) {
     case ImageLayout::ColorAttachment:
         return VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
     case ImageLayout::DepthAttachment:
@@ -52,19 +48,16 @@ VkAccessFlags2 accessFor(ImageLayout layout)
 
 } // namespace
 
-CommandList::CommandList(Device& device, bool transient) : device_(&device)
-{
+CommandList::CommandList(Device& device, bool transient) : device_(&device) {
     VkCommandPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    if (transient)
-    {
+    if (transient) {
         poolInfo.flags |= VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
     }
     poolInfo.queueFamilyIndex = device.graphicsFamily();
 
-    if (vkCreateCommandPool(device.handle(), &poolInfo, nullptr, &pool_) != VK_SUCCESS)
-    {
+    if (vkCreateCommandPool(device.handle(), &poolInfo, nullptr, &pool_) != VK_SUCCESS) {
         throw std::runtime_error("failed to create a command pool");
     }
 
@@ -74,68 +67,60 @@ CommandList::CommandList(Device& device, bool transient) : device_(&device)
     allocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocateInfo.commandBufferCount = 1;
 
-    if (vkAllocateCommandBuffers(device.handle(), &allocateInfo, &commandBuffer_) != VK_SUCCESS)
-    {
+    if (vkAllocateCommandBuffers(device.handle(), &allocateInfo, &commandBuffer_) != VK_SUCCESS) {
         vkDestroyCommandPool(device.handle(), pool_, nullptr);
         pool_ = VK_NULL_HANDLE;
         throw std::runtime_error("failed to allocate a command buffer");
     }
 }
 
-CommandList::~CommandList()
-{
-    if (pool_ != VK_NULL_HANDLE)
-    {
+CommandList::~CommandList() {
+    if (pool_ != VK_NULL_HANDLE) {
         vkDestroyCommandPool(device_->handle(), pool_, nullptr);
     }
 }
 
-void CommandList::begin()
-{
+void CommandList::begin() {
     vkResetCommandPool(device_->handle(), pool_, 0);
 
     VkCommandBufferBeginInfo info{};
     info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-    if (vkBeginCommandBuffer(commandBuffer_, &info) != VK_SUCCESS)
-    {
+    if (vkBeginCommandBuffer(commandBuffer_, &info) != VK_SUCCESS) {
         throw std::runtime_error("failed to begin a command buffer");
     }
 }
 
-void CommandList::end()
-{
-    if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS)
-    {
+void CommandList::end() {
+    if (vkEndCommandBuffer(commandBuffer_) != VK_SUCCESS) {
         throw std::runtime_error("failed to end a command buffer");
     }
 }
 
-void CommandList::beginRendering(const std::vector<ColorAttachment>& colorAttachments, const DepthAttachment* depth, Extent2D area)
-{
+void CommandList::beginRendering(const std::vector<ColorAttachment>& colorAttachments, const DepthAttachment* depth,
+                                 Extent2D area) {
     std::vector<VkRenderingAttachmentInfo> colors;
     colors.reserve(colorAttachments.size());
-    for (const ColorAttachment& attachment : colorAttachments)
-    {
+    for (const ColorAttachment& attachment : colorAttachments) {
         VkRenderingAttachmentInfo info{};
         info.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         info.imageView = reinterpret_cast<VkImageView>(attachment.image);
         info.imageLayout = toVkImageLayout(attachment.layout);
-        info.loadOp = attachment.loadOp == LoadOp::Load      ? VK_ATTACHMENT_LOAD_OP_LOAD
+        info.loadOp = attachment.loadOp == LoadOp::Load    ? VK_ATTACHMENT_LOAD_OP_LOAD
                       : attachment.loadOp == LoadOp::Clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                            : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        info.clearValue.color = {{attachment.clearColor[0], attachment.clearColor[1], attachment.clearColor[2], attachment.clearColor[3]}};
+        info.clearValue.color = {
+            {attachment.clearColor[0], attachment.clearColor[1], attachment.clearColor[2], attachment.clearColor[3]}};
         colors.push_back(info);
     }
 
     VkRenderingAttachmentInfo depthInfo{};
-    if (depth != nullptr)
-    {
+    if (depth != nullptr) {
         depthInfo.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
         depthInfo.imageView = reinterpret_cast<VkImageView>(depth->image);
         depthInfo.imageLayout = toVkImageLayout(depth->layout);
-        depthInfo.loadOp = depth->loadOp == LoadOp::Load      ? VK_ATTACHMENT_LOAD_OP_LOAD
+        depthInfo.loadOp = depth->loadOp == LoadOp::Load    ? VK_ATTACHMENT_LOAD_OP_LOAD
                            : depth->loadOp == LoadOp::Clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                             : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         depthInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -153,47 +138,41 @@ void CommandList::beginRendering(const std::vector<ColorAttachment>& colorAttach
     vkCmdBeginRendering(commandBuffer_, &renderingInfo);
 }
 
-void CommandList::endRendering()
-{
+void CommandList::endRendering() {
     vkCmdEndRendering(commandBuffer_);
 }
 
-void CommandList::bindPipeline(const GraphicsPipeline& pipeline)
-{
+void CommandList::bindPipeline(const GraphicsPipeline& pipeline) {
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.handle());
 }
 
-void CommandList::bindComputePipeline(const ComputePipeline& pipeline)
-{
+void CommandList::bindComputePipeline(const ComputePipeline& pipeline) {
     vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline.handle());
 }
 
 void CommandList::bindDescriptorSet(VkPipelineLayout layout, std::uint32_t set, VkDescriptorSet descriptorSet,
-                                    const std::vector<std::uint32_t>& dynamicOffsets)
-{
+                                    const std::vector<std::uint32_t>& dynamicOffsets) {
     vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, layout, set, 1, &descriptorSet,
-                            static_cast<std::uint32_t>(dynamicOffsets.size()), dynamicOffsets.empty() ? nullptr : dynamicOffsets.data());
+                            static_cast<std::uint32_t>(dynamicOffsets.size()),
+                            dynamicOffsets.empty() ? nullptr : dynamicOffsets.data());
 }
 
-void CommandList::pushConstants(VkPipelineLayout layout, VkShaderStageFlags stages, std::uint32_t offset, std::uint32_t size, const void* data)
-{
+void CommandList::pushConstants(VkPipelineLayout layout, VkShaderStageFlags stages, std::uint32_t offset,
+                                std::uint32_t size, const void* data) {
     vkCmdPushConstants(commandBuffer_, layout, stages, offset, size, data);
 }
 
-void CommandList::bindVertexBuffer(const Buffer& buffer, std::uint32_t binding)
-{
+void CommandList::bindVertexBuffer(const Buffer& buffer, std::uint32_t binding) {
     VkBuffer handle = buffer.handle();
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(commandBuffer_, binding, 1, &handle, &offset);
 }
 
-void CommandList::bindIndexBuffer(const Buffer& buffer, bool use32Bit)
-{
+void CommandList::bindIndexBuffer(const Buffer& buffer, bool use32Bit) {
     vkCmdBindIndexBuffer(commandBuffer_, buffer.handle(), 0, use32Bit ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
 }
 
-void CommandList::setViewport(float x, float y, float width, float height)
-{
+void CommandList::setViewport(float x, float y, float width, float height) {
     // The whole renderer (scene pass, debug draw and swapchain) goes through
     // this one function, so the screen-space Y flip lives here and only here.
     // Vulkan's NDC has +Y pointing down while the camera builds a right-handed
@@ -213,37 +192,31 @@ void CommandList::setViewport(float x, float y, float width, float height)
     vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
 }
 
-void CommandList::setScissor(std::int32_t x, std::int32_t y, std::uint32_t width, std::uint32_t height)
-{
+void CommandList::setScissor(std::int32_t x, std::int32_t y, std::uint32_t width, std::uint32_t height) {
     VkRect2D scissor{};
     scissor.offset = {x, y};
     scissor.extent = {width, height};
     vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
 }
 
-void CommandList::draw(std::uint32_t vertexCount, std::uint32_t firstVertex)
-{
+void CommandList::draw(std::uint32_t vertexCount, std::uint32_t firstVertex) {
     vkCmdDraw(commandBuffer_, vertexCount, 1, firstVertex, 0);
 }
 
 void CommandList::drawInstanced(std::uint32_t vertexCount, std::uint32_t instanceCount, std::uint32_t firstVertex,
-                                std::uint32_t firstInstance)
-{
+                                std::uint32_t firstInstance) {
     vkCmdDraw(commandBuffer_, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
-void CommandList::drawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex, std::int32_t vertexOffset)
-{
+void CommandList::drawIndexed(std::uint32_t indexCount, std::uint32_t firstIndex, std::int32_t vertexOffset) {
     vkCmdDrawIndexed(commandBuffer_, indexCount, 1, firstIndex, vertexOffset, 0);
 }
 
-void CommandList::dispatch(std::uint32_t groupX, std::uint32_t groupY, std::uint32_t groupZ)
-{
+void CommandList::dispatch(std::uint32_t groupX, std::uint32_t groupY, std::uint32_t groupZ) {
     vkCmdDispatch(commandBuffer_, groupX, groupY, groupZ);
 }
 
-void CommandList::transitionImage(VkImage image, ImageLayout from, ImageLayout to, VkImageAspectFlags aspect)
-{
+void CommandList::transitionImage(VkImage image, ImageLayout from, ImageLayout to, VkImageAspectFlags aspect) {
     VkImageMemoryBarrier2 barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = stageFor(from);
@@ -265,15 +238,13 @@ void CommandList::transitionImage(VkImage image, ImageLayout from, ImageLayout t
     vkCmdPipelineBarrier2(commandBuffer_, &dependency);
 }
 
-void CommandList::copyBuffer(VkBuffer source, VkBuffer destination, VkDeviceSize size)
-{
+void CommandList::copyBuffer(VkBuffer source, VkBuffer destination, VkDeviceSize size) {
     VkBufferCopy region{};
     region.size = size;
     vkCmdCopyBuffer(commandBuffer_, source, destination, 1, &region);
 }
 
-void CommandList::copyImageToBuffer(VkImage image, VkBuffer destination, Extent2D extent)
-{
+void CommandList::copyImageToBuffer(VkImage image, VkBuffer destination, Extent2D extent) {
     VkBufferImageCopy region{};
     region.bufferOffset = 0;
     region.bufferRowLength = 0;

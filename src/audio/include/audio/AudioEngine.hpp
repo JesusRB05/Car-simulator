@@ -15,8 +15,7 @@ namespace sim::audio {
 
 // A tiny wrapper around miniaudio's high-level engine. Sounds are decoded from
 // memory, so all audio assets are read through the VFS like everything else.
-class AudioEngine
-{
+class AudioEngine {
 public:
     using SoundHandle = std::uint32_t;
     static constexpr SoundHandle kInvalidSound = 0;

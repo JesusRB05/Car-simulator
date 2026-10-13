@@ -5,8 +5,8 @@
 #include <string>
 #include <vector>
 
-#include "physics/RigidBody.hpp"
 #include "physics/PhysicsTypes.hpp"
+#include "physics/RigidBody.hpp"
 
 namespace sim::physics {
 
@@ -21,8 +21,7 @@ namespace sim::physics {
 //
 //   vA += invMassA * linearA  * lambda,  wA += invInertiaA * angularA  * lambda
 //   vB += invMassB * linearB  * lambda,  wB += invInertiaB * angularB  * lambda
-struct ConstraintRow
-{
+struct ConstraintRow {
     RigidBody* bodyA = nullptr;
     RigidBody* bodyB = nullptr;
 
@@ -31,16 +30,16 @@ struct ConstraintRow
     Vec3 linearB{0.0};
     Vec3 angularB{0.0};
 
-    Real velocityTarget = 0.0;  // Cdot is driven towards this value
-    Real bias = 0.0;            // soft-constraint position term
-    Real softness = 0.0;        // gamma (CFM)
-    Real effectiveMass = 0.0;   // 1 / (K + gamma)
-    Real impulse = 0.0;         // accumulated impulse (warm started)
-    Real lower = -kInfinity;    // impulse clamp (limits / motors)
+    Real velocityTarget = 0.0; // Cdot is driven towards this value
+    Real bias = 0.0;           // soft-constraint position term
+    Real softness = 0.0;       // gamma (CFM)
+    Real effectiveMass = 0.0;  // 1 / (K + gamma)
+    Real impulse = 0.0;        // accumulated impulse (warm started)
+    Real lower = -kInfinity;   // impulse clamp (limits / motors)
     Real upper = kInfinity;
 
-    Real positionError = 0.0;   // scalar position error C at prepare() time
-    bool project = false;       // rigid row: corrected by the position projection pass
+    Real positionError = 0.0; // scalar position error C at prepare() time
+    bool project = false;     // rigid row: corrected by the position projection pass
 
     bool isBilateral() const { return lower == -kInfinity && upper == kInfinity; }
 };
@@ -59,17 +58,15 @@ struct ConstraintRow
 //  * Velocity-only (`frequency <= 0`, `stiffness <= 0`, not rigid): gamma = 0
 //    and no position correction at all. Only meant for motor rows, whose target
 //    is a velocity; a positional joint configured like this drifts.
-struct SoftParams
-{
-    Real frequency = 0.0;     // Hz
-    Real dampingRatio = 1.0;  // 1 = critically damped
-    Real stiffness = 0.0;     // N/m or N*m/rad (0 = use frequency-based stiffness)
-    bool rigid = false;       // rigid row + position projection
+struct SoftParams {
+    Real frequency = 0.0;    // Hz
+    Real dampingRatio = 1.0; // 1 = critically damped
+    Real stiffness = 0.0;    // N/m or N*m/rad (0 = use frequency-based stiffness)
+    bool rigid = false;      // rigid row + position projection
 
     bool isRigid() const { return rigid || stiffness >= 1e18; }
 
-    static SoftParams makeRigid()
-    {
+    static SoftParams makeRigid() {
         SoftParams params;
         params.rigid = true;
         return params;
@@ -91,8 +88,7 @@ void solveRow(ConstraintRow& row);
 
 // Base class of every joint. Concrete joints build their rows in prepare(),
 // then the world warm-starts and iterates them.
-class Constraint
-{
+class Constraint {
 public:
     virtual ~Constraint() = default;
 

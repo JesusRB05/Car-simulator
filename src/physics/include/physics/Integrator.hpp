@@ -2,8 +2,8 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
-#include "physics/RigidBody.hpp"
 #include "physics/PhysicsTypes.hpp"
+#include "physics/RigidBody.hpp"
 
 namespace sim::physics {
 

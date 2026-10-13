@@ -6,39 +6,32 @@
 
 namespace sim::core {
 
-JobSystem::JobSystem(std::uint32_t threadCount)
-{
-    if (threadCount == 0)
-    {
+JobSystem::JobSystem(std::uint32_t threadCount) {
+    if (threadCount == 0) {
         threadCount = std::max(1u, std::thread::hardware_concurrency());
     }
     threadCount_ = threadCount;
 
     workers_.reserve(threadCount_);
-    for (std::uint32_t i = 0; i < threadCount_; ++i)
-    {
+    for (std::uint32_t i = 0; i < threadCount_; ++i) {
         workers_.emplace_back([this] { workerLoop(); });
     }
 }
 
-JobSystem::~JobSystem()
-{
+JobSystem::~JobSystem() {
     {
         std::lock_guard lock(mutex_);
         stopping_ = true;
     }
     workAvailable_.notify_all();
-    for (auto& worker : workers_)
-    {
-        if (worker.joinable())
-        {
+    for (auto& worker : workers_) {
+        if (worker.joinable()) {
             worker.join();
         }
     }
 }
 
-void JobSystem::enqueue(std::function<void()> job)
-{
+void JobSystem::enqueue(std::function<void()> job) {
     pending_.fetch_add(1, std::memory_order_acq_rel);
     {
         std::lock_guard lock(mutex_);
@@ -47,22 +40,18 @@ void JobSystem::enqueue(std::function<void()> job)
     workAvailable_.notify_one();
 }
 
-void JobSystem::waitIdle()
-{
+void JobSystem::waitIdle() {
     std::unique_lock lock(mutex_);
     idle_.wait(lock, [this] { return pending_.load(std::memory_order_acquire) == 0; });
 }
 
-void JobSystem::workerLoop()
-{
-    for (;;)
-    {
+void JobSystem::workerLoop() {
+    for (;;) {
         std::function<void()> job;
         {
             std::unique_lock lock(mutex_);
             workAvailable_.wait(lock, [this] { return stopping_ || !queue_.empty(); });
-            if (stopping_ && queue_.empty())
-            {
+            if (stopping_ && queue_.empty()) {
                 return;
             }
             job = std::move(queue_.front());
@@ -71,8 +60,7 @@ void JobSystem::workerLoop()
 
         job();
 
-        if (pending_.fetch_sub(1, std::memory_order_acq_rel) == 1)
-        {
+        if (pending_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
             std::lock_guard lock(mutex_);
             idle_.notify_all();
         }

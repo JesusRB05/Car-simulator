@@ -18,8 +18,7 @@ namespace sim::app {
 // A point that must be visible at a known screen position with a roughly known
 // colour. Used by the headless semantic checks to prove that the camera, the
 // depth test and the interpolation actually placed geometry where expected.
-struct SceneProbe
-{
+struct SceneProbe {
     glm::vec3 world;
     glm::vec4 color;
 };
@@ -36,16 +35,14 @@ const std::vector<std::string>& renderTestSceneNames();
 std::vector<std::string> sceneNames();
 
 // Browser grouping of the built-in scenes.
-enum class SceneCategory
-{
+enum class SceneCategory {
     Driving,    // keyboard-drivable scenes (apps/sim/src/drive)
     Physics,    // live PhysicsWorld scenes stepped with the fixed step
     RenderTest, // static scenes used by the headless render checks
 };
 
 // One entry of the scene registry shown by the interactive scene browser.
-struct SceneInfo
-{
+struct SceneInfo {
     std::string name;
     SceneCategory category = SceneCategory::RenderTest;
     std::string description;

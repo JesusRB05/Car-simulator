@@ -20,8 +20,7 @@ namespace {
 
 constexpr Real kDt = 1.0 / 1000.0;
 
-RigidBody& makeDynamic(PhysicsWorld& world, Real mass, const Vec3& inertia, const Vec3& position)
-{
+RigidBody& makeDynamic(PhysicsWorld& world, Real mass, const Vec3& inertia, const Vec3& position) {
     RigidBody& body = world.createBody();
     body.setMass(mass);
     body.setInertiaPrincipal(inertia);
@@ -30,8 +29,7 @@ RigidBody& makeDynamic(PhysicsWorld& world, Real mass, const Vec3& inertia, cons
     return body;
 }
 
-RigidBody& makeStatic(PhysicsWorld& world, const Vec3& position)
-{
+RigidBody& makeStatic(PhysicsWorld& world, const Vec3& position) {
     RigidBody& body = world.createBody();
     body.setType(BodyType::Static);
     body.setMass(0.0);
@@ -40,23 +38,19 @@ RigidBody& makeStatic(PhysicsWorld& world, const Vec3& position)
     return body;
 }
 
-Real pointError(const RigidBody& bodyA, const Vec3& localA, const RigidBody& bodyB, const Vec3& localB)
-{
+Real pointError(const RigidBody& bodyA, const Vec3& localA, const RigidBody& bodyB, const Vec3& localB) {
     return glm::length(bodyA.localToWorldPoint(localA) - bodyB.localToWorldPoint(localB));
 }
 
-Real relativeError(Real measured, Real reference)
-{
+Real relativeError(Real measured, Real reference) {
     return std::abs(measured - reference) / std::abs(reference);
 }
 
 // Mean period from the times at which a scalar signal crosses zero (successive
 // crossings are half a period apart).
-Real periodFromZeroCrossings(const std::vector<Real>& crossings)
-{
+Real periodFromZeroCrossings(const std::vector<Real>& crossings) {
     Real sum = 0.0;
-    for (std::size_t i = 1; i < crossings.size(); ++i)
-    {
+    for (std::size_t i = 1; i < crossings.size(); ++i) {
         sum += crossings[i] - crossings[i - 1];
     }
     return 2.0 * sum / static_cast<Real>(crossings.size() - 1);
@@ -64,14 +58,12 @@ Real periodFromZeroCrossings(const std::vector<Real>& crossings)
 
 } // namespace
 
-TEST_CASE("free fall matches the analytic solution")
-{
+TEST_CASE("free fall matches the analytic solution") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
     RigidBody& body = makeDynamic(world, 2.0, Vec3(1.0), Vec3(0.0));
 
-    for (int i = 0; i < 1000; ++i)
-    {
+    for (int i = 0; i < 1000; ++i) {
         world.step(kDt);
     }
 
@@ -87,15 +79,13 @@ TEST_CASE("free fall matches the analytic solution")
     CHECK(positionErrorValue < 2e-3);
 }
 
-TEST_CASE("projectile follows a parabola")
-{
+TEST_CASE("projectile follows a parabola") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
     RigidBody& body = makeDynamic(world, 1.0, Vec3(1.0), Vec3(0.0));
     body.linearVelocity = Vec3(10.0, 10.0, 0.0);
 
-    for (int i = 0; i < 1000; ++i)
-    {
+    for (int i = 0; i < 1000; ++i) {
         world.step(kDt);
     }
 
@@ -109,8 +99,7 @@ TEST_CASE("projectile follows a parabola")
     CHECK(yError < 2e-3);
 }
 
-TEST_CASE("mass-spring oscillator period matches the analytic value")
-{
+TEST_CASE("mass-spring oscillator period matches the analytic value") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0);
 
@@ -126,13 +115,11 @@ TEST_CASE("mass-spring oscillator period matches the analytic value")
 
     std::vector<Real> crossings;
     Real previous = body.position.x - 1.0;
-    for (int i = 0; i < 10000; ++i)
-    {
+    for (int i = 0; i < 10000; ++i) {
         const Real timeBefore = static_cast<Real>(world.time());
         world.step(kDt);
         const Real current = body.position.x - 1.0;
-        if (previous < 0.0 && current >= 0.0)
-        {
+        if (previous < 0.0 && current >= 0.0) {
             const Real fraction = -previous / (current - previous);
             crossings.push_back(timeBefore + fraction * kDt);
         }
@@ -149,16 +136,16 @@ TEST_CASE("mass-spring oscillator period matches the analytic value")
     CHECK(error < 2e-5);
 }
 
-TEST_CASE("simple pendulum period matches the analytic value")
-{
+TEST_CASE("simple pendulum period matches the analytic value") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
     const Real length = 1.0;
-    const Real angle0 = 0.05;  // small so the sin(theta) ~ theta approximation holds
+    const Real angle0 = 0.05; // small so the sin(theta) ~ theta approximation holds
 
     RigidBody& pivot = makeStatic(world, Vec3(0.0));
-    RigidBody& bob = makeDynamic(world, 1.0, Vec3(1e-3), Vec3(length * std::sin(angle0), -length * std::cos(angle0), 0.0));
+    RigidBody& bob =
+        makeDynamic(world, 1.0, Vec3(1e-3), Vec3(length * std::sin(angle0), -length * std::cos(angle0), 0.0));
 
     DistanceConstraint& rod = world.createConstraint<DistanceConstraint>(pivot, bob);
     rod.localAnchorA = Vec3(0.0);
@@ -174,13 +161,11 @@ TEST_CASE("simple pendulum period matches the analytic value")
 
     std::vector<Real> crossings;
     Real previous = bob.position.x;
-    for (int i = 0; i < 8000; ++i)
-    {
+    for (int i = 0; i < 8000; ++i) {
         const Real timeBefore = static_cast<Real>(world.time());
         world.step(kDt);
         const Real current = bob.position.x;
-        if ((previous < 0.0) != (current < 0.0))
-        {
+        if ((previous < 0.0) != (current < 0.0)) {
             const Real fraction = -previous / (current - previous);
             crossings.push_back(timeBefore + fraction * kDt);
         }
@@ -195,8 +180,7 @@ TEST_CASE("simple pendulum period matches the analytic value")
     CHECK(error < 1e-4);
 }
 
-TEST_CASE("oscillator energy stays bounded over 60 s")
-{
+TEST_CASE("oscillator energy stays bounded over 60 s") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0);
 
@@ -216,8 +200,7 @@ TEST_CASE("oscillator energy stays bounded over 60 s")
 
     const Real initial = energy();
     Real maxRelativeDrift = 0.0;
-    for (int i = 0; i < 60000; ++i)
-    {
+    for (int i = 0; i < 60000; ++i) {
         world.step(kDt);
         maxRelativeDrift = std::max(maxRelativeDrift, std::abs(energy() - initial) / initial);
     }
@@ -228,8 +211,7 @@ TEST_CASE("oscillator energy stays bounded over 60 s")
     CHECK(maxRelativeDrift < 8e-3);
 }
 
-TEST_CASE("angular momentum of a torque-free top is conserved")
-{
+TEST_CASE("angular momentum of a torque-free top is conserved") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0);
 
@@ -238,8 +220,7 @@ TEST_CASE("angular momentum of a torque-free top is conserved")
     body.updateCache();
 
     const Real initial = glm::length(body.angularMomentumAbout(body.position));
-    for (int i = 0; i < 10000; ++i)
-    {
+    for (int i = 0; i < 10000; ++i) {
         world.step(kDt);
     }
     const Real final = glm::length(body.angularMomentumAbout(body.position));
@@ -251,8 +232,7 @@ TEST_CASE("angular momentum of a torque-free top is conserved")
     CHECK(error < 1e-12);
 }
 
-TEST_CASE("Dzhanibekov flip: an asymmetric body tumbling about its intermediate axis reverses")
-{
+TEST_CASE("Dzhanibekov flip: an asymmetric body tumbling about its intermediate axis reverses") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0);
 
@@ -264,13 +244,12 @@ TEST_CASE("Dzhanibekov flip: an asymmetric body tumbling about its intermediate 
     const Real initialMomentum = glm::length(body.angularMomentumAbout(body.position));
     Real minIntermediate = body.angularVelocity.y;
     Real maxMomentumError = 0.0;
-    for (int i = 0; i < 10000; ++i)
-    {
+    for (int i = 0; i < 10000; ++i) {
         world.step(kDt);
         const Vec3 bodyAngular = rotateVector(quaternionConjugate(body.orientation), body.angularVelocity);
         minIntermediate = std::min(minIntermediate, bodyAngular.y);
-        maxMomentumError =
-            std::max(maxMomentumError, relativeError(glm::length(body.angularMomentumAbout(body.position)), initialMomentum));
+        maxMomentumError = std::max(
+            maxMomentumError, relativeError(glm::length(body.angularMomentumAbout(body.position)), initialMomentum));
     }
     MESSAGE("Dzhanibekov min intermediate-axis omega = " << minIntermediate
                                                          << ", max momentum rel.error = " << maxMomentumError);
@@ -282,12 +261,11 @@ TEST_CASE("Dzhanibekov flip: an asymmetric body tumbling about its intermediate 
     CHECK(maxMomentumError < 1e-10);
 }
 
-TEST_CASE("fast gyroscope keeps its energy and precesses at the analytic rate")
-{
+TEST_CASE("fast gyroscope keeps its energy and precesses at the analytic rate") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
-    const Real spinRate = 3000.0 * kTwoPiPhysics / 60.0;  // 3000 rpm
+    const Real spinRate = 3000.0 * kTwoPiPhysics / 60.0; // 3000 rpm
     const Real distance = 0.1;
 
     RigidBody& pivot = makeStatic(world, Vec3(0.0));
@@ -317,19 +295,16 @@ TEST_CASE("fast gyroscope keeps its energy and precesses at the analytic rate")
     const Real duration = 20.0;
     const int steps = static_cast<int>(duration / kDt);
     Real maxEnergy = initialEnergy;
-    for (int i = 0; i < steps; ++i)
-    {
+    for (int i = 0; i < steps; ++i) {
         world.step(kDt);
         maxEnergy = std::max(maxEnergy, energy());
     }
 
     Real delta = azimuth() - initialAzimuth;
-    while (delta > kPiPhysics)
-    {
+    while (delta > kPiPhysics) {
         delta -= kTwoPiPhysics;
     }
-    while (delta < -kPiPhysics)
-    {
+    while (delta < -kPiPhysics) {
         delta += kTwoPiPhysics;
     }
 
@@ -347,8 +322,7 @@ TEST_CASE("fast gyroscope keeps its energy and precesses at the analytic rate")
     CHECK(precessionError < 1e-2);
 }
 
-TEST_CASE("20-link chain keeps its joints bounded over 60 s")
-{
+TEST_CASE("20-link chain keeps its joints bounded over 60 s") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
@@ -360,14 +334,12 @@ TEST_CASE("20-link chain keeps its joints bounded over 60 s")
     RigidBody& anchor = makeStatic(world, Vec3(0.0));
 
     std::vector<RigidBody*> links;
-    for (int i = 0; i < kLinks; ++i)
-    {
+    for (int i = 0; i < kLinks; ++i) {
         links.push_back(&makeDynamic(world, 1.0, Vec3(0.01), Vec3(0.0, -(i + 0.5) * 2.0 * kHalf, 0.0)));
     }
 
     world.createConstraint<SphericalConstraint>(anchor, *links[0]).localAnchorB = localTop;
-    for (int i = 0; i < kLinks - 1; ++i)
-    {
+    for (int i = 0; i < kLinks - 1; ++i) {
         SphericalConstraint& joint = world.createConstraint<SphericalConstraint>(*links[i], *links[i + 1]);
         joint.localAnchorA = localBottom;
         joint.localAnchorB = localTop;
@@ -375,16 +347,13 @@ TEST_CASE("20-link chain keeps its joints bounded over 60 s")
 
     Real maxError = 0.0;
     bool finite = true;
-    for (int step = 0; step < 60000; ++step)
-    {
+    for (int step = 0; step < 60000; ++step) {
         world.step(kDt);
-        for (RigidBody* link : links)
-        {
+        for (RigidBody* link : links) {
             finite = finite && link->isFiniteState();
         }
         maxError = std::max(maxError, pointError(anchor, Vec3(0.0), *links[0], localTop));
-        for (int i = 0; i < kLinks - 1; ++i)
-        {
+        for (int i = 0; i < kLinks - 1; ++i) {
             maxError = std::max(maxError, pointError(*links[i], localBottom, *links[i + 1], localTop));
         }
     }
@@ -396,8 +365,7 @@ TEST_CASE("20-link chain keeps its joints bounded over 60 s")
     CHECK(maxError < 7e-3);
 }
 
-TEST_CASE("rigid 20-link chain keeps every joint within 0.1 mm over 60 s")
-{
+TEST_CASE("rigid 20-link chain keeps every joint within 0.1 mm over 60 s") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
@@ -412,8 +380,7 @@ TEST_CASE("rigid 20-link chain keeps every joint within 0.1 mm over 60 s")
     RigidBody& anchor = makeStatic(world, Vec3(0.0));
 
     std::vector<RigidBody*> links;
-    for (int i = 0; i < kLinks; ++i)
-    {
+    for (int i = 0; i < kLinks; ++i) {
         links.push_back(&makeDynamic(world, 1.0, Vec3(0.01), Vec3(0.0, -(i + 0.5) * 2.0 * kHalf, 0.0)));
     }
     links.back()->linearVelocity = Vec3(2.0, 0.0, 1.0);
@@ -421,8 +388,7 @@ TEST_CASE("rigid 20-link chain keeps every joint within 0.1 mm over 60 s")
     SphericalConstraint& top = world.createConstraint<SphericalConstraint>(anchor, *links[0]);
     top.localAnchorB = localTop;
     top.soft = SoftParams::makeRigid();
-    for (int i = 0; i < kLinks - 1; ++i)
-    {
+    for (int i = 0; i < kLinks - 1; ++i) {
         SphericalConstraint& joint = world.createConstraint<SphericalConstraint>(*links[i], *links[i + 1]);
         joint.localAnchorA = localBottom;
         joint.localAnchorB = localTop;
@@ -431,16 +397,13 @@ TEST_CASE("rigid 20-link chain keeps every joint within 0.1 mm over 60 s")
 
     Real maxError = 0.0;
     bool finite = true;
-    for (int step = 0; step < 60000; ++step)
-    {
+    for (int step = 0; step < 60000; ++step) {
         world.step(kDt);
-        for (RigidBody* link : links)
-        {
+        for (RigidBody* link : links) {
             finite = finite && link->isFiniteState();
         }
         maxError = std::max(maxError, pointError(anchor, Vec3(0.0), *links[0], localTop));
-        for (int i = 0; i < kLinks - 1; ++i)
-        {
+        for (int i = 0; i < kLinks - 1; ++i) {
             maxError = std::max(maxError, pointError(*links[i], localBottom, *links[i + 1], localTop));
         }
     }
@@ -456,11 +419,10 @@ TEST_CASE("rigid 20-link chain keeps every joint within 0.1 mm over 60 s")
 
 namespace {
 
-struct MassRatioResult
-{
+struct MassRatioResult {
     Real maxJointError = 0.0;
-    Real maxEnergyDrift = 0.0;  // max |E - E0| / (E0 - E_rest)
-    Real maxEnergyGain = 0.0;   // max (E - E0) / (E0 - E_rest), i.e. injected energy
+    Real maxEnergyDrift = 0.0; // max |E - E0| / (E0 - E_rest)
+    Real maxEnergyGain = 0.0;  // max (E - E0) / (E0 - E_rest), i.e. injected energy
     bool finite = true;
 };
 
@@ -469,8 +431,7 @@ struct MassRatioResult
 // 1 rad/s (a velocity consistent with the joints, so the step-0 energy is the
 // true reference), then runs for 60 s. The energy drift is measured relative
 // to the swing energy E0 - E_rest.
-MassRatioResult runMassRatioPendulum(Real upperMass, Real lowerMass)
-{
+MassRatioResult runMassRatioPendulum(Real upperMass, Real lowerMass) {
     PhysicsWorld world;
     const Real g = 9.80665;
     world.gravity = Vec3(0.0, -g, 0.0);
@@ -487,9 +448,9 @@ MassRatioResult runMassRatioPendulum(Real upperMass, Real lowerMass)
         return Vec3(transverse, 0.01 * mass, transverse);
     };
     RigidBody& upper = makeDynamic(world, upperMass, rodInertia(upperMass), rotateVector(tilt, Vec3(0.0, -half, 0.0)));
-    RigidBody& lower = makeDynamic(world, lowerMass, rodInertia(lowerMass), rotateVector(tilt, Vec3(0.0, -3.0 * half, 0.0)));
-    for (RigidBody* body : {&upper, &lower})
-    {
+    RigidBody& lower =
+        makeDynamic(world, lowerMass, rodInertia(lowerMass), rotateVector(tilt, Vec3(0.0, -3.0 * half, 0.0)));
+    for (RigidBody* body : {&upper, &lower}) {
         body->orientation = tilt;
         body->angularVelocity = spin;
         body->linearVelocity = glm::cross(spin, body->position);
@@ -505,15 +466,15 @@ MassRatioResult runMassRatioPendulum(Real upperMass, Real lowerMass)
     second.soft = SoftParams::makeRigid();
 
     const auto energy = [&]() {
-        return upper.kineticEnergy() + lower.kineticEnergy() + g * (upper.mass * upper.position.y + lower.mass * lower.position.y);
+        return upper.kineticEnergy() + lower.kineticEnergy() +
+               g * (upper.mass * upper.position.y + lower.mass * lower.position.y);
     };
     const Real restEnergy = g * (upper.mass * -half + lower.mass * -3.0 * half);
     const Real initialEnergy = energy();
     const Real swingEnergy = initialEnergy - restEnergy;
 
     MassRatioResult result;
-    for (int step = 0; step < 60000; ++step)
-    {
+    for (int step = 0; step < 60000; ++step) {
         world.step(kDt);
         result.finite = result.finite && upper.isFiniteState() && lower.isFiniteState();
         result.maxJointError = std::max(result.maxJointError, pointError(anchor, Vec3(0.0), upper, localTop));
@@ -527,17 +488,16 @@ MassRatioResult runMassRatioPendulum(Real upperMass, Real lowerMass)
 
 } // namespace
 
-TEST_CASE("1:1000 mass ratio: a 1 kg link holding a 1000 kg body stays rigid over 60 s")
-{
+TEST_CASE("1:1000 mass ratio: a 1 kg link holding a 1000 kg body stays rigid over 60 s") {
     // The hard ordering: the light body sits between the static anchor and the
     // heavy one. Plain sequential impulses converge at a rate set by the 1:1000
     // ratio (8 PGS iterations leave a 3.0 mm error, 100 iterations 0.22 mm);
     // the island block solve is exact, and the soft 60 Hz joints would stretch
     // by 0.17 m here because their stiffness is scaled by the 1 kg row mass.
     const MassRatioResult result = runMassRatioPendulum(1.0, 1000.0);
-    MESSAGE("anchor -> 1 kg -> 1000 kg: max joint error = "
-            << result.maxJointError << " m, max energy drift = " << result.maxEnergyDrift
-            << ", max energy gain = " << result.maxEnergyGain);
+    MESSAGE("anchor -> 1 kg -> 1000 kg: max joint error = " << result.maxJointError
+                                                            << " m, max energy drift = " << result.maxEnergyDrift
+                                                            << ", max energy gain = " << result.maxEnergyGain);
     // Joint error measured 4.2e-12 m (round-off); 1e-6 m keeps >10^5 headroom
     // and is far below the 0.1 mm requirement.
     // Energy: velocity projection with semi-implicit Euler dissipates O(dt), so
@@ -550,14 +510,13 @@ TEST_CASE("1:1000 mass ratio: a 1 kg link holding a 1000 kg body stays rigid ove
     CHECK(result.maxEnergyGain < 2e-3);
 }
 
-TEST_CASE("1:1000 mass ratio reference: a 1000 kg link holding a 1 kg body")
-{
+TEST_CASE("1:1000 mass ratio reference: a 1000 kg link holding a 1 kg body") {
     // The easy ordering (heavy body next to the anchor), kept as a reference:
     // even plain PGS holds it to ~1e-13 m.
     const MassRatioResult result = runMassRatioPendulum(1000.0, 1.0);
-    MESSAGE("anchor -> 1000 kg -> 1 kg: max joint error = "
-            << result.maxJointError << " m, max energy drift = " << result.maxEnergyDrift
-            << ", max energy gain = " << result.maxEnergyGain);
+    MESSAGE("anchor -> 1000 kg -> 1 kg: max joint error = " << result.maxJointError
+                                                            << " m, max energy drift = " << result.maxEnergyDrift
+                                                            << ", max energy gain = " << result.maxEnergyGain);
     // Joint error measured 2.5e-12 m; same 1e-6 m bound as above. The light
     // tip whips faster, so the O(dt) projection damping is larger: measured
     // -4.4 % at 60 s (max |drift| 4.67 %), bounded by 8 %; the transient gain
@@ -568,8 +527,7 @@ TEST_CASE("1:1000 mass ratio reference: a 1000 kg link holding a 1 kg body")
     CHECK(result.maxEnergyGain < 3e-3);
 }
 
-TEST_CASE("fixed constraint keeps a welded pair rigid under disturbance")
-{
+TEST_CASE("fixed constraint keeps a welded pair rigid under disturbance") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
@@ -587,17 +545,15 @@ TEST_CASE("fixed constraint keeps a welded pair rigid under disturbance")
     const Vec3 referencePosition = arm.position;
     Real maxPointError = 0.0;
     Real maxOrientationError = 0.0;
-    for (int i = 0; i < 5000; ++i)
-    {
+    for (int i = 0; i < 5000; ++i) {
         world.step(kDt);
-        maxPointError =
-            std::max(maxPointError, glm::length(arm.position - referencePosition));
-        maxOrientationError = std::max(
-            maxOrientationError, 1.0 - std::abs(glm::dot(arm.orientation, reference))
-                                      / (glm::length(arm.orientation) * glm::length(reference)));
+        maxPointError = std::max(maxPointError, glm::length(arm.position - referencePosition));
+        maxOrientationError =
+            std::max(maxOrientationError, 1.0 - std::abs(glm::dot(arm.orientation, reference)) /
+                                                    (glm::length(arm.orientation) * glm::length(reference)));
     }
     MESSAGE("fixed joint max position error over 5 s = " << maxPointError
-            << " m, max orientation error = " << maxOrientationError);
+                                                         << " m, max orientation error = " << maxOrientationError);
     // Six soft rows must hold a 2 kg arm 1 m from the base against gravity
     // (static sag ~7e-5 m) even after an initial linear+angular disturbance
     // while it still falls in free space (its own motion is unconstrained).
@@ -605,8 +561,7 @@ TEST_CASE("fixed constraint keeps a welded pair rigid under disturbance")
     CHECK(maxOrientationError < 5e-3);
 }
 
-TEST_CASE("rigid fixed constraint holds a cantilevered arm within 0.1 mm")
-{
+TEST_CASE("rigid fixed constraint holds a cantilevered arm within 0.1 mm") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
@@ -627,15 +582,14 @@ TEST_CASE("rigid fixed constraint holds a cantilevered arm within 0.1 mm")
     const Quat reference = arm.orientation;
     Real maxPointError = 0.0;
     Real maxAngleError = 0.0;
-    for (int i = 0; i < 5000; ++i)
-    {
+    for (int i = 0; i < 5000; ++i) {
         world.step(kDt);
         maxPointError = std::max(maxPointError, pointError(base, weld.localAnchorA, arm, weld.localAnchorB));
         const Quat delta = quaternionMultiply(arm.orientation, quaternionInverse(reference));
         maxAngleError = std::max(maxAngleError, glm::length(quaternionRotationVector(delta)));
     }
     MESSAGE("rigid weld max anchor error over 5 s = " << maxPointError << " m, max angle error = " << maxAngleError
-                                                     << " rad");
+                                                      << " rad");
     // The exact block solve removes the disturbance velocity in the first step,
     // before any position is integrated, and the projection keeps the pose on
     // the manifold: measured 4.7e-19 m / 4.6e-19 rad. The requirement is
@@ -644,8 +598,7 @@ TEST_CASE("rigid fixed constraint holds a cantilevered arm within 0.1 mm")
     CHECK(maxAngleError < 1e-6);
 }
 
-TEST_CASE("linear damping decays velocity at the analytic exponential rate")
-{
+TEST_CASE("linear damping decays velocity at the analytic exponential rate") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0);
 
@@ -653,23 +606,21 @@ TEST_CASE("linear damping decays velocity at the analytic exponential rate")
     body.linearVelocity = Vec3(10.0, 0.0, 0.0);
     body.linearDamping = 1.0;
 
-    for (int i = 0; i < 1000; ++i)
-    {
+    for (int i = 0; i < 1000; ++i) {
         world.step(kDt);
     }
     const Real time = world.time();
     const Real analytic = 10.0 * std::exp(-1.0 * time);
     const Real error = relativeError(body.linearVelocity.x, analytic);
-    MESSAGE("damped velocity measured = " << body.linearVelocity.x << " m/s, analytic = " << analytic
-                                          << " m/s over " << time << " s, rel.error = " << error);
+    MESSAGE("damped velocity measured = " << body.linearVelocity.x << " m/s, analytic = " << analytic << " m/s over "
+                                          << time << " s, rel.error = " << error);
     // Damping is applied as 1/(1 + d*dt) per step, whose continuous limit is
     // exp(-d*t); at d = 1 the discretization error is ~3e-4, so 1e-2 bounds it
     // while flagging a mis-scaled or missing decay term.
     CHECK(error < 1e-2);
 }
 
-TEST_CASE("revolute motor drives the hinge to its target angular speed")
-{
+TEST_CASE("revolute motor drives the hinge to its target angular speed") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
@@ -686,8 +637,7 @@ TEST_CASE("revolute motor drives the hinge to its target angular speed")
     hinge.captureReference();
 
     Real speed = 0.0;
-    for (int i = 0; i < 3000; ++i)
-    {
+    for (int i = 0; i < 3000; ++i) {
         world.step(kDt);
         const Vec3 axis = rotateVector(base.orientation, hinge.localAxisA);
         speed = glm::dot(arm.angularVelocity, axis);
@@ -700,8 +650,7 @@ TEST_CASE("revolute motor drives the hinge to its target angular speed")
 
 namespace {
 
-void buildDeterministicScene(PhysicsWorld& world)
-{
+void buildDeterministicScene(PhysicsWorld& world) {
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
     RigidBody& pivot = makeStatic(world, Vec3(0.0));
@@ -723,19 +672,16 @@ void buildDeterministicScene(PhysicsWorld& world)
 
 } // namespace
 
-TEST_CASE("two independent runs of 20000 steps are bit-for-bit identical")
-{
+TEST_CASE("two independent runs of 20000 steps are bit-for-bit identical") {
     PhysicsWorld first;
     buildDeterministicScene(first);
-    for (int i = 0; i < 20000; ++i)
-    {
+    for (int i = 0; i < 20000; ++i) {
         first.step(kDt);
     }
 
     PhysicsWorld second;
     buildDeterministicScene(second);
-    for (int i = 0; i < 20000; ++i)
-    {
+    for (int i = 0; i < 20000; ++i) {
         second.step(kDt);
     }
 
@@ -743,24 +689,20 @@ TEST_CASE("two independent runs of 20000 steps are bit-for-bit identical")
     CHECK(first.stateHash() == second.stateHash());
 }
 
-TEST_CASE("snapshot/restore reproduces the exact continuation state")
-{
+TEST_CASE("snapshot/restore reproduces the exact continuation state") {
     PhysicsWorld world;
     buildDeterministicScene(world);
-    for (int i = 0; i < 10000; ++i)
-    {
+    for (int i = 0; i < 10000; ++i) {
         world.step(kDt);
     }
     const WorldSnapshot snapshot = world.saveSnapshot();
-    for (int i = 0; i < 10000; ++i)
-    {
+    for (int i = 0; i < 10000; ++i) {
         world.step(kDt);
     }
     const std::uint64_t continuousHash = world.stateHash();
 
     world.restoreSnapshot(snapshot);
-    for (int i = 0; i < 10000; ++i)
-    {
+    for (int i = 0; i < 10000; ++i) {
         world.step(kDt);
     }
 
@@ -768,8 +710,7 @@ TEST_CASE("snapshot/restore reproduces the exact continuation state")
     CHECK(world.stateHash() == continuousHash);
 }
 
-TEST_CASE("benchmark: 20-link chain throughput")
-{
+TEST_CASE("benchmark: 20-link chain throughput") {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
@@ -779,31 +720,28 @@ TEST_CASE("benchmark: 20-link chain throughput")
     RigidBody& anchor = makeStatic(world, Vec3(0.0));
 
     std::vector<RigidBody*> links;
-    for (int i = 0; i < kLinks; ++i)
-    {
+    for (int i = 0; i < kLinks; ++i) {
         links.push_back(&makeDynamic(world, 1.0, Vec3(0.01), Vec3(0.0, -(i + 0.5) * 0.5, 0.0)));
     }
     world.createConstraint<SphericalConstraint>(anchor, *links[0]).localAnchorB = localTop;
-    for (int i = 0; i < kLinks - 1; ++i)
-    {
+    for (int i = 0; i < kLinks - 1; ++i) {
         SphericalConstraint& joint = world.createConstraint<SphericalConstraint>(*links[i], *links[i + 1]);
         joint.localAnchorA = localBottom;
         joint.localAnchorB = localTop;
     }
 
     const auto start = std::chrono::steady_clock::now();
-    for (int step = 0; step < 10000; ++step)
-    {
+    for (int step = 0; step < 10000; ++step) {
         world.step(kDt);
     }
-    const double milliseconds = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-    MESSAGE("20-link chain: 10000 steps in " << milliseconds << " ms (" << (milliseconds / 10000.0)
-                                             << " ms/step, " << (10000000.0 / milliseconds) << " steps/s)");
+    const double milliseconds =
+        std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+    MESSAGE("20-link chain: 10000 steps in " << milliseconds << " ms (" << (milliseconds / 10000.0) << " ms/step, "
+                                             << (10000000.0 / milliseconds) << " steps/s)");
     CHECK(links.back()->isFiniteState());
 }
 
-TEST_CASE("math helpers behave as documented")
-{
+TEST_CASE("math helpers behave as documented") {
     const Vec3 v(1.0, 2.0, 3.0);
     const Vec3 w(-2.0, 0.5, 1.5);
     CHECK(skew(v) * w == glm::cross(v, w));
@@ -825,4 +763,3 @@ TEST_CASE("math helpers behave as documented")
     invalid.setInertiaTensor(Mat3(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 5.0));
     CHECK_FALSE(invalid.validateInertia());
 }
-

@@ -21,8 +21,7 @@ namespace sim::vfs {
 //
 // PhysicsFS keeps global state and is not thread-safe: a single instance is
 // expected, created after the platform layer and used from the main thread.
-class VirtualFileSystem
-{
+class VirtualFileSystem {
 public:
     VirtualFileSystem();
     ~VirtualFileSystem();

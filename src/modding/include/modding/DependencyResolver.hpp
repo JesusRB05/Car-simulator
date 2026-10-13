@@ -9,14 +9,12 @@
 
 namespace sim::modding {
 
-struct ResolveError
-{
+struct ResolveError {
     std::string modId;
     std::string message;
 };
 
-struct ResolveResult
-{
+struct ResolveResult {
     // Active mods in load order: a mod always appears after its dependencies.
     std::vector<std::string> order;
     // Requested mods that could not be activated (missing or invalid).

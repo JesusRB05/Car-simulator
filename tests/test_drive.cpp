@@ -180,8 +180,7 @@ TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rol
     while (progress < length && steps < 180000) {
         const auto& body = car.chassis();
         const Track::Projection here = track.project(body.position.x, body.position.z);
-        if (!here.found)
-        {
+        if (!here.found) {
             valid = false;
             break;
         }
@@ -224,8 +223,7 @@ TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rol
 
         world.step(world.fixedStep);
         ++steps;
-        if (!car.chassis().isFiniteState())
-        {
+        if (!car.chassis().isFiniteState()) {
             valid = false;
             break;
         }

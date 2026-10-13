@@ -7,8 +7,7 @@
 namespace sim::rhi {
 
 Frame::Frame(Device& device, Swapchain& swapchain, std::uint32_t framesInFlight)
-    : device_(device), swapchain_(swapchain)
-{
+    : device_(device), swapchain_(swapchain) {
     framesInFlight = framesInFlight < 1 ? 1 : framesInFlight;
     slots_.resize(framesInFlight);
 
@@ -19,51 +18,41 @@ Frame::Frame(Device& device, Swapchain& swapchain, std::uint32_t framesInFlight)
     VkSemaphoreCreateInfo semaphoreInfo{};
     semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-    for (Slot& slot : slots_)
-    {
+    for (Slot& slot : slots_) {
         slot.list = std::make_unique<CommandList>(device);
         if (vkCreateFence(device.handle(), &fenceInfo, nullptr, &slot.fence) != VK_SUCCESS ||
             vkCreateSemaphore(device.handle(), &semaphoreInfo, nullptr, &slot.imageAvailable) != VK_SUCCESS ||
-            vkCreateSemaphore(device.handle(), &semaphoreInfo, nullptr, &slot.renderFinished) != VK_SUCCESS)
-        {
+            vkCreateSemaphore(device.handle(), &semaphoreInfo, nullptr, &slot.renderFinished) != VK_SUCCESS) {
             throw std::runtime_error("failed to create frame synchronisation objects");
         }
     }
 }
 
-Frame::~Frame()
-{
+Frame::~Frame() {
     device_.waitIdle();
-    for (Slot& slot : slots_)
-    {
-        if (slot.imageAvailable != VK_NULL_HANDLE)
-        {
+    for (Slot& slot : slots_) {
+        if (slot.imageAvailable != VK_NULL_HANDLE) {
             vkDestroySemaphore(device_.handle(), slot.imageAvailable, nullptr);
         }
-        if (slot.renderFinished != VK_NULL_HANDLE)
-        {
+        if (slot.renderFinished != VK_NULL_HANDLE) {
             vkDestroySemaphore(device_.handle(), slot.renderFinished, nullptr);
         }
-        if (slot.fence != VK_NULL_HANDLE)
-        {
+        if (slot.fence != VK_NULL_HANDLE) {
             vkDestroyFence(device_.handle(), slot.fence, nullptr);
         }
     }
 }
 
-bool Frame::begin()
-{
+bool Frame::begin() {
     Slot& slot = slots_[slotIndex_];
     vkWaitForFences(device_.handle(), 1, &slot.fence, VK_TRUE, UINT64_MAX);
 
-    if (swapchain_.framebufferResized())
-    {
+    if (swapchain_.framebufferResized()) {
         return false;
     }
 
     std::uint32_t index = 0;
-    if (!swapchain_.acquireNextImage(slot.imageAvailable, index))
-    {
+    if (!swapchain_.acquireNextImage(slot.imageAvailable, index)) {
         return false;
     }
     imageIndex_ = index;
@@ -75,8 +64,7 @@ bool Frame::begin()
     return true;
 }
 
-void Frame::submitAndPresent()
-{
+void Frame::submitAndPresent() {
     Slot& slot = slots_[slotIndex_];
     slot.list->transitionImage(swapchain_.image(imageIndex_), ImageLayout::ColorAttachment, ImageLayout::Present);
     slot.list->end();
@@ -104,8 +92,7 @@ void Frame::submitAndPresent()
     submitInfo.commandBufferInfoCount = 1;
     submitInfo.pCommandBufferInfos = &commandInfo;
 
-    if (vkQueueSubmit2(device_.graphicsQueue(), 1, &submitInfo, slot.fence) != VK_SUCCESS)
-    {
+    if (vkQueueSubmit2(device_.graphicsQueue(), 1, &submitInfo, slot.fence) != VK_SUCCESS) {
         throw std::runtime_error("failed to submit the frame");
     }
 
@@ -113,8 +100,7 @@ void Frame::submitAndPresent()
     slotIndex_ = (slotIndex_ + 1) % slots_.size();
 }
 
-ColorAttachment Frame::swapchainAttachment(LoadOp loadOp, float r, float g, float b, float a) const
-{
+ColorAttachment Frame::swapchainAttachment(LoadOp loadOp, float r, float g, float b, float a) const {
     ColorAttachment attachment;
     attachment.image = reinterpret_cast<std::uint64_t>(swapchain_.imageView(imageIndex_));
     attachment.layout = ImageLayout::ColorAttachment;

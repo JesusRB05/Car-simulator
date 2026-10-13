@@ -12,16 +12,14 @@
 
 namespace sim::rhi {
 
-struct SwapchainDesc
-{
+struct SwapchainDesc {
     Extent2D extent;
     bool vsync = true;
 };
 
 // Owns the presentable swapchain and its image views. Out-of-date and
 // suboptimal results are reported to the caller so a frame can be retried.
-class Swapchain
-{
+class Swapchain {
 public:
     Swapchain(Device& device, const SwapchainDesc& desc);
     ~Swapchain();

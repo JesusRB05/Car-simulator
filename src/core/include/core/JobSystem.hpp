@@ -16,8 +16,7 @@ namespace sim::core {
 // Simple task-based thread pool used for non-real-time work (asset loading,
 // mod scanning, ...). The physics thread is NOT driven by this pool: it has its
 // own dedicated thread for deterministic scheduling.
-class JobSystem
-{
+class JobSystem {
 public:
     // threadCount == 0 selects std::thread::hardware_concurrency().
     explicit JobSystem(std::uint32_t threadCount = 0);

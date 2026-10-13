@@ -11,8 +11,7 @@ using physics::Real;
 using physics::Vec3;
 
 // Driver controls fed into a vehicle model. All values are normalised.
-struct VehicleInput
-{
+struct VehicleInput {
     Real throttle = 0.0; // [0, 1]
     Real brake = 0.0;    // [0, 1]
     Real steer = 0.0;    // [-1, 1], positive = steer left (counter-clockwise seen from +Y)
@@ -28,8 +27,7 @@ struct VehicleInput
 // it to the left (towards -X). Units are SI: metres, seconds, radians, kg.
 //
 // Implementations must be deterministic and advanced with a fixed timestep.
-class IVehicleModel
-{
+class IVehicleModel {
 public:
     virtual ~IVehicleModel() = default;
 

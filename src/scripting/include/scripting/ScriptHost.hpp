@@ -22,8 +22,7 @@ namespace sim::scripting {
 //
 // It also exposes `sim.log(message)` (prefixed with the mod id) and
 // `sim.read(path)` (reads through the VFS only).
-class ScriptHost
-{
+class ScriptHost {
 public:
     ScriptHost(LuaSandbox& sandbox, vfs::VirtualFileSystem& vfs);
 
@@ -39,8 +38,7 @@ public:
     LuaSandbox& sandbox() { return sandbox_; }
 
 private:
-    struct Entry
-    {
+    struct Entry {
         std::string modId;
         std::string path;
         std::vector<sol::protected_function> onLoad;

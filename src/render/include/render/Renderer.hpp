@@ -26,8 +26,7 @@ namespace sim::render {
 // Owns the scene pipeline, the per-frame uniform buffers / descriptor sets and
 // the depth target. The application drives it: ensureTargets(), then
 // updateFrameUniforms() and renderScene() each frame.
-class Renderer
-{
+class Renderer {
 public:
     Renderer(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32_t framesInFlight);
     ~Renderer();
@@ -38,9 +37,11 @@ public:
     // (Re)creates swapchain-dependent resources when the size or format change.
     void ensureTargets(rhi::Extent2D extent, rhi::Format colorFormat);
 
-    void updateFrameUniforms(std::uint32_t slot, const Camera& camera, const glm::vec4& lightDirection, const glm::vec4& lightColor);
+    void updateFrameUniforms(std::uint32_t slot, const Camera& camera, const glm::vec4& lightDirection,
+                             const glm::vec4& lightColor);
 
-    void renderScene(rhi::CommandList& commandList, const Scene& scene, const rhi::ColorAttachment& colorAttachment, std::uint32_t slot);
+    void renderScene(rhi::CommandList& commandList, const Scene& scene, const rhi::ColorAttachment& colorAttachment,
+                     std::uint32_t slot);
 
     bool ready() const { return pipeline_ != nullptr && depthImage_ != nullptr; }
 

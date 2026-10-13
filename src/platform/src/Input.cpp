@@ -10,50 +10,40 @@
 
 namespace sim::platform {
 
-InputManager::InputManager()
-{
+InputManager::InputManager() {
     openAllDevices();
 }
 
-InputManager::~InputManager()
-{
-    for (auto& device : devices_)
-    {
-        if (device.joystick != nullptr)
-        {
+InputManager::~InputManager() {
+    for (auto& device : devices_) {
+        if (device.joystick != nullptr) {
             SDL_CloseJoystick(device.joystick);
             device.joystick = nullptr;
         }
     }
 }
 
-void InputManager::openAllDevices()
-{
+void InputManager::openAllDevices() {
     int count = 0;
     SDL_JoystickID* ids = SDL_GetJoysticks(&count);
-    if (ids == nullptr)
-    {
+    if (ids == nullptr) {
         return;
     }
-    for (int i = 0; i < count; ++i)
-    {
+    for (int i = 0; i < count; ++i) {
         openDevice(ids[i]);
     }
     SDL_free(ids);
 }
 
-void InputManager::openDevice(SDL_JoystickID instanceId)
-{
+void InputManager::openDevice(SDL_JoystickID instanceId) {
     const auto alreadyOpen = std::any_of(devices_.begin(), devices_.end(),
                                          [instanceId](const InputDevice& d) { return d.instanceId == instanceId; });
-    if (alreadyOpen)
-    {
+    if (alreadyOpen) {
         return;
     }
 
     SDL_Joystick* joystick = SDL_OpenJoystick(instanceId);
-    if (joystick == nullptr)
-    {
+    if (joystick == nullptr) {
         core::Log::get("input")->warn("failed to open joystick {}: {}", instanceId, SDL_GetError());
         return;
     }
@@ -75,26 +65,21 @@ void InputManager::openDevice(SDL_JoystickID instanceId)
     devices_.push_back(std::move(device));
 }
 
-void InputManager::closeDevice(SDL_JoystickID instanceId)
-{
+void InputManager::closeDevice(SDL_JoystickID instanceId) {
     const auto it = std::find_if(devices_.begin(), devices_.end(),
                                  [instanceId](const InputDevice& d) { return d.instanceId == instanceId; });
-    if (it == devices_.end())
-    {
+    if (it == devices_.end()) {
         return;
     }
     core::Log::get("input")->info("disconnected '{}'", it->name);
-    if (it->joystick != nullptr)
-    {
+    if (it->joystick != nullptr) {
         SDL_CloseJoystick(it->joystick);
     }
     devices_.erase(it);
 }
 
-bool InputManager::processEvent(const SDL_Event& event)
-{
-    switch (event.type)
-    {
+bool InputManager::processEvent(const SDL_Event& event) {
+    switch (event.type) {
     case SDL_EVENT_JOYSTICK_ADDED:
         openDevice(event.jdevice.which);
         return true;
@@ -106,48 +91,37 @@ bool InputManager::processEvent(const SDL_Event& event)
     }
 }
 
-void InputManager::refresh()
-{
-    for (auto& device : devices_)
-    {
-        if (device.joystick == nullptr)
-        {
+void InputManager::refresh() {
+    for (auto& device : devices_) {
+        if (device.joystick == nullptr) {
             continue;
         }
-        for (std::size_t i = 0; i < device.axes.size(); ++i)
-        {
+        for (std::size_t i = 0; i < device.axes.size(); ++i) {
             const Sint16 raw = SDL_GetJoystickAxis(device.joystick, static_cast<int>(i));
             device.axes[i] = raw < 0 ? static_cast<float>(raw) / 32768.0F : static_cast<float>(raw) / 32767.0F;
         }
-        for (std::size_t i = 0; i < device.buttons.size(); ++i)
-        {
+        for (std::size_t i = 0; i < device.buttons.size(); ++i) {
             device.buttons[i] = SDL_GetJoystickButton(device.joystick, static_cast<int>(i));
         }
     }
 }
 
-bool InputManager::keyDown(SDL_Scancode scancode) const
-{
+bool InputManager::keyDown(SDL_Scancode scancode) const {
     const bool* state = SDL_GetKeyboardState(nullptr);
-    if (state == nullptr || scancode < 0)
-    {
+    if (state == nullptr || scancode < 0) {
         return false;
     }
     return state[scancode];
 }
 
-std::vector<SDL_Scancode> InputManager::pressedKeys() const
-{
+std::vector<SDL_Scancode> InputManager::pressedKeys() const {
     std::vector<SDL_Scancode> keys;
     const bool* state = SDL_GetKeyboardState(nullptr);
-    if (state == nullptr)
-    {
+    if (state == nullptr) {
         return keys;
     }
-    for (int i = 0; i < SDL_SCANCODE_COUNT; ++i)
-    {
-        if (state[i])
-        {
+    for (int i = 0; i < SDL_SCANCODE_COUNT; ++i) {
+        if (state[i]) {
             keys.push_back(static_cast<SDL_Scancode>(i));
         }
     }

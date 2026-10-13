@@ -8,8 +8,7 @@
 namespace sim::physics {
 
 // Keeps two anchor points at a fixed distance. One row.
-class DistanceConstraint : public Constraint
-{
+class DistanceConstraint : public Constraint {
 public:
     Vec3 localAnchorA{0.0};
     Vec3 localAnchorB{0.0};
@@ -21,8 +20,7 @@ public:
 };
 
 // A ball / spherical joint: the two anchor points coincide. Three rows.
-class SphericalConstraint : public Constraint
-{
+class SphericalConstraint : public Constraint {
 public:
     Vec3 localAnchorA{0.0};
     Vec3 localAnchorB{0.0};
@@ -34,8 +32,7 @@ public:
 
 // Welds two bodies: anchors coincide and relative orientation is locked. Six
 // rows. Call captureReference() once after the bodies are in place.
-class FixedConstraint : public Constraint
-{
+class FixedConstraint : public Constraint {
 public:
     Vec3 localAnchorA{0.0};
     Vec3 localAnchorB{0.0};
@@ -49,8 +46,7 @@ public:
 
 // A revolute / hinge joint: anchors coincide, rotation is free about one axis,
 // with optional motor and angle limits about that axis. Seven rows.
-class RevoluteConstraint : public Constraint
-{
+class RevoluteConstraint : public Constraint {
 public:
     Vec3 localAnchorA{0.0};
     Vec3 localAnchorB{0.0};
@@ -59,16 +55,16 @@ public:
     SoftParams soft{60.0, 1.0};
 
     bool motorEnabled = false;
-    Real motorSpeed = 0.0;       // rad/s target
-    Real maxMotorTorque = 0.0;   // N*m
+    Real motorSpeed = 0.0;     // rad/s target
+    Real maxMotorTorque = 0.0; // N*m
 
     bool limitsEnabled = false;
-    Real lowerAngle = 0.0;  // rad
-    Real upperAngle = 0.0;  // rad
+    Real lowerAngle = 0.0; // rad
+    Real upperAngle = 0.0; // rad
     SoftParams limitSoft{30.0, 1.0};
 
     void captureReference();
-    Real angle() const;  // current twist about the hinge axis, relative to reference
+    Real angle() const; // current twist about the hinge axis, relative to reference
     void prepare(Real dt) override;
     const char* typeName() const override { return "Revolute"; }
 
@@ -78,8 +74,7 @@ private:
 
 // A prismatic / slider joint: relative rotation is locked, translation is free
 // along one axis, with optional motor and translation limits. Seven rows.
-class PrismaticConstraint : public Constraint
-{
+class PrismaticConstraint : public Constraint {
 public:
     Vec3 localAnchorA{0.0};
     Vec3 localAnchorB{0.0};
@@ -89,11 +84,11 @@ public:
     SoftParams soft{60.0, 1.0};
 
     bool motorEnabled = false;
-    Real motorSpeed = 0.0;     // m/s target
-    Real maxMotorForce = 0.0;  // N
+    Real motorSpeed = 0.0;    // m/s target
+    Real maxMotorForce = 0.0; // N
 
     bool limitsEnabled = false;
-    Real lowerTranslation = 0.0;  // m, relative to reference
+    Real lowerTranslation = 0.0; // m, relative to reference
     Real upperTranslation = 0.0;
     SoftParams limitSoft{30.0, 1.0};
 

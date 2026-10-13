@@ -4,16 +4,13 @@
 
 namespace sim::physics::integrator {
 
-void integrateVelocities(RigidBody& body, const Vec3& gravity, Real dt)
-{
-    if (!body.isDynamic())
-    {
+void integrateVelocities(RigidBody& body, const Vec3& gravity, Real dt) {
+    if (!body.isDynamic()) {
         return;
     }
 
     body.linearVelocity += (gravity + body.forceAccumulator * body.inverseMass) * dt;
-    if (body.linearDamping > 0.0)
-    {
+    if (body.linearDamping > 0.0) {
         body.linearVelocity *= 1.0 / (1.0 + body.linearDamping * dt);
     }
 
@@ -30,38 +27,34 @@ void integrateVelocities(RigidBody& body, const Vec3& gravity, Real dt)
     const Mat3 inverseInertiaWorld = body.inverseInertiaWorldCache;
     const Vec3 angularOld = body.angularVelocity;
     Vec3 angularNew = angularOld;
-    for (int iteration = 0; iteration < 4; ++iteration)
-    {
+    for (int iteration = 0; iteration < 4; ++iteration) {
         const Vec3 angularMid = 0.5 * (angularOld + angularNew);
         const Vec3 gyroscopic = glm::cross(angularMid, inertiaWorld * angularMid);
         angularNew = angularOld + dt * (inverseInertiaWorld * (body.torqueAccumulator - gyroscopic));
     }
     body.angularVelocity = angularNew;
 
-    if (body.angularDamping > 0.0)
-    {
+    if (body.angularDamping > 0.0) {
         body.angularVelocity *= 1.0 / (1.0 + body.angularDamping * dt);
     }
 }
 
-void integratePositions(RigidBody& body, Real dt)
-{
-    if (body.isStatic())
-    {
+void integratePositions(RigidBody& body, Real dt) {
+    if (body.isStatic()) {
         return;
     }
 
     body.position += body.linearVelocity * dt;
 
     const Vec3 rotationVector = body.angularVelocity * dt;
-    body.orientation = quaternionNormalize(quaternionMultiply(quaternionFromRotationVector(rotationVector), body.orientation));
+    body.orientation =
+        quaternionNormalize(quaternionMultiply(quaternionFromRotationVector(rotationVector), body.orientation));
 
     body.updateCache();
     body.clearAccumulators();
 }
 
-void integrateBody(RigidBody& body, const Vec3& gravity, Real dt)
-{
+void integrateBody(RigidBody& body, const Vec3& gravity, Real dt) {
     integrateVelocities(body, gravity, dt);
     integratePositions(body, dt);
 }

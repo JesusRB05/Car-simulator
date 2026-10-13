@@ -8,8 +8,7 @@ namespace {
 const Vec3 kAxes[3] = {Vec3(1.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, 0.0, 1.0)};
 
 void buildPointRow(ConstraintRow& row, const Vec3& e, const Vec3& rA, const Vec3& rB, Real error, Real dt,
-                   const SoftParams& soft)
-{
+                   const SoftParams& soft) {
     row.linearA = e;
     row.linearB = -e;
     row.angularA = glm::cross(rA, e);
@@ -18,8 +17,7 @@ void buildPointRow(ConstraintRow& row, const Vec3& e, const Vec3& rA, const Vec3
     configureRow(row, constraintMass(row), error, dt, soft);
 }
 
-void buildAngularRow(ConstraintRow& row, const Vec3& e, Real error, Real dt, const SoftParams& soft)
-{
+void buildAngularRow(ConstraintRow& row, const Vec3& e, Real error, Real dt, const SoftParams& soft) {
     row.linearA = Vec3(0.0);
     row.linearB = Vec3(0.0);
     row.angularA = -e;
@@ -28,8 +26,7 @@ void buildAngularRow(ConstraintRow& row, const Vec3& e, Real error, Real dt, con
     configureRow(row, constraintMass(row), error, dt, soft);
 }
 
-void disableRow(ConstraintRow& row)
-{
+void disableRow(ConstraintRow& row) {
     row.effectiveMass = 0.0;
     row.softness = 0.0;
     row.bias = 0.0;
@@ -38,16 +35,15 @@ void disableRow(ConstraintRow& row)
     row.upper = 0.0;
 }
 
-Quat relativeToReference(const Constraint& constraint, const Quat& reference)
-{
-    const Quat relative = quaternionMultiply(quaternionInverse(constraint.bodyA->orientation), constraint.bodyB->orientation);
+Quat relativeToReference(const Constraint& constraint, const Quat& reference) {
+    const Quat relative =
+        quaternionMultiply(quaternionInverse(constraint.bodyA->orientation), constraint.bodyB->orientation);
     return quaternionMultiply(relative, quaternionInverse(reference));
 }
 
 } // namespace
 
-void DistanceConstraint::prepare(Real dt)
-{
+void DistanceConstraint::prepare(Real dt) {
     rebuildRows(1);
 
     const Vec3 pA = bodyA->localToWorldPoint(localAnchorA);
@@ -67,8 +63,7 @@ void DistanceConstraint::prepare(Real dt)
     configureRow(row, constraintMass(row), length - distance, dt, soft);
 }
 
-void SphericalConstraint::prepare(Real dt)
-{
+void SphericalConstraint::prepare(Real dt) {
     rebuildRows(3);
 
     const Vec3 pA = bodyA->localToWorldPoint(localAnchorA);
@@ -77,19 +72,16 @@ void SphericalConstraint::prepare(Real dt)
     const Vec3 rB = pB - bodyB->position;
     const Vec3 error = pA - pB;
 
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         buildPointRow(rows[static_cast<std::size_t>(i)], kAxes[i], rA, rB, glm::dot(error, kAxes[i]), dt, soft);
     }
 }
 
-void FixedConstraint::captureReference()
-{
+void FixedConstraint::captureReference() {
     referenceRotation = quaternionMultiply(quaternionInverse(bodyA->orientation), bodyB->orientation);
 }
 
-void FixedConstraint::prepare(Real dt)
-{
+void FixedConstraint::prepare(Real dt) {
     rebuildRows(6);
 
     const Vec3 pA = bodyA->localToWorldPoint(localAnchorA);
@@ -98,36 +90,30 @@ void FixedConstraint::prepare(Real dt)
     const Vec3 rB = pB - bodyB->position;
     const Vec3 error = pA - pB;
 
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         buildPointRow(rows[static_cast<std::size_t>(i)], kAxes[i], rA, rB, glm::dot(error, kAxes[i]), dt, soft);
     }
 
     const Quat qErr = relativeToReference(*this, referenceRotation);
     const Vec3 errorWorld = rotateVector(bodyA->orientation, quaternionRotationVector(qErr));
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         buildAngularRow(rows[static_cast<std::size_t>(3 + i)], kAxes[i], glm::dot(errorWorld, kAxes[i]), dt, soft);
     }
 }
 
-void RevoluteConstraint::captureReference()
-{
+void RevoluteConstraint::captureReference() {
     referenceRotation = quaternionMultiply(quaternionInverse(bodyA->orientation), bodyB->orientation);
 }
 
-Quat RevoluteConstraint::relativeError() const
-{
+Quat RevoluteConstraint::relativeError() const {
     return relativeToReference(*this, referenceRotation);
 }
 
-Real RevoluteConstraint::angle() const
-{
+Real RevoluteConstraint::angle() const {
     return glm::dot(quaternionRotationVector(relativeError()), localAxisA);
 }
 
-void RevoluteConstraint::prepare(Real dt)
-{
+void RevoluteConstraint::prepare(Real dt) {
     rebuildRows(7);
 
     const Vec3 pA = bodyA->localToWorldPoint(localAnchorA);
@@ -136,8 +122,7 @@ void RevoluteConstraint::prepare(Real dt)
     const Vec3 rB = pB - bodyB->position;
     const Vec3 error = pA - pB;
 
-    for (int i = 0; i < 3; ++i)
-    {
+    for (int i = 0; i < 3; ++i) {
         buildPointRow(rows[static_cast<std::size_t>(i)], kAxes[i], rA, rB, glm::dot(error, kAxes[i]), dt, soft);
     }
 
@@ -158,8 +143,7 @@ void RevoluteConstraint::prepare(Real dt)
 
     // Motor row (index 5).
     ConstraintRow& motor = rows[5];
-    if (motorEnabled)
-    {
+    if (motorEnabled) {
         motor.linearA = Vec3(0.0);
         motor.linearB = Vec3(0.0);
         motor.angularA = -axisWorld;
@@ -168,9 +152,7 @@ void RevoluteConstraint::prepare(Real dt)
         configureRow(motor, constraintMass(motor), 0.0, dt, SoftParams{0.0, 1.0});
         motor.lower = -maxMotorTorque * dt;
         motor.upper = maxMotorTorque * dt;
-    }
-    else
-    {
+    } else {
         disableRow(motor);
     }
 
@@ -181,26 +163,20 @@ void RevoluteConstraint::prepare(Real dt)
     limit.angularA = -axisWorld;
     limit.angularB = axisWorld;
     limit.velocityTarget = 0.0;
-    if (limitsEnabled && twist < lowerAngle)
-    {
+    if (limitsEnabled && twist < lowerAngle) {
         configureRow(limit, constraintMass(limit), twist - lowerAngle, dt, limitSoft);
         limit.lower = 0.0;
         limit.upper = kInfinity;
-    }
-    else if (limitsEnabled && twist > upperAngle)
-    {
+    } else if (limitsEnabled && twist > upperAngle) {
         configureRow(limit, constraintMass(limit), twist - upperAngle, dt, limitSoft);
         limit.lower = -kInfinity;
         limit.upper = 0.0;
-    }
-    else
-    {
+    } else {
         disableRow(limit);
     }
 }
 
-void PrismaticConstraint::captureReference()
-{
+void PrismaticConstraint::captureReference() {
     referenceRotation = quaternionMultiply(quaternionInverse(bodyA->orientation), bodyB->orientation);
     const Vec3 pA = bodyA->localToWorldPoint(localAnchorA);
     const Vec3 pB = bodyB->localToWorldPoint(localAnchorB);
@@ -208,16 +184,14 @@ void PrismaticConstraint::captureReference()
     referenceTranslation = glm::dot(pA - pB, axisWorld);
 }
 
-Real PrismaticConstraint::translation() const
-{
+Real PrismaticConstraint::translation() const {
     const Vec3 pA = bodyA->localToWorldPoint(localAnchorA);
     const Vec3 pB = bodyB->localToWorldPoint(localAnchorB);
     const Vec3 axisWorld = safeNormalize(rotateVector(bodyA->orientation, localAxisA), Vec3(1.0, 0.0, 0.0));
     return glm::dot(pA - pB, axisWorld) - referenceTranslation;
 }
 
-void PrismaticConstraint::prepare(Real dt)
-{
+void PrismaticConstraint::prepare(Real dt) {
     rebuildRows(7);
 
     const Vec3 pA = bodyA->localToWorldPoint(localAnchorA);
@@ -243,8 +217,7 @@ void PrismaticConstraint::prepare(Real dt)
     const Real coordinate = glm::dot(pA - pB, axisWorld) - referenceTranslation;
 
     ConstraintRow& motor = rows[5];
-    if (motorEnabled)
-    {
+    if (motorEnabled) {
         motor.linearA = axisWorld;
         motor.linearB = -axisWorld;
         motor.angularA = glm::cross(rA, axisWorld);
@@ -253,9 +226,7 @@ void PrismaticConstraint::prepare(Real dt)
         configureRow(motor, constraintMass(motor), 0.0, dt, SoftParams{0.0, 1.0});
         motor.lower = -maxMotorForce * dt;
         motor.upper = maxMotorForce * dt;
-    }
-    else
-    {
+    } else {
         disableRow(motor);
     }
 
@@ -265,20 +236,15 @@ void PrismaticConstraint::prepare(Real dt)
     limit.angularA = glm::cross(rA, axisWorld);
     limit.angularB = -glm::cross(rB, axisWorld);
     limit.velocityTarget = 0.0;
-    if (limitsEnabled && coordinate < lowerTranslation)
-    {
+    if (limitsEnabled && coordinate < lowerTranslation) {
         configureRow(limit, constraintMass(limit), coordinate - lowerTranslation, dt, limitSoft);
         limit.lower = 0.0;
         limit.upper = kInfinity;
-    }
-    else if (limitsEnabled && coordinate > upperTranslation)
-    {
+    } else if (limitsEnabled && coordinate > upperTranslation) {
         configureRow(limit, constraintMass(limit), coordinate - upperTranslation, dt, limitSoft);
         limit.lower = -kInfinity;
         limit.upper = 0.0;
-    }
-    else
-    {
+    } else {
         disableRow(limit);
     }
 }

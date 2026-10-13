@@ -16,14 +16,12 @@ using sim::scripting::LuaSandbox;
 namespace {
 
 // Runs `code` in a fresh sandbox and returns whether it succeeded.
-bool runInSandbox(const std::string& code, std::string& error)
-{
+bool runInSandbox(const std::string& code, std::string& error) {
     LuaSandbox sandbox;
     return sandbox.run(code, "test", error);
 }
 
-void writeFile(const std::filesystem::path& path, const std::string& contents)
-{
+void writeFile(const std::filesystem::path& path, const std::string& contents) {
     std::filesystem::create_directories(path.parent_path());
     std::ofstream out(path, std::ios::binary);
     out << contents;
@@ -31,13 +29,11 @@ void writeFile(const std::filesystem::path& path, const std::string& contents)
 
 } // namespace
 
-TEST_CASE("Lua sandbox hides dangerous libraries and loaders")
-{
+TEST_CASE("Lua sandbox hides dangerous libraries and loaders") {
     // Every name must be unreachable both as a global and through _G/getfenv.
     const char* names[] = {"io",   "os",         "ffi",    "jit",      "debug",  "package",
                            "load", "loadstring", "dofile", "loadfile", "require"};
-    for (const char* name : names)
-    {
+    for (const char* name : names) {
         CAPTURE(name);
         const std::string code = std::string("local n = '") + name +
                                  "'\n"
@@ -62,8 +58,7 @@ TEST_CASE("Lua sandbox hides dangerous libraries and loaders")
     CHECK_FALSE(runInSandbox("loadstring('return 1')()", error));
 }
 
-TEST_CASE("Lua sandbox rejects precompiled bytecode")
-{
+TEST_CASE("Lua sandbox rejects precompiled bytecode") {
     LuaSandbox sandbox;
     std::string error;
     // A LuaJIT bytecode header followed by junk: text-only mode must refuse it
@@ -73,8 +68,7 @@ TEST_CASE("Lua sandbox rejects precompiled bytecode")
     CHECK_FALSE(error.empty());
 }
 
-TEST_CASE("Lua sandbox instruction budget interrupts infinite loops")
-{
+TEST_CASE("Lua sandbox instruction budget interrupts infinite loops") {
     LuaSandbox sandbox;
     sandbox.setInstructionBudget(1'000'000);
 
@@ -97,8 +91,7 @@ TEST_CASE("Lua sandbox instruction budget interrupts infinite loops")
     CHECK(elapsed < std::chrono::seconds(10));
 }
 
-TEST_CASE("VFS: a higher-priority mod overrides base content")
-{
+TEST_CASE("VFS: a higher-priority mod overrides base content") {
     namespace fs = std::filesystem;
     const fs::path root = fs::temp_directory_path() / "sim_tests_vfs_override";
     fs::remove_all(root);
@@ -130,19 +123,17 @@ TEST_CASE("VFS: a higher-priority mod overrides base content")
     fs::remove_all(root, ignored);
 }
 
-TEST_CASE("ScriptHost exposes the documented sim API and runs an entry script")
-{
+TEST_CASE("ScriptHost exposes the documented sim API and runs an entry script") {
     namespace fs = std::filesystem;
     const fs::path root = fs::temp_directory_path() / "sim_tests_script_host";
     fs::remove_all(root);
     // Same shape as content/base/scripts/main.lua: uses every sim.* entry point.
-    writeFile(root / "scripts" / "main.lua",
-              "sim.log('loaded ' .. sim.game_version)\n"
-              "assert(type(sim.read) == 'function')\n"
-              "assert(sim.read('scripts/main.lua') ~= nil)\n"
-              "loaded = 0; updates = 0\n"
-              "sim.register_on_load(function() loaded = loaded + 1 end)\n"
-              "sim.register_on_update(function(dt) updates = updates + dt end)\n");
+    writeFile(root / "scripts" / "main.lua", "sim.log('loaded ' .. sim.game_version)\n"
+                                             "assert(type(sim.read) == 'function')\n"
+                                             "assert(sim.read('scripts/main.lua') ~= nil)\n"
+                                             "loaded = 0; updates = 0\n"
+                                             "sim.register_on_load(function() loaded = loaded + 1 end)\n"
+                                             "sim.register_on_update(function(dt) updates = updates + dt end)\n");
 
     {
         sim::vfs::VirtualFileSystem vfs;

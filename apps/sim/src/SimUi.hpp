@@ -15,8 +15,7 @@ struct OrbitCamera;
 
 // Debug overlay layers. Everything defaults to on; the physics layers only
 // apply to physics scenes.
-struct DebugDrawFlags
-{
+struct DebugDrawFlags {
     bool grid = true;
     bool worldAxes = true;
     bool bodyAxes = true;
@@ -28,8 +27,7 @@ struct DebugDrawFlags
 };
 
 // Which panels are open. Persisted in the ImGui .ini file under [SimUi][Panels].
-struct PanelVisibility
-{
+struct PanelVisibility {
     bool sceneBrowser = true;
     bool simulation = true;
     bool debugDraw = true;
@@ -41,28 +39,26 @@ struct PanelVisibility
 };
 
 // Per-frame read-only state shown by the panels.
-struct SimUiFrame
-{
-    std::string activeScene;                        // empty = interactive driving scene
-    const physics::PhysicsWorld* world = nullptr;   // the live physics scene, if any
-    bool driveActive = false;                       // the keyboard-drivable scene owns keys and camera
+struct SimUiFrame {
+    std::string activeScene;                      // empty = interactive driving scene
+    const physics::PhysicsWorld* world = nullptr; // the live physics scene, if any
+    bool driveActive = false;                     // the keyboard-drivable scene owns keys and camera
     bool hasEnergy = false;
-    double totalEnergy = 0.0;                       // J
+    double totalEnergy = 0.0; // J
     double cpuFrameMs = 0.0;
     double gpuFrameMs = 0.0;
     double fps = 0.0;
-    double nowSeconds = 0.0;                        // wall clock, for the plots
-    float viewportHeight = 1.0f;                    // pixels, for panning
+    double nowSeconds = 0.0;     // wall clock, for the plots
+    float viewportHeight = 1.0f; // pixels, for panning
 };
 
 // What the user asked for this frame. Applied by the Application.
-struct SimUiActions
-{
+struct SimUiActions {
     bool quit = false;
     bool loadScene = false;
-    std::string scene;      // with loadScene; empty = driving scene
-    bool step = false;      // advance exactly one fixed step (while paused)
-    bool reset = false;     // rebuild the physics scene from its initial state
+    std::string scene;  // with loadScene; empty = driving scene
+    bool step = false;  // advance exactly one fixed step (while paused)
+    bool reset = false; // rebuild the physics scene from its initial state
     bool frameScene = false;
 };
 
@@ -71,8 +67,7 @@ struct SimUiActions
 // plus the keyboard shortcuts. Only ever constructed in windowed mode; must be
 // created after the ImGui context and before the first ImGui::NewFrame() so
 // its .ini settings are read.
-class SimUi
-{
+class SimUi {
 public:
     SimUi();
     ~SimUi();

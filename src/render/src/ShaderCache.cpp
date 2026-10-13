@@ -12,23 +12,21 @@ namespace sim::render {
 
 ShaderCache::ShaderCache(rhi::Device& device, vfs::VirtualFileSystem& vfs) : device_(device), vfs_(vfs) {}
 
-const rhi::ShaderModule* ShaderCache::get(std::string_view virtualPath)
-{
+const rhi::ShaderModule* ShaderCache::get(std::string_view virtualPath) {
     const std::string path(virtualPath);
     const auto existing = modules_.find(path);
-    if (existing != modules_.end())
-    {
+    if (existing != modules_.end()) {
         return existing->second.get();
     }
 
     const auto bytes = vfs_.readBinary(path);
-    if (!bytes || bytes->empty())
-    {
+    if (!bytes || bytes->empty()) {
         core::Log::get("render")->error("shader '{}' is missing from the VFS", path);
         return nullptr;
     }
 
-    auto module = std::make_unique<rhi::ShaderModule>(device_, reinterpret_cast<const std::byte*>(bytes->data()), bytes->size());
+    auto module =
+        std::make_unique<rhi::ShaderModule>(device_, reinterpret_cast<const std::byte*>(bytes->data()), bytes->size());
     const rhi::ShaderModule* result = module.get();
     modules_.emplace(path, std::move(module));
     return result;

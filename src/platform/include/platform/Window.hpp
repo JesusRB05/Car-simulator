@@ -14,8 +14,7 @@ namespace sim::platform {
 
 class InputManager;
 
-struct WindowDesc
-{
+struct WindowDesc {
     std::string title = "Car Simulator";
     int width = 1280;
     int height = 720;
@@ -26,8 +25,7 @@ struct WindowDesc
 // SDL3 window. Owns the platform window and, on request, the Vulkan surface
 // created from it. The RHI layer never sees SDL: the application asks the
 // window for a surface and hands the raw handle to the RHI.
-class Window
-{
+class Window {
 public:
     explicit Window(const WindowDesc& desc);
     ~Window();

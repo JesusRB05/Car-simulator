@@ -9,8 +9,7 @@
 namespace sim::app {
 
 // Options parsed from the command line for the offscreen (headless) renderer.
-struct HeadlessOptions
-{
+struct HeadlessOptions {
     std::uint32_t frames = 1;
     std::filesystem::path executablePath;
     std::filesystem::path screenshot;

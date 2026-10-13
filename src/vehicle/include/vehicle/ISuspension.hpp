@@ -14,8 +14,7 @@ using physics::Vec3;
 // chassis frame (metres; +X right, +Y up, -Z forward) at the design (static
 // ride height) position. Simpler topologies (MacPherson strut, beam axle) may
 // leave unused points at their defaults and must document which ones they read.
-struct SuspensionHardpoints
-{
+struct SuspensionHardpoints {
     // Chassis-side pivots of the upper wishbone (front and rear bushings).
     Vec3 upperWishboneFrontPivot{0.0};
     Vec3 upperWishboneRearPivot{0.0};
@@ -41,8 +40,7 @@ struct SuspensionHardpoints
 // steering rack position, it reports where the wheel sits and how the elastic
 // elements are deformed. Forces are applied by the vehicle model using the
 // spring/damper lengths and motion ratios reported here.
-class ISuspension
-{
+class ISuspension {
 public:
     virtual ~ISuspension() = default;
 

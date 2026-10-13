@@ -11,16 +11,14 @@ using physics::Vec3;
 
 // Aerodynamic loads on the chassis, in the chassis frame (+X right, +Y up,
 // -Z forward), referred to the chassis reference point.
-struct AeroLoads
-{
+struct AeroLoads {
     Vec3 force{0.0};  // N; drag points to +Z when driving forward, downforce is -Y
     Vec3 moment{0.0}; // N*m about the reference point
 };
 
 // Aerodynamic model of the vehicle body: drag, lift/downforce and the
 // resulting pitch/yaw/roll moments.
-class IAerodynamics
-{
+class IAerodynamics {
 public:
     virtual ~IAerodynamics() = default;
 

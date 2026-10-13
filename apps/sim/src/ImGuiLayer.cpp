@@ -14,8 +14,7 @@
 
 namespace sim::app {
 
-ImGuiLayer::ImGuiLayer(rhi::Device& device, rhi::Swapchain& swapchain, SDL_Window* window) : device_(&device)
-{
+ImGuiLayer::ImGuiLayer(rhi::Device& device, rhi::Swapchain& swapchain, SDL_Window* window) : device_(&device) {
     VkDescriptorPoolSize poolSize{};
     poolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSize.descriptorCount = 1000;
@@ -27,8 +26,7 @@ ImGuiLayer::ImGuiLayer(rhi::Device& device, rhi::Swapchain& swapchain, SDL_Windo
     poolInfo.poolSizeCount = 1;
     poolInfo.pPoolSizes = &poolSize;
 
-    if (vkCreateDescriptorPool(device.handle(), &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS)
-    {
+    if (vkCreateDescriptorPool(device.handle(), &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
         throw std::runtime_error("failed to create the ImGui descriptor pool");
     }
 
@@ -37,8 +35,7 @@ ImGuiLayer::ImGuiLayer(rhi::Device& device, rhi::Swapchain& swapchain, SDL_Windo
     ImPlot::CreateContext();
     ImGui::StyleColorsDark();
 
-    if (!ImGui_ImplSDL3_InitForVulkan(window))
-    {
+    if (!ImGui_ImplSDL3_InitForVulkan(window)) {
         throw std::runtime_error("failed to initialise the ImGui SDL3 backend");
     }
 
@@ -60,45 +57,38 @@ ImGuiLayer::ImGuiLayer(rhi::Device& device, rhi::Swapchain& swapchain, SDL_Windo
     initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
     initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colorFormat_;
 
-    if (!ImGui_ImplVulkan_Init(&initInfo))
-    {
+    if (!ImGui_ImplVulkan_Init(&initInfo)) {
         throw std::runtime_error("failed to initialise the ImGui Vulkan backend");
     }
 }
 
-ImGuiLayer::~ImGuiLayer()
-{
+ImGuiLayer::~ImGuiLayer() {
     device_->waitIdle();
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImPlot::DestroyContext();
     ImGui::DestroyContext();
 
-    if (descriptorPool_ != VK_NULL_HANDLE)
-    {
+    if (descriptorPool_ != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(device_->handle(), descriptorPool_, nullptr);
     }
 }
 
-void ImGuiLayer::onSwapchainRecreated(rhi::Swapchain& swapchain)
-{
+void ImGuiLayer::onSwapchainRecreated(rhi::Swapchain& swapchain) {
     ImGui_ImplVulkan_SetMinImageCount(swapchain.imageCount() < 2 ? 2 : swapchain.imageCount());
 }
 
-bool ImGuiLayer::processEvent(const SDL_Event& event)
-{
+bool ImGuiLayer::processEvent(const SDL_Event& event) {
     return ImGui_ImplSDL3_ProcessEvent(&event);
 }
 
-void ImGuiLayer::beginFrame()
-{
+void ImGuiLayer::beginFrame() {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 }
 
-void ImGuiLayer::endFrame(VkCommandBuffer commandBuffer)
-{
+void ImGuiLayer::endFrame(VkCommandBuffer commandBuffer) {
     ImGui::Render();
     ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
 }

@@ -16,8 +16,7 @@ namespace sim::app {
 // sphere around `target`: yaw is measured around +Y from +Z towards +X and
 // pitch upwards from the horizon, so yaw = pitch = 0 looks down -Z (the
 // engine's forward) from a point on +Z. Right-handed, +Y up.
-struct OrbitCamera
-{
+struct OrbitCamera {
     glm::vec3 target{0.0f};
     float yaw = 0.0f;
     float pitch = 0.3f;

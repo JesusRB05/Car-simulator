@@ -19,15 +19,13 @@ class VirtualFileSystem;
 
 namespace sim::modding {
 
-enum class ModState
-{
+enum class ModState {
     Active,
     Disabled, // valid but disabled by the user
     Invalid   // failed to load (bad manifest, missing dependency, ...)
 };
 
-struct ModStatus
-{
+struct ModStatus {
     std::string id;
     std::string name;
     std::string version;
@@ -38,8 +36,7 @@ struct ModStatus
     std::vector<std::string> errors;
 };
 
-struct ModReport
-{
+struct ModReport {
     std::vector<ModStatus> mods;
     std::vector<std::string> messages;
 
@@ -50,11 +47,9 @@ struct ModReport
 // Discovers mods, validates their manifests, resolves dependencies and mounts
 // the active set onto the VFS. A single invalid mod never aborts the process:
 // it is disabled with a clear error and the rest still loads.
-class ModManager
-{
+class ModManager {
 public:
-    struct Paths
-    {
+    struct Paths {
         std::filesystem::path baseContent;   // e.g. <root>/content/base
         std::filesystem::path modsDirectory; // e.g. <root>/mods
     };
@@ -72,8 +67,7 @@ public:
     bool setModActive(std::string_view id, bool active);
 
 private:
-    struct Discovered
-    {
+    struct Discovered {
         ModStatus status;
         std::optional<ModManifest> manifest;
     };

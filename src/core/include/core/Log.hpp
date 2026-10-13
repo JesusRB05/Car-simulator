@@ -14,11 +14,9 @@ namespace sim::core {
 // Central logging facility. Loggers are named: the base application uses
 // "app", subsystems use their subsystem name and mods / plugins use a
 // "mod:<id>" or "plugin:<id>" name so their output is easy to spot.
-class Log
-{
+class Log {
 public:
-    struct Config
-    {
+    struct Config {
         std::string appName = "sim";
         std::filesystem::path logFile = "sim.log";
         bool console = true;

@@ -6,8 +6,7 @@ namespace sim::platform {
 
 // RAII wrapper around SDL global initialisation. One instance must outlive any
 // Window, InputManager or other SDL-based object.
-class SdlContext
-{
+class SdlContext {
 public:
     SdlContext();
     ~SdlContext();

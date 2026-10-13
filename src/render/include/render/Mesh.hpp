@@ -13,8 +13,7 @@
 
 namespace sim::render {
 
-struct Vertex
-{
+struct Vertex {
     glm::vec3 position{0.0f};
     glm::vec3 normal{0.0f, 1.0f, 0.0f};
     glm::vec2 uv{0.0f};
@@ -22,8 +21,7 @@ struct Vertex
 
 // CPU-side geometry. Triangles are wound counter-clockwise when seen from
 // outside, i.e. (p1 - p0) x (p2 - p0) points along the vertex normals.
-struct MeshData
-{
+struct MeshData {
     std::vector<Vertex> vertices;
     std::vector<std::uint32_t> indices;
 };
@@ -35,8 +33,7 @@ MeshData cylinderData();
 MeshData groundPlaneData(float halfSize);
 
 // A CPU-authored mesh uploaded into immutable vertex and index buffers.
-class Mesh
-{
+class Mesh {
 public:
     Mesh(rhi::Device& device, const std::vector<Vertex>& vertices, const std::vector<std::uint32_t>& indices);
 

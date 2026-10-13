@@ -14,8 +14,7 @@
 
 namespace sim::render {
 
-TEST_CASE("glm column-major memory matches the shader column_major layout")
-{
+TEST_CASE("glm column-major memory matches the shader column_major layout") {
     // std140 upload layout: every member is a multiple of 16 bytes and matrices
     // are stored as their columns contiguously. GLM keeps mat4 as four vec4
     // columns, so a raw byte copy is the identity mapping between the C++
@@ -32,10 +31,8 @@ TEST_CASE("glm column-major memory matches the shader column_major layout")
     glm::mat4 identity(1.0f);
     std::uint8_t bytes[64];
     writeMatrix(identity, bytes);
-    for (int column = 0; column < 4; ++column)
-    {
-        for (int row = 0; row < 4; ++row)
-        {
+    for (int column = 0; column < 4; ++column) {
+        for (int row = 0; row < 4; ++row) {
             float value = 0.0f;
             std::memcpy(&value, bytes + (column * 4 + row) * sizeof(float), sizeof(float));
             CHECK(value == doctest::Approx(column == row ? 1.0f : 0.0f));
@@ -43,8 +40,7 @@ TEST_CASE("glm column-major memory matches the shader column_major layout")
     }
 }
 
-TEST_CASE("a known world point projects to the expected pixel (column-major mul)")
-{
+TEST_CASE("a known world point projects to the expected pixel (column-major mul)") {
     constexpr int kWidth = 640;
     constexpr int kHeight = 360;
     constexpr double kPi = 3.14159265358979323846;
@@ -85,8 +81,7 @@ TEST_CASE("a known world point projects to the expected pixel (column-major mul)
     CHECK(py == expectedPy);
 }
 
-TEST_CASE("screen orientation is absolute: +Y world renders above, +X world renders right")
-{
+TEST_CASE("screen orientation is absolute: +Y world renders above, +X world renders right") {
     // Pins the engine's screen orientation without a GPU: with a horizontal
     // camera, the RHI-flipped mapping must place a higher world point on a
     // strictly smaller row (top of the image) and a point towards +X on a
@@ -133,32 +128,26 @@ namespace {
 // normal (p1 - p0) x (p2 - p0) has to agree with the vertex normals. The
 // pipeline culls back faces with a CCW front face, so a reversed triangle is
 // invisible from outside and shows the interior instead.
-void checkOutwardWinding(const MeshData& mesh, const std::string& name)
-{
+void checkOutwardWinding(const MeshData& mesh, const std::string& name) {
     REQUIRE(mesh.indices.size() % 3 == 0);
     int reversed = 0;
     int badNormals = 0;
-    for (std::size_t i = 0; i < mesh.indices.size(); i += 3)
-    {
+    for (std::size_t i = 0; i < mesh.indices.size(); i += 3) {
         const Vertex& a = mesh.vertices[mesh.indices[i]];
         const Vertex& b = mesh.vertices[mesh.indices[i + 1]];
         const Vertex& c = mesh.vertices[mesh.indices[i + 2]];
         const glm::vec3 faceNormal = glm::cross(b.position - a.position, c.position - a.position);
-        if (glm::length(faceNormal) < 1e-9f)
-        {
+        if (glm::length(faceNormal) < 1e-9f) {
             continue; // degenerate pole triangle
         }
         const glm::vec3 averageNormal = a.normal + b.normal + c.normal;
-        if (glm::dot(faceNormal, averageNormal) <= 0.0f)
-        {
+        if (glm::dot(faceNormal, averageNormal) <= 0.0f) {
             ++reversed;
         }
         // Flat faces (cube, plane, cylinder caps) must carry the face normal.
         const glm::vec3 unit = glm::normalize(faceNormal);
-        for (const Vertex* v : {&a, &b, &c})
-        {
-            if (glm::dot(unit, glm::normalize(v->normal)) < 0.1f)
-            {
+        for (const Vertex* v : {&a, &b, &c}) {
+            if (glm::dot(unit, glm::normalize(v->normal)) < 0.1f) {
                 ++badNormals;
             }
         }
@@ -170,8 +159,7 @@ void checkOutwardWinding(const MeshData& mesh, const std::string& name)
 
 } // namespace
 
-TEST_CASE("built-in meshes are wound counter-clockwise seen from outside")
-{
+TEST_CASE("built-in meshes are wound counter-clockwise seen from outside") {
     checkOutwardWinding(cubeData(), "cube");
     checkOutwardWinding(sphereData(), "sphere");
     checkOutwardWinding(cylinderData(), "cylinder");

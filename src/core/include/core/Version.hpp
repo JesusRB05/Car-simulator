@@ -15,7 +15,7 @@ inline constexpr int kVersionMajor = SIM_VERSION_MAJOR;
 inline constexpr int kVersionMinor = SIM_VERSION_MINOR;
 inline constexpr int kVersionPatch = SIM_VERSION_PATCH;
 
-inline constexpr const char* kVersionString = SIM_STRINGIFY(SIM_VERSION_MAJOR) "." SIM_STRINGIFY(
-    SIM_VERSION_MINOR) "." SIM_STRINGIFY(SIM_VERSION_PATCH);
+inline constexpr const char* kVersionString =
+    SIM_STRINGIFY(SIM_VERSION_MAJOR) "." SIM_STRINGIFY(SIM_VERSION_MINOR) "." SIM_STRINGIFY(SIM_VERSION_PATCH);
 
 } // namespace sim::core

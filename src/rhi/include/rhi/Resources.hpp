@@ -17,11 +17,11 @@ namespace sim::rhi {
 
 // A GPU buffer allocated through VMA. Host-visible memory is mapped once at
 // creation; device-local memory is meant to be filled through a staging path.
-class Buffer
-{
+class Buffer {
 public:
     Buffer(Device& device, std::size_t size, BufferUsage usage, MemoryUsage memory = MemoryUsage::CpuToGpu);
-    Buffer(Device& device, const void* data, std::size_t size, BufferUsage usage, MemoryUsage memory = MemoryUsage::CpuToGpu);
+    Buffer(Device& device, const void* data, std::size_t size, BufferUsage usage,
+           MemoryUsage memory = MemoryUsage::CpuToGpu);
     ~Buffer();
 
     Buffer(const Buffer&) = delete;
@@ -50,8 +50,7 @@ private:
 };
 
 // A GPU image plus its default 2D view.
-class Image
-{
+class Image {
 public:
     Image(Device& device, Extent2D extent, Format format, ImageUsage usage, bool depthStencil = false);
     ~Image();
@@ -76,8 +75,7 @@ private:
 };
 
 // A texture sampler with sensible defaults.
-class Sampler
-{
+class Sampler {
 public:
     Sampler(Device& device, bool linear = true, bool repeat = true);
     ~Sampler();
@@ -93,8 +91,7 @@ private:
 };
 
 // A SPIR-V shader module.
-class ShaderModule
-{
+class ShaderModule {
 public:
     ShaderModule(Device& device, const std::vector<std::uint32_t>& spirv);
     ShaderModule(Device& device, const std::byte* data, std::size_t byteSize);

@@ -18,8 +18,7 @@ namespace sim::rhi {
 // Manages CPU/GPU frame synchronisation for the swapchain: a pool of command
 // lists, one fence and two semaphores per frame in flight. It also performs the
 // swapchain image layout transitions around rendering.
-class Frame
-{
+class Frame {
 public:
     Frame(Device& device, Swapchain& swapchain, std::uint32_t framesInFlight = 2);
     ~Frame();
@@ -38,17 +37,19 @@ public:
 
     std::uint32_t imageIndex() const { return imageIndex_; }
     std::uint32_t slot() const { return slotIndex_; }
-    Format colorFormat() const { return swapchain_.format() == VK_FORMAT_B8G8R8A8_SRGB ? Format::B8G8R8A8Srgb : Format::B8G8R8A8Unorm; }
+    Format colorFormat() const {
+        return swapchain_.format() == VK_FORMAT_B8G8R8A8_SRGB ? Format::B8G8R8A8Srgb : Format::B8G8R8A8Unorm;
+    }
     Extent2D extent() const { return swapchain_.extent(); }
     VkImage swapchainImage() const { return swapchain_.image(imageIndex_); }
     VkImageView swapchainImageView() const { return swapchain_.imageView(imageIndex_); }
 
     // Convenience colour attachment targeting the current swapchain image.
-    ColorAttachment swapchainAttachment(LoadOp loadOp = LoadOp::Clear, float r = 0.05f, float g = 0.06f, float b = 0.08f, float a = 1.0f) const;
+    ColorAttachment swapchainAttachment(LoadOp loadOp = LoadOp::Clear, float r = 0.05f, float g = 0.06f,
+                                        float b = 0.08f, float a = 1.0f) const;
 
 private:
-    struct Slot
-    {
+    struct Slot {
         std::unique_ptr<CommandList> list;
         VkFence fence = VK_NULL_HANDLE;
         VkSemaphore imageAvailable = VK_NULL_HANDLE;

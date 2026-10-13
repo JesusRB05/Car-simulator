@@ -22,8 +22,7 @@ namespace sim::scripting {
 //
 // An instruction budget (via a Lua debug hook) aborts runaway scripts such as
 // `while true do end` without freezing the host.
-class LuaSandbox
-{
+class LuaSandbox {
 public:
     LuaSandbox();
     ~LuaSandbox();
@@ -49,8 +48,7 @@ public:
     void log(std::string_view message) const;
 
 private:
-    struct Budget
-    {
+    struct Budget {
         std::uint64_t limit = 0;
         std::uint64_t used = 0;
     };
@@ -58,14 +56,11 @@ private:
     // Owns the raw Lua state and closes it on destruction. Declared before
     // `view_` so that the sol2 view (which holds registry references) is
     // destroyed first; closing the state earlier crashes on unref.
-    struct StateOwner
-    {
+    struct StateOwner {
         lua_State* state = nullptr;
         explicit StateOwner(lua_State* s) : state(s) {}
-        ~StateOwner()
-        {
-            if (state != nullptr)
-            {
+        ~StateOwner() {
+            if (state != nullptr) {
                 lua_close(state);
             }
         }

@@ -10,21 +10,20 @@
 namespace sim::render {
 
 Renderer::Renderer(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32_t framesInFlight)
-    : device_(device), shaders_(device, vfs)
-{
+    : device_(device), shaders_(device, vfs) {
     framesInFlight = framesInFlight < 1 ? 1 : framesInFlight;
 
-    frameLayout_ = std::make_unique<rhi::DescriptorSetLayout>(device_, std::vector<rhi::DescriptorBinding>{
-                                                                           {0, rhi::DescriptorType::UniformBuffer, 1,
-                                                                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT}});
+    frameLayout_ = std::make_unique<rhi::DescriptorSetLayout>(
+        device_, std::vector<rhi::DescriptorBinding>{{0, rhi::DescriptorType::UniformBuffer, 1,
+                                                      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT}});
 
     descriptorPool_ = std::make_unique<rhi::DescriptorPool>(device_, framesInFlight, frameLayout_->bindings());
 
     frameSets_.reserve(framesInFlight);
     frameBuffers_.reserve(framesInFlight);
-    for (std::uint32_t slot = 0; slot < framesInFlight; ++slot)
-    {
-        frameBuffers_.push_back(std::make_unique<rhi::Buffer>(device_, sizeof(FrameUniforms), rhi::BufferUsage::Uniform));
+    for (std::uint32_t slot = 0; slot < framesInFlight; ++slot) {
+        frameBuffers_.push_back(
+            std::make_unique<rhi::Buffer>(device_, sizeof(FrameUniforms), rhi::BufferUsage::Uniform));
         rhi::DescriptorSet set(&device_, descriptorPool_->allocate(*frameLayout_));
         set.writeBuffer(0, frameBuffers_.back()->handle(), sizeof(FrameUniforms));
         frameSets_.push_back(set);
@@ -33,18 +32,14 @@ Renderer::Renderer(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32
 
 Renderer::~Renderer() = default;
 
-void Renderer::ensureTargets(rhi::Extent2D extent, rhi::Format colorFormat)
-{
-    if (colorFormat != colorFormat_)
-    {
+void Renderer::ensureTargets(rhi::Extent2D extent, rhi::Format colorFormat) {
+    if (colorFormat != colorFormat_) {
         colorFormat_ = colorFormat;
         createPipeline(colorFormat);
     }
 
-    if (depthImage_ == nullptr || depthExtent_.width != extent.width || depthExtent_.height != extent.height)
-    {
-        if (extent.width == 0 || extent.height == 0)
-        {
+    if (depthImage_ == nullptr || depthExtent_.width != extent.width || depthExtent_.height != extent.height) {
+        if (extent.width == 0 || extent.height == 0) {
             return;
         }
         depthImage_ = std::make_unique<rhi::Image>(device_, extent, rhi::Format::D32Sfloat,
@@ -53,12 +48,10 @@ void Renderer::ensureTargets(rhi::Extent2D extent, rhi::Format colorFormat)
     }
 }
 
-void Renderer::createPipeline(rhi::Format colorFormat)
-{
+void Renderer::createPipeline(rhi::Format colorFormat) {
     const rhi::ShaderModule* vertex = shaders_.get("shaders/mesh.vertex.spv");
     const rhi::ShaderModule* fragment = shaders_.get("shaders/mesh.fragment.spv");
-    if (vertex == nullptr || fragment == nullptr)
-    {
+    if (vertex == nullptr || fragment == nullptr) {
         core::Log::get("render")->error("scene shaders are unavailable; the scene pass will be skipped");
         pipeline_.reset();
         return;
@@ -88,10 +81,9 @@ void Renderer::createPipeline(rhi::Format colorFormat)
     core::Log::get("render")->info("scene pipeline ready ({})", rhi::formatName(colorFormat));
 }
 
-void Renderer::updateFrameUniforms(std::uint32_t slot, const Camera& camera, const glm::vec4& lightDirection, const glm::vec4& lightColor)
-{
-    if (slot >= frameBuffers_.size())
-    {
+void Renderer::updateFrameUniforms(std::uint32_t slot, const Camera& camera, const glm::vec4& lightDirection,
+                                   const glm::vec4& lightColor) {
+    if (slot >= frameBuffers_.size()) {
         return;
     }
 
@@ -105,10 +97,9 @@ void Renderer::updateFrameUniforms(std::uint32_t slot, const Camera& camera, con
     frameBuffers_[slot]->upload(&uniforms, sizeof(uniforms));
 }
 
-void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene, const rhi::ColorAttachment& colorAttachment, std::uint32_t slot)
-{
-    if (!ready() || slot >= frameSets_.size())
-    {
+void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
+                           const rhi::ColorAttachment& colorAttachment, std::uint32_t slot) {
+    if (!ready() || slot >= frameSets_.size()) {
         return;
     }
 
@@ -125,13 +116,12 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene, co
     commandList.beginRendering({colorAttachment}, &depth, depthExtent_);
     commandList.bindPipeline(*pipeline_);
     commandList.bindDescriptorSet(pipeline_->layout(), 0, frameSets_[slot].handle());
-    commandList.setViewport(0.0f, 0.0f, static_cast<float>(depthExtent_.width), static_cast<float>(depthExtent_.height));
+    commandList.setViewport(0.0f, 0.0f, static_cast<float>(depthExtent_.width),
+                            static_cast<float>(depthExtent_.height));
     commandList.setScissor(0, 0, depthExtent_.width, depthExtent_.height);
 
-    for (const Drawable& drawable : scene.drawables())
-    {
-        if (!drawable.mesh)
-        {
+    for (const Drawable& drawable : scene.drawables()) {
+        if (!drawable.mesh) {
             continue;
         }
 

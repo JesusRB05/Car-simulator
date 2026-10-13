@@ -7,8 +7,7 @@
 
 using namespace sim::core;
 
-TEST_CASE("FixedStepClock runs whole steps and reports an interpolation alpha")
-{
+TEST_CASE("FixedStepClock runs whole steps and reports an interpolation alpha") {
     FixedStepClock clock(0.01, 8);
     const StepResult result = clock.advance(0.025);
     CHECK(result.steps == 2);
@@ -16,15 +15,13 @@ TEST_CASE("FixedStepClock runs whole steps and reports an interpolation alpha")
     CHECK(result.simTime == doctest::Approx(0.02));
 }
 
-TEST_CASE("FixedStepClock clamps catch-up work to avoid the spiral of death")
-{
+TEST_CASE("FixedStepClock clamps catch-up work to avoid the spiral of death") {
     FixedStepClock clock(0.01, 4);
     const StepResult result = clock.advance(10.0);
     CHECK(result.steps == 4);
 }
 
-TEST_CASE("Config stores and retrieves nested values without touching disk")
-{
+TEST_CASE("Config stores and retrieves nested values without touching disk") {
     Config config("does-not-exist.toml");
     CHECK_FALSE(config.contains("a.b"));
 

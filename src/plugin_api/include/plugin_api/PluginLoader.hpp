@@ -18,8 +18,7 @@ class VirtualFileSystem;
 namespace sim::plugin {
 
 // Description of a native plugin after a load attempt.
-struct PluginRecord
-{
+struct PluginRecord {
     std::filesystem::path path;
     std::string name;
     std::uint32_t abiVersion = 0;
@@ -37,8 +36,7 @@ struct PluginRecord
 // their per-frame callbacks. The ABI version is verified before the plugin is
 // allowed to run: the exported symbol is read first, then the struct size and
 // version carried by sim_plugin_api.
-class PluginLoader
-{
+class PluginLoader {
 public:
     explicit PluginLoader(vfs::VirtualFileSystem& vfs);
     ~PluginLoader();
