@@ -190,6 +190,7 @@ docs/                Documentation
 
 ## Documentation
 
+- [Roadmap](docs/ROADMAP.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Building](docs/BUILDING.md)
 - [Physics](docs/FISICA.md)
