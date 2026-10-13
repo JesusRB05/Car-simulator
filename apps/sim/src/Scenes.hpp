@@ -24,7 +24,15 @@ struct SceneProbe
     glm::vec4 color;
 };
 
-// The names of every built-in demo scene, in display order.
+// Scene categories:
+//  - "render_tests": static scenes that exercise the renderer (geometry,
+//    depth, lighting, orientation); captured in screenshots/render_tests_sheet.png.
+//  - "physics": real PhysicsWorld demos (see PhysicsScenes.hpp); captured in
+//    screenshots/contact_sheet.png.
+const std::vector<std::string>& renderTestSceneNames();
+
+// The names of every built-in demo scene, in display order (render tests first,
+// then physics scenes).
 std::vector<std::string> sceneNames();
 
 // Applies the shared demo key light (direction + colour) to the given scene.

@@ -56,6 +56,7 @@ Thumbs.db
 *.log
 screenshots/*.png
 !screenshots/contact_sheet.png
+!screenshots/render_tests_sheet.png
 
 # Per-user runtime state written by apps/sim next to content/ (repo root)
 /config.toml

@@ -93,6 +93,12 @@ int main(int argc, char** argv)
             runHeadless = true;
             ++i;
         }
+        else if (matches(arg, "--render-tests-sheet") && next != nullptr)
+        {
+            headless.renderTestsSheet = next;
+            runHeadless = true;
+            ++i;
+        }
         else if (matches(arg, "--max-diff-percent") && next != nullptr)
         {
             headless.maxDiffPercent = std::strtod(next, nullptr);

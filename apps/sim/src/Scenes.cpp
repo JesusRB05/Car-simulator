@@ -65,11 +65,17 @@ glm::vec4 hueColor(float t)
 
 } // namespace
 
+const std::vector<std::string>& renderTestSceneNames()
+{
+    static const std::vector<std::string> names{"default", "grid",    "pyramid", "ramp",       "orbit",
+                                                "tower",   "checker", "rows",    "orientation"};
+    return names;
+}
+
 std::vector<std::string> sceneNames()
 {
-    static const std::vector<std::string> renderTests{"default", "grid", "pyramid", "ramp",
-                                                      "orbit",   "tower", "checker", "rows"};
-    static const std::vector<std::string> physicsScenes = physicsSceneNames();
+    const std::vector<std::string>& renderTests = renderTestSceneNames();
+    const std::vector<std::string>& physicsScenes = physicsSceneNames();
     std::vector<std::string> names;
     names.reserve(renderTests.size() + physicsScenes.size());
     names.insert(names.end(), renderTests.begin(), renderTests.end());

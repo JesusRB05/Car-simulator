@@ -33,8 +33,10 @@ struct HeadlessOptions
     // expected colour to appear at that pixel.
     bool semantic = false;
 
-    // Contact sheet: render every scene into one labelled mosaic PNG.
+    // Contact sheets: labelled mosaic PNGs of every physics scene (captured
+    // after their settle time) and of every render-test scene.
     std::filesystem::path contactSheet;
+    std::filesystem::path renderTestsSheet;
 
     // Overlays the instanced debug draw (ground grid + world axes) on top of
     // the scene, exercising the debug pipeline in a headless run.

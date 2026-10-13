@@ -490,9 +490,8 @@ void drawText(std::vector<std::uint8_t>& image, int width, int height, int origi
 int runContactSheet(rhi::Device& device, vfs::VirtualFileSystem& vfs, render::Renderer& renderer,
                     const std::shared_ptr<render::Mesh>& cube, const std::shared_ptr<render::Mesh>& sphere,
                     const std::shared_ptr<render::Mesh>& cylinder, const std::shared_ptr<render::Mesh>& ground,
-                    const std::filesystem::path& output)
+                    const std::vector<std::string>& names, const std::filesystem::path& output)
 {
-    const std::vector<std::string> names = sceneNames();
     const int tileW = 480;
     const int tileH = 270;
     const int labelH = 26;
@@ -501,6 +500,14 @@ int runContactSheet(rhi::Device& device, vfs::VirtualFileSystem& vfs, render::Re
     const int sheetW = tileW * columns;
     const int sheetH = (tileH + labelH) * rows;
     std::vector<std::uint8_t> sheet(static_cast<std::size_t>(sheetW) * sheetH * 4);
+    // Opaque dark background, so unused tiles do not show up as transparent.
+    for (std::size_t i = 0; i < sheet.size(); i += 4)
+    {
+        sheet[i + 0] = 22;
+        sheet[i + 1] = 24;
+        sheet[i + 2] = 30;
+        sheet[i + 3] = 255;
+    }
 
     Offscreen target;
     createTargets(device, target, {static_cast<std::uint32_t>(tileW), static_cast<std::uint32_t>(tileH)});
@@ -611,7 +618,12 @@ int runHeadless(const HeadlessOptions& options)
 
     if (!options.contactSheet.empty())
     {
-        result = runContactSheet(*device, vfs, renderer, cube, sphere, cylinder, ground, options.contactSheet);
+        result = runContactSheet(*device, vfs, renderer, cube, sphere, cylinder, ground, physicsSceneNames(), options.contactSheet);
+    }
+    if (result == 0 && !options.renderTestsSheet.empty())
+    {
+        result = runContactSheet(*device, vfs, renderer, cube, sphere, cylinder, ground, renderTestSceneNames(),
+                                 options.renderTestsSheet);
     }
     else
     {

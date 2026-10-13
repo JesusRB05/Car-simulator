@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -110,12 +111,19 @@ void addSpring(render::DebugDraw& draw, const glm::vec3& a, const glm::vec3& b, 
     draw.addLine(previous, b, color);
 }
 
+// Free fall (body 1, released from rest) next to a projectile (body 0); both
+// analytic trajectories are drawn by drawPhysicsSceneDebug.
+const glm::vec3 kProjectileStart(0.0f, 2.0f, 0.0f);
+const glm::vec3 kProjectileVelocity(5.0f, 8.0f, 0.0f);
+const glm::vec3 kFreeFallStart(-2.0f, 6.0f, 0.0f);
+
 void buildProjectileScene(physics::PhysicsWorld& world)
 {
     world.gravity = physics::Vec3(0.0, -9.80665, 0.0);
     physics::RigidBody& body = addDynamic(world, "projectile", 1.0f, physics::Shape::box({0.25, 0.25, 0.25}),
-                                          physics::Vec3(0.0, 2.0, 0.0));
-    body.linearVelocity = physics::Vec3(5.0, 8.0, 0.0);
+                                          physics::Vec3(kProjectileStart));
+    body.linearVelocity = physics::Vec3(kProjectileVelocity);
+    addDynamic(world, "free fall", 1.0f, physics::Shape::sphere(0.25), physics::Vec3(kFreeFallStart));
 }
 
 void buildOscillatorScene(physics::PhysicsWorld& world)
@@ -155,8 +163,10 @@ void buildDoublePendulumScene(physics::PhysicsWorld& world)
     const physics::Vec3 p2 = p1 + physics::Vec3(length2 * std::sin(a1 + a2), -length2 * std::cos(a1 + a2), 0.0);
     physics::RigidBody& link2 = addDynamic(world, "link2", 0.7f, physics::Shape::sphere(0.11), p2);
 
-    world.createConstraint<physics::SphericalConstraint>(pivot, link1);
-    world.createConstraint<physics::SphericalConstraint>(link1, link2);
+    // Massless rods between the body centres (a ball joint with centred
+    // anchors would pin each bob onto the previous one).
+    world.createConstraint<physics::DistanceConstraint>(pivot, link1).distance = length1;
+    world.createConstraint<physics::DistanceConstraint>(link1, link2).distance = length2;
 }
 
 void buildChainScene(physics::PhysicsWorld& world)
@@ -204,11 +214,13 @@ void buildGyroScene(physics::PhysicsWorld& world)
     const double distance = 0.1;
     const double spinRate = 3000.0 * 6.2831853 / 60.0; // 3000 rpm
 
-    physics::RigidBody& pivot = addStatic(world, physics::Vec3(0.0), 0.12f);
+    // The pivot sits 1.5 m above the ground so the hanging wheel is clear of it.
+    const physics::Vec3 pivotPosition(0.0, 1.5, 0.0);
+    physics::RigidBody& pivot = addStatic(world, pivotPosition, 0.12f);
     physics::RigidBody& wheel = addDynamic(world, "wheel", 1.0f, physics::Shape::cylinder(0.50, 0.06),
-                                           physics::Vec3(0.0, -distance, 0.0));
+                                           pivotPosition - physics::Vec3(0.0, distance, 0.0));
     wheel.orientation = physics::quaternionFromAxisAngle(physics::Vec3(0.0, 0.0, 1.0), 0.15);
-    wheel.position = -physics::rotateVector(wheel.orientation, physics::Vec3(0.0, distance, 0.0));
+    wheel.position = pivotPosition - physics::rotateVector(wheel.orientation, physics::Vec3(0.0, distance, 0.0));
     wheel.angularVelocity = physics::rotateVector(wheel.orientation, physics::Vec3(0.0, spinRate, 0.0));
     wheel.updateCache();
 
@@ -216,29 +228,56 @@ void buildGyroScene(physics::PhysicsWorld& world)
     joint.localAnchorB = physics::Vec3(0.0, distance, 0.0);
 }
 
+// Two hanging two-link chains with a 1:1000 mass ratio, as in the physics
+// tests: left, static anchor -> 1 kg -> 1000 kg (the hard case: the light link
+// carries the heavy one); right, anchor -> 1000 kg -> 1 kg (the easy reference).
+// Both start with a lateral push. Bodies: 0 anchor, 1 light, 2 heavy, 3 anchor,
+// 4 heavy, 5 light.
 void buildMassesScene(physics::PhysicsWorld& world)
 {
     world.gravity = physics::Vec3(0.0, -9.80665, 0.0);
-
-    // Heavy column (1000 kg, stiff spring) and light column (1 kg, soft
-    // spring): identical geometry, ~100x difference in oscillator frequency, so
-    // the 1:1000 mass ratio is legible as slow/fast bounce.
-    physics::RigidBody& heavyAnchor = addStatic(world, physics::Vec3(-2.0, 5.0, 0.0), 0.12f);
-    physics::RigidBody& heavy = addDynamic(world, "heavy", 1000.0f, physics::Shape::sphere(0.55), physics::Vec3(-2.0, 2.52, 0.0));
-    physics::PointSpringDamper& heavySpring = world.createForceElement<physics::PointSpringDamper>(&heavy, &heavyAnchor);
-    heavySpring.restLength = 2.0;
-    heavySpring.stiffness = 10000.0;
-
-    physics::RigidBody& lightAnchor = addStatic(world, physics::Vec3(2.0, 5.0, 0.0), 0.12f);
-    physics::RigidBody& light = addDynamic(world, "light", 1.0f, physics::Shape::sphere(0.22), physics::Vec3(2.0, 3.4, 0.0));
-    physics::PointSpringDamper& lightSpring = world.createForceElement<physics::PointSpringDamper>(&light, &lightAnchor);
-    lightSpring.restLength = 2.0;
-    lightSpring.stiffness = 100.0;
+    const double link = 1.0;
+    const auto column = [&](double x, bool heavyBelow) {
+        physics::RigidBody& anchor = addStatic(world, physics::Vec3(x, 4.5, 0.0), 0.12f);
+        const float upperMass = heavyBelow ? 1.0f : 1000.0f;
+        const float lowerMass = heavyBelow ? 1000.0f : 1.0f;
+        const auto shapeFor = [](float mass) { return physics::Shape::sphere(mass > 10.0f ? 0.40 : 0.15); };
+        physics::RigidBody& upper = addDynamic(world, upperMass > 10.0f ? "heavy" : "light", upperMass, shapeFor(upperMass),
+                                               physics::Vec3(x, 4.5 - link, 0.0));
+        physics::RigidBody& lower = addDynamic(world, lowerMass > 10.0f ? "heavy" : "light", lowerMass, shapeFor(lowerMass),
+                                               physics::Vec3(x, 4.5 - 2.0 * link, 0.0));
+        lower.linearVelocity = physics::Vec3(1.0, 0.0, 0.0);
+        world.createConstraint<physics::DistanceConstraint>(anchor, upper).distance = link;
+        world.createConstraint<physics::DistanceConstraint>(upper, lower).distance = link;
+    };
+    column(-1.5, true);
+    column(1.5, false);
 }
 
-void setPhysicsCamera(render::Scene& scene, float aspect)
+// Radius of a sphere that encloses the body's shape, for framing.
+double boundingRadius(const physics::Shape& shape)
 {
-    scene.camera().setPerspective(60.0f, aspect, 0.1f, 1000.0f);
+    switch (shape.type)
+    {
+    case physics::ShapeType::Sphere:
+        return shape.radius;
+    case physics::ShapeType::Cylinder:
+        return std::sqrt(shape.radius * shape.radius + shape.halfHeight * shape.halfHeight);
+    default:
+        return glm::length(shape.halfExtents);
+    }
+}
+
+// Viewing direction (from the target towards the camera) per scene. Most demos
+// move in the XY plane, so the camera sits on +Z, a little to the right and
+// above, looking towards -Z.
+glm::vec3 viewDirection(const std::string& name)
+{
+    if (name == "gyro" || name == "dzhanibekov")
+    {
+        return glm::normalize(glm::vec3(0.8f, 0.55f, 1.0f));
+    }
+    return glm::normalize(glm::vec3(0.35f, 0.25f, 1.0f));
 }
 
 } // namespace
@@ -295,46 +334,49 @@ double buildPhysicsWorld(const std::string& name, physics::PhysicsWorld& world)
 
 void physicsSceneCamera(const std::string& name, render::Scene& scene, float aspect)
 {
-    if (name == "drop")
+    // Automatic framing: run a scratch copy of the scene for a while (it is
+    // deterministic, so it sweeps exactly what the real run will show), take
+    // the bounding box of every body, and fit its bounding sphere in the view
+    // frustum along the scene's viewing direction.
+    physics::PhysicsWorld world;
+    const double settle = buildPhysicsWorld(name, world);
+    const double horizon = settle;
+    const physics::Real dt = 1.0 / 1000.0;
+    const int steps = static_cast<int>(horizon / dt);
+
+    glm::vec3 lower(std::numeric_limits<float>::max());
+    glm::vec3 upper(-std::numeric_limits<float>::max());
+    const auto accumulate = [&]() {
+        for (std::size_t i = 0; i < world.bodyCount(); ++i)
+        {
+            const physics::RigidBody& body = world.body(i);
+            const glm::vec3 centre(body.position);
+            const float radius = static_cast<float>(boundingRadius(body.shape));
+            lower = glm::min(lower, centre - glm::vec3(radius));
+            upper = glm::max(upper, centre + glm::vec3(radius));
+        }
+    };
+    accumulate();
+    for (int step = 1; step <= steps; ++step)
     {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({10.0f, 6.0f, 10.0f}, {3.5f, 3.0f, 0.0f}, {0.0f, 1.0f, 0.0f});
+        world.step(dt);
+        if (step % 20 == 0)
+        {
+            accumulate();
+        }
     }
-    else if (name == "oscillator")
-    {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({5.0f, 2.5f, 6.0f}, {0.0f, 2.2f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    }
-    else if (name == "pendulum")
-    {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({4.5f, 3.2f, 6.5f}, {0.3f, 3.1f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    }
-    else if (name == "double_pendulum")
-    {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({7.0f, 4.2f, 9.0f}, {0.6f, 3.2f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    }
-    else if (name == "chain")
-    {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({6.0f, 3.0f, 7.0f}, {0.0f, 3.6f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    }
-    else if (name == "dzhanibekov")
-    {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({4.0f, 2.0f, 5.0f}, {0.0f, 0.6f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    }
-    else if (name == "gyro")
-    {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({3.0f, 2.0f, 4.5f}, {0.0f, -0.3f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    }
-    else if (name == "masses")
-    {
-        setPhysicsCamera(scene, aspect);
-        scene.camera().lookAt({0.0f, 3.4f, 9.0f}, {0.0f, 2.4f, 0.0f}, {0.0f, 1.0f, 0.0f});
-    }
+
+    constexpr float kFovY = 50.0f;
+    scene.camera().setPerspective(kFovY, aspect, 0.05f, 1000.0f);
+    // Bodies fall through the ground (no collisions yet); never frame below it.
+    lower.y = std::max(lower.y, 0.0f);
+    upper.y = std::max(upper.y, lower.y + 0.5f);
+    const glm::vec3 target = 0.5f * (lower + upper);
+    const float radius = std::max(0.5f * glm::length(upper - lower), 0.75f);
+    const float halfFovY = glm::radians(kFovY) * 0.5f;
+    const float halfFovX = std::atan(std::tan(halfFovY) * aspect);
+    const float distance = 1.15f * radius / std::sin(std::min(halfFovY, halfFovX));
+    scene.camera().lookAt(target + viewDirection(name) * distance, target, {0.0f, 1.0f, 0.0f});
 }
 
 void buildSceneFromWorld(const physics::PhysicsWorld& world, render::Scene& scene, const std::shared_ptr<render::Mesh>& cube,
@@ -385,22 +427,52 @@ void drawPhysicsSceneDebug(const std::string& name, const physics::PhysicsWorld&
         return glm::vec3(static_cast<float>(p.x), static_cast<float>(p.y), static_cast<float>(p.z));
     };
 
+    // Every dynamic body: its local axes (X red, Y green, Z blue, sized to the
+    // body) and its linear velocity (white, drawn as the distance covered in
+    // kVelocityScale seconds).
+    constexpr float kVelocityScale = 0.25f;
+    const glm::vec4 kVelocityColor{1.0f, 1.0f, 1.0f, 1.0f};
+    for (std::size_t i = 0; i < world.bodyCount(); ++i)
+    {
+        const physics::RigidBody& body = world.body(i);
+        if (!body.isDynamic())
+        {
+            continue;
+        }
+        const glm::vec3 origin = position(i);
+        const glm::quat q = glm::quat(body.orientation);
+        const float axisLength = 1.6f * static_cast<float>(boundingRadius(body.shape));
+        draw.addLine(origin, origin + q * glm::vec3(axisLength, 0.0f, 0.0f), kAxisX);
+        draw.addLine(origin, origin + q * glm::vec3(0.0f, axisLength, 0.0f), kAxisY);
+        draw.addLine(origin, origin + q * glm::vec3(0.0f, 0.0f, axisLength), kAxisZ);
+        const glm::vec3 velocity(body.linearVelocity);
+        if (glm::length(velocity) > 1e-3f)
+        {
+            draw.addLine(origin, origin + velocity * kVelocityScale, kVelocityColor);
+        }
+    }
+
     if (name == "drop")
     {
-        // Analytic parabola the numeric trajectory is expected to follow.
-        constexpr int kSegments = 24;
-        const glm::vec3 start(0.0f, 2.0f, 0.0f);
-        const glm::vec3 velocity(5.0f, 8.0f, 0.0f);
+        // Analytic trajectories the numeric ones are expected to follow: the
+        // projectile's parabola and the free-falling body's vertical line,
+        // both drawn down to the ground.
+        constexpr int kSegments = 32;
         constexpr float kGravity = 9.80665f;
-        const float duration = static_cast<float>(kSettleTime);
-        glm::vec3 previous = start;
-        for (int i = 1; i <= kSegments; ++i)
-        {
-            const float t = duration * static_cast<float>(i) / static_cast<float>(kSegments);
-            const glm::vec3 point = start + velocity * t + glm::vec3(0.0f, -0.5f * kGravity * t * t, 0.0f);
-            draw.addLine(previous, point, kTrajectoryColor);
-            previous = point;
-        }
+        const auto analytic = [&](const glm::vec3& start, const glm::vec3& velocity) {
+            const float landing =
+                (velocity.y + std::sqrt(velocity.y * velocity.y + 2.0f * kGravity * start.y)) / kGravity;
+            glm::vec3 previous = start;
+            for (int i = 1; i <= kSegments; ++i)
+            {
+                const float t = landing * static_cast<float>(i) / static_cast<float>(kSegments);
+                const glm::vec3 point = start + velocity * t + glm::vec3(0.0f, -0.5f * kGravity * t * t, 0.0f);
+                draw.addLine(previous, point, kTrajectoryColor);
+                previous = point;
+            }
+        };
+        analytic(kProjectileStart, kProjectileVelocity);
+        analytic(kFreeFallStart, glm::vec3(0.0f));
     }
     else if (name == "oscillator")
     {
@@ -439,8 +511,10 @@ void drawPhysicsSceneDebug(const std::string& name, const physics::PhysicsWorld&
     }
     else if (name == "masses")
     {
-        addSpring(draw, position(0), position(2), 8, 0.22f, kSpringColor);
-        addSpring(draw, position(1), position(3), 6, 0.14f, kSpringColor);
+        draw.addLine(position(0), position(1), kRodColor);
+        draw.addLine(position(1), position(2), kRodColor);
+        draw.addLine(position(3), position(4), kRodColor);
+        draw.addLine(position(4), position(5), kRodColor);
     }
 }
 

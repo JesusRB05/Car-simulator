@@ -47,7 +47,8 @@ if(SIM_ENABLE_GPU_TESTS)
 
     # Contact sheet: one labelled mosaic of every scene, for human review.
     add_test(NAME sim_contact_sheet
-             COMMAND $<TARGET_FILE:sim> --headless --contact-sheet "${_shot}/contact_sheet.png")
+             COMMAND $<TARGET_FILE:sim> --headless --contact-sheet "${_shot}/contact_sheet.png"
+                     --render-tests-sheet "${_shot}/render_tests_sheet.png")
 
     # Golden-image regression + semantic (projected pixel) checks per scene.
     # Approved references live in tests/golden/<driver>/, keyed by the Vulkan
