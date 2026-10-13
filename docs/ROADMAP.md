@@ -213,7 +213,14 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   P2.11). `Brake` (`vehicle/Brake.hpp`) closes the group with
   the disc torque, the front/rear bias and the thermal model (P2.12). For karts,
   `FrameTorsion` (`vehicle/FrameTorsion.hpp`) is the chassis torsion between the two
-  halves (Section 5.6).
+  halves (Section 5.6). P2.13 has started: `VehicleModel`
+  (`vehicle/VehicleModel.hpp`) assembles every component on one rigid chassis in a
+  `PhysicsWorld`, with raycast corners that read the tyre, the spring-damper and the
+  `IGroundQuery` surface, and a rear-wheel-drive driveline (engine, clutch, gearbox,
+  differential) plus brakes, Ackermann steering and aero; it implements
+  `IVehicleModel` and a `makeDefaultVehicleSetup()` describes the first car. The
+  `PlaceholderVehicle` and `RaycastCar` prototypes are still present and are removed
+  once the app drives the assembled model.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,
