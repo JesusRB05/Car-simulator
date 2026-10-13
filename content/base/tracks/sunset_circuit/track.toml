@@ -1,0 +1,49 @@
+# Sunset Circuit - base track descriptor (CC BY-SA 4.0).
+#
+# The driving demo builds this circuit procedurally in Track.cpp: a closed
+# centripetal Catmull-Rom spline through the control points below, resampled by
+# arc length over one smooth Gaussian hill. Nothing reads this file yet; it
+# records the intended parameters so a future data-driven loader can reproduce
+# the same layout from content.
+
+id = "sunset_circuit"
+name = "Sunset Circuit"
+author = "Car Simulator contributors"
+license = "CC BY-SA 4.0"
+description = "A short closed circuit with a long main straight, a hairpin, a fast sweeper and a chicane, laid over a gentle hill."
+
+[geometry]
+loop = true
+sample_spacing = 1.0        # metres between resampled centreline points
+half_width = 5.0            # asphalt half-width (metres, each side)
+kerb_width = 1.0            # kerb band beyond the asphalt (metres)
+
+# Centreline control points in the direction of travel (metres). Right-handed
+# world: +X right, +Y up, -Z forward; the car starts on the straight at x = 0
+# heading -Z. The start/finish line sits near z = 40.
+control_points = [
+    [0.0, 120.0],    # main straight
+    [0.0, 20.0],     # start/finish line around z = 40
+    [0.0, -90.0],    # end of the straight, braking zone
+    [6.0, -165.0],   # hairpin entry (right)
+    [28.0, -192.0],  # hairpin apex
+    [52.0, -170.0],  # hairpin exit
+    [55.0, -95.0],   # back straight over the hill
+    [105.0, -25.0],  # fast sweeper
+    [122.0, 55.0],   # sweeper exit
+    [98.0, 100.0],   # chicane (left)
+    [124.0, 128.0],  # chicane (right)
+    [96.0, 160.0],   # chicane exit
+    [48.0, 196.0],   # long left onto the main straight
+    [8.0, 168.0],
+]
+
+[terrain]
+# One smooth Gaussian hill gives a gentle elevation change (max grade ~5.5 %).
+hill_centre = [90.0, -60.0]  # [x, z] metres
+hill_height = 5.0            # metres
+hill_sigma = 55.0            # metres
+
+[model]
+# Placeholder: the renderer grows a glTF/KTX2 path (cgltf + ktx are available).
+mesh = "model/track.gltf"

@@ -9,6 +9,8 @@ content/
     README.txt
     LICENSE.txt
     scripts/main.lua
+    tracks/<id>/        <- track descriptor (track.toml) + model/
+    cars/<id>/          <- car descriptor (car.toml) + model/
 mods/                   <- user mods (scanned at start-up)
   my_mod/
     mod.toml
@@ -37,6 +39,16 @@ Current content:
 | `README.txt` | Description of the content tree |
 | `LICENSE.txt` | CC BY-SA 4.0 notice and reference to the root license |
 | `scripts/main.lua` | Entry script; only logs a load message |
+| `tracks/sunset_circuit/` | Track descriptor (`track.toml`) and a placeholder model |
+| `cars/voyager/` | Car descriptor (`car.toml`) and a placeholder model |
+
+A **track** lives in `tracks/<id>/` with a `track.toml` (control points,
+surface widths, terrain) and a `model/` folder; a **car** lives in `cars/<id>/`
+with a `car.toml` (chassis, suspension, wheels, engine, brakes, aero) and a
+`model/` folder. The demo currently builds both procedurally in
+`apps/sim/src/drive/`, and these descriptors record the same parameters so a
+future data-driven loader can reproduce them from content; nothing reads them
+yet.
 
 Compiled *shaders* (`shaders/*.spv`) are **not** here: the build generates the
 SPIR-V next to the executable and the application mounts that directory after
