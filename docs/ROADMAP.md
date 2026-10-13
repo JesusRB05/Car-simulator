@@ -23,6 +23,14 @@ A **serious driving simulator**. The priorities, in this order:
 
 Targets: **Windows first**, designed so that **Linux** works without a rewrite.
 
+### Disciplines the physics must support
+
+One engine, with the differences expressed as data and optional modules:
+**circuit** (GT, touring), **rally**, **rallycross**, **karting** and **driving mode**
+(road cars). The capability matrix, the equations of every model, the validation
+manoeuvres and the numbered work packages are in the
+[vehicle physics technical plan](PHYSICS_PLAN.md); the phases below summarise it.
+
 ## Ground rules (apply to every phase)
 
 ### Realism
@@ -120,7 +128,9 @@ can run in parallel.
   across platforms.
 
 ### Phase 1 - Collisions and contacts (XL)
-The base the vehicle needs: tyres, chassis, walls and props all collide.
+The base the vehicle needs: chassis, walls and props collide (tyres use a dedicated
+ground interface, not rigid contacts). Work packages P1.1-P1.6 in the
+[technical plan](PHYSICS_PLAN.md#3-contacts-and-ground-interface-phase-1).
 - Broadphase (BVH/sweep-and-prune) and narrowphase for sphere, box, cylinder, convex
   hull (SAT or GJK/EPA), triangle mesh and heightfield for terrain.
 - Contact manifolds with persistent ids, friction (Coulomb cone), restitution,
@@ -136,7 +146,9 @@ The base the vehicle needs: tyres, chassis, walls and props all collide.
 
 ### Phase 2 - Vehicle dynamics, realism core (XL)
 The heart of the simulator. Everything implements `IVehicleModel` and its component
-interfaces; the prototype `RaycastCar` and `PlaceholderVehicle` are removed.
+interfaces; the prototype `RaycastCar` and `PlaceholderVehicle` are removed. Equations
+and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-model)
+(tyre, suspension, chassis and aerodynamics, powertrain and brakes).
 - **Tyres:** combined-slip model (Pacejka MF 6.x or equivalent), transient behaviour
   with relaxation length (needed for stability at low speed), camber and load
   dependence, self-aligning torque, rolling resistance, surface friction maps.
@@ -158,6 +170,9 @@ interfaces; the prototype `RaycastCar` and `PlaceholderVehicle` are removed.
   and pass the Phase 3 tests.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
+The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,
+ISO 3888-2, jumps, kart and rally cases) are listed in
+[PHYSICS_PLAN, Section 10](PHYSICS_PLAN.md#10-validation-plan); work packages P3.1-P3.6.
 - **Validation suite in CI** with reference values: braking distance
   (`v^2 / (2 mu g)`), steady-state circular driving (understeer gradient against the
   linear bicycle model), step steer and sine-sweep response, constant-radius
@@ -175,6 +190,9 @@ interfaces; the prototype `RaycastCar` and `PlaceholderVehicle` are removed.
   suite passes in CI. Visuals are still basic.
 
 ### Phase 4 - World physics (L)
+Surface table, road roughness (ISO 8608), loose-surface layer, wet roads and
+aquaplaning, jumps and weather: work packages P4.1-P4.7 in the
+[technical plan](PHYSICS_PLAN.md#8-surfaces-and-environment).
 - Track format: spline with per-segment surface/friction maps, banking and camber;
   glTF import with a collision mesh; kerbs, rumble strips and bumps as real geometry.
 - Surfaces: asphalt, concrete, wet, gravel, grass, snow/ice parameters; dynamic

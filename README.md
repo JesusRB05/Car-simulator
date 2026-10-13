@@ -191,6 +191,7 @@ docs/                Documentation
 ## Documentation
 
 - [Roadmap](docs/ROADMAP.md)
+- [Vehicle physics plan](docs/PHYSICS_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Building](docs/BUILDING.md)
 - [Physics](docs/FISICA.md)
