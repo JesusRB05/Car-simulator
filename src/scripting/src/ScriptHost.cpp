@@ -17,29 +17,35 @@ void ScriptHost::installApi()
 {
     sol::state_view view = sandbox_.view();
 
-    view.set_function("sim.log", [this](std::string message) {
+    // Everything lives in a `sim` table. (set_function("sim.log", ...) would
+    // create a global literally named "sim.log", and indexing the missing
+    // `sim` table afterwards raised an unprotected Lua error that killed the
+    // windowed app at startup.)
+    sol::table sim = view.create_named_table("sim");
+
+    sim.set_function("log", [this](std::string message) {
         core::Log::forMod(currentMod_)->info("{}", message);
     });
 
-    view.set_function("sim.read", [this](std::string path) -> std::optional<std::string> {
+    sim.set_function("read", [this](std::string path) -> std::optional<std::string> {
         return vfs_.readText(path);
     });
 
-    view.set_function("sim.register_on_load", [this](sol::protected_function function) {
+    sim.set_function("register_on_load", [this](sol::protected_function function) {
         if (onLoadTarget_ != nullptr)
         {
             onLoadTarget_->push_back(std::move(function));
         }
     });
 
-    view.set_function("sim.register_on_update", [this](sol::protected_function function) {
+    sim.set_function("register_on_update", [this](sol::protected_function function) {
         if (onUpdateTarget_ != nullptr)
         {
             onUpdateTarget_->push_back(std::move(function));
         }
     });
 
-    view["sim"]["game_version"] = std::string(core::kVersionString);
+    sim["game_version"] = std::string(core::kVersionString);
 }
 
 bool ScriptHost::loadScript(std::string_view modId, std::string_view virtualPath)

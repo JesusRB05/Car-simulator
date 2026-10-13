@@ -8,6 +8,7 @@
 #include <string>
 
 #include "scripting/LuaSandbox.hpp"
+#include "scripting/ScriptHost.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
 using sim::scripting::LuaSandbox;
@@ -123,6 +124,40 @@ TEST_CASE("VFS: a higher-priority mod overrides base content")
         const auto restored = vfs.readText("cars/car.json");
         REQUIRE(restored.has_value());
         CHECK(*restored == "base");
+    }
+
+    std::error_code ignored;
+    fs::remove_all(root, ignored);
+}
+
+TEST_CASE("ScriptHost exposes the documented sim API and runs an entry script")
+{
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "sim_tests_script_host";
+    fs::remove_all(root);
+    // Same shape as content/base/scripts/main.lua: uses every sim.* entry point.
+    writeFile(root / "scripts" / "main.lua",
+              "sim.log('loaded ' .. sim.game_version)\n"
+              "assert(type(sim.read) == 'function')\n"
+              "assert(sim.read('scripts/main.lua') ~= nil)\n"
+              "loaded = 0; updates = 0\n"
+              "sim.register_on_load(function() loaded = loaded + 1 end)\n"
+              "sim.register_on_update(function(dt) updates = updates + dt end)\n");
+
+    {
+        sim::vfs::VirtualFileSystem vfs;
+        REQUIRE(vfs.mount(root));
+        LuaSandbox sandbox;
+        sim::scripting::ScriptHost host(sandbox, vfs);
+
+        REQUIRE(host.loadScript("test", "scripts/main.lua"));
+        host.callOnLoad();
+        host.callOnUpdate(0.25);
+        host.callOnUpdate(0.25);
+
+        std::string error;
+        CHECK(sandbox.run("assert(loaded == 1 and updates == 0.5)", "check", error));
+        CHECK(error.empty());
     }
 
     std::error_code ignored;
