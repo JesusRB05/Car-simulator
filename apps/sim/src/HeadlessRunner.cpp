@@ -40,7 +40,6 @@ namespace sim::app {
 namespace {
 
 constexpr rhi::Format kColorFormat = rhi::Format::R8G8B8A8Unorm;
-constexpr float kClear[4] = {0.05f, 0.06f, 0.08f, 1.0f};
 
 std::filesystem::path searchForRoot(const std::filesystem::path& exeDir)
 {
@@ -138,7 +137,8 @@ std::vector<std::uint8_t> renderFrames(rhi::Device& device, render::Renderer& re
         attachment.image = reinterpret_cast<std::uint64_t>(target.color->view());
         attachment.layout = rhi::ImageLayout::ColorAttachment;
         attachment.loadOp = rhi::LoadOp::Clear;
-        std::memcpy(attachment.clearColor, kClear, sizeof(kClear));
+        const glm::vec4& sky = scene.skyColor();
+        std::memcpy(attachment.clearColor, &sky.r, sizeof(attachment.clearColor));
 
         renderer.updateFrameUniforms(0, scene.camera(), scene.lightDirection(), scene.lightColor());
         renderer.renderScene(commandList, scene, attachment, 0);
@@ -323,31 +323,121 @@ bool checkSemantics(const render::Scene& scene, const std::vector<SceneProbe>& p
     return ok;
 }
 
-// Proves the frame is not vertically flipped by sampling the centre column: with
-// the horizontal camera of the "orientation" scene the top of the image must be
-// the clear (sky) colour and the bottom must be ground. Used on top of the
-// off-axis chromaticity probes of that scene.
-bool checkOrientationHorizon(const std::vector<std::uint8_t>& pixels, rhi::Extent2D extent)
+// Absolute orientation checks for the "orientation" scene that never touch the
+// projection matrix: they only look at pixels, so a wrong matrix convention
+// cannot make them agree with a wrong image.
+//
+//  1. Horizon: with a horizontal camera the top row is sky and the bottom row
+//     is ground.
+//  2. Placement: the pixel centroid of the box that is higher in the world is
+//     higher in the image, and the +X box is right of the -X box.
+//  3. Culling: the "high" box sits entirely above the eye, so only its front
+//     (+Z) and bottom (-Y) faces may be visible. The bottom face only gets the
+//     ground ambient and is darker than the sun-lit front face, so the lowest
+//     rows of its silhouette must be darker than the middle ones. With an
+//     inverted front face the interior shows instead: a bright +Y strip on top
+//     over a uniformly dark back face.
+bool checkOrientation(const render::Scene& scene, const std::vector<std::uint8_t>& pixels, rhi::Extent2D extent)
 {
-    const auto sample = [&](float relativeRow) {
-        const int x = static_cast<int>(static_cast<float>(extent.width) * 0.5f + 0.5f);
-        const int y = static_cast<int>(relativeRow * static_cast<float>(extent.height));
+    const int width = static_cast<int>(extent.width);
+    const int height = static_cast<int>(extent.height);
+    const auto pixel = [&](int x, int y) {
         const std::size_t i = (static_cast<std::size_t>(y) * extent.width + static_cast<std::size_t>(x)) * 4;
         return glm::vec3(pixels[i] / 255.0f, pixels[i + 1] / 255.0f, pixels[i + 2] / 255.0f);
     };
+    bool ok = true;
 
-    const glm::vec3 sky(glm::vec3(kClear[0], kClear[1], kClear[2]));
-    const glm::vec3 top = sample(0.08f);
-    const glm::vec3 bottom = sample(0.92f);
-    const glm::vec3 topDiff = glm::abs(top - sky);
-    const float bottomDiff = glm::length(bottom - sky);
+    // 1. Horizon, sampled along the centre column.
+    const glm::vec3 sky(scene.skyColor());
+    const glm::vec3 top = pixel(width / 2, height / 20);
+    const glm::vec3 bottom = pixel(width / 2, height - 1 - height / 20);
+    const bool horizonOk = glm::length(top - sky) < 0.05f && glm::length(bottom - sky) > 0.15f;
+    std::printf("[headless] orientation horizon: top=(%.3f,%.3f,%.3f) sky=(%.3f,%.3f,%.3f) bottom=(%.3f,%.3f,%.3f) %s\n", top.r, top.g,
+                top.b, sky.r, sky.g, sky.b, bottom.r, bottom.g, bottom.b, horizonOk ? "ok" : "FAIL");
+    ok = ok && horizonOk;
 
-    std::printf("[headless] orientation horizon: top=(%.3f,%.3f,%.3f) vs sky, bottom=(%.3f,%.3f,%.3f) dist %.3f %s\n", top.r, top.g,
-                top.b, bottom.r, bottom.g, bottom.b, bottomDiff, topDiff.r < 0.05f && topDiff.g < 0.05f && topDiff.b < 0.05f
-                                                                       && bottomDiff > 0.15f
-                                                                       ? "ok"
-                                                                       : "FAIL");
-    return topDiff.r < 0.05f && topDiff.g < 0.05f && topDiff.b < 0.05f && bottomDiff > 0.15f;
+    // Pixels of a box, found by chromaticity (shading scales all channels).
+    struct Blob
+    {
+        double sumX = 0.0;
+        double sumY = 0.0;
+        int count = 0;
+        int minY = 1 << 30;
+        int maxY = -1;
+        glm::vec2 centroid() const { return {static_cast<float>(sumX / count), static_cast<float>(sumY / count)}; }
+    };
+    const auto chroma = [](const glm::vec3& c) { return c / (c.r + c.g + c.b + 1e-5f); };
+    const auto matches = [&](const glm::vec3& c, const glm::vec4& base) {
+        const glm::vec3 d = glm::abs(chroma(c) - chroma(glm::vec3(base)));
+        return std::max({d.x, d.y, d.z}) < 0.06f && (c.r + c.g + c.b) > 0.03f;
+    };
+    const auto findBlob = [&](const glm::vec4& base) {
+        Blob blob;
+        for (int y = 0; y < height; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                if (matches(pixel(x, y), base))
+                {
+                    blob.sumX += x;
+                    blob.sumY += y;
+                    ++blob.count;
+                    blob.minY = std::min(blob.minY, y);
+                    blob.maxY = std::max(blob.maxY, y);
+                }
+            }
+        }
+        return blob;
+    };
+
+    const std::vector<SceneProbe> boxes = sceneProbes("orientation"); // reference, high, left, right
+    const Blob reference = findBlob(boxes[0].color);
+    const Blob high = findBlob(boxes[1].color);
+    const Blob left = findBlob(boxes[2].color);
+    const Blob right = findBlob(boxes[3].color);
+    if (reference.count < 50 || high.count < 50 || left.count < 50 || right.count < 50)
+    {
+        std::fprintf(stderr, "[headless] orientation: a box is missing (pixels ref=%d high=%d left=%d right=%d)\n", reference.count,
+                     high.count, left.count, right.count);
+        return false;
+    }
+
+    // 2. Placement.
+    const bool aboveOk = high.centroid().y < reference.centroid().y;
+    const bool rightOk = right.centroid().x > left.centroid().x;
+    std::printf("[headless] orientation placement: high y=%.1f < reference y=%.1f %s, right x=%.1f > left x=%.1f %s\n",
+                high.centroid().y, reference.centroid().y, aboveOk ? "ok" : "FAIL", right.centroid().x, left.centroid().x,
+                rightOk ? "ok" : "FAIL");
+    ok = ok && aboveOk && rightOk;
+
+    // 3. Culling, from the mean luminance of horizontal bands of the high box.
+    const auto bandLuminance = [&](float from, float to) {
+        const int span = high.maxY - high.minY + 1;
+        const int y0 = high.minY + static_cast<int>(from * static_cast<float>(span));
+        const int y1 = high.minY + static_cast<int>(to * static_cast<float>(span));
+        double sum = 0.0;
+        int count = 0;
+        for (int y = y0; y < y1; ++y)
+        {
+            for (int x = 0; x < width; ++x)
+            {
+                const glm::vec3 c = pixel(x, y);
+                if (matches(c, boxes[1].color))
+                {
+                    sum += 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+                    ++count;
+                }
+            }
+        }
+        return count > 0 ? static_cast<float>(sum / count) : 0.0f;
+    };
+    const float topBand = bandLuminance(0.0f, 0.15f);
+    const float middleBand = bandLuminance(0.40f, 0.60f);
+    const float bottomBand = bandLuminance(0.88f, 1.0f);
+    const bool cullingOk = bottomBand < 0.85f * middleBand && topBand < 1.10f * middleBand;
+    std::printf("[headless] orientation culling: high box luminance top=%.3f middle=%.3f bottom=%.3f %s\n", topBand, middleBand,
+                bottomBand, cullingOk ? "ok" : "FAIL");
+    return ok && cullingOk;
 }
 
 // ---- Contact sheet ---------------------------------------------------------
@@ -601,7 +691,7 @@ int runHeadless(const HeadlessOptions& options)
             {
                 result = 4;
             }
-            else if (options.scene == "orientation" && !checkOrientationHorizon(pixels, target.extent))
+            else if (options.scene == "orientation" && !checkOrientation(scene, pixels, target.extent))
             {
                 result = 4;
             }

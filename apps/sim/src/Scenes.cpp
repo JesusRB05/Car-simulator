@@ -217,7 +217,7 @@ bool buildScene(const std::string& name, render::Scene& scene, const std::shared
     // image and +X world the right, so each box lands where its probe expects;
     // a vertically flipped image fails the probes. The "sky top / ground
     // bottom" horizon is checked separately by the headless runner
-    // (checkOrientationHorizon).
+    // (checkOrientation), without using the projection matrix.
     if (name == "orientation")
     {
         addBox(scene, cube, {0.0f, 0.9f, -8.0f}, {1.0f, 1.0f, 1.0f}, glm::vec4(0.85f, 0.35f, 0.30f, 1.0f)); // reference

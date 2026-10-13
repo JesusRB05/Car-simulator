@@ -827,7 +827,9 @@ int Application::run()
         const double gpuMs = gpuTimer_->readMilliseconds(frame_->slot());
         renderer_->updateFrameUniforms(frame_->slot(), scene_.camera(), scene_.lightDirection(), scene_.lightColor());
         gpuTimer_->begin(commandList, frame_->slot());
-        renderer_->renderScene(commandList, scene_, frame_->swapchainAttachment(), frame_->slot());
+        const glm::vec4& sky = scene_.skyColor();
+        renderer_->renderScene(commandList, scene_, frame_->swapchainAttachment(rhi::LoadOp::Clear, sky.r, sky.g, sky.b, sky.a),
+                               frame_->slot());
         gpuTimer_->end(commandList, frame_->slot());
         const bool physicsOverlay = !sceneWorldName_.empty();
         if ((debugDrawEnabled_ || physicsOverlay) && debugDraw_ != nullptr)

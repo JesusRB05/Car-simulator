@@ -37,9 +37,15 @@ public:
     const glm::vec4& lightDirection() const { return lightDirection_; }
     const glm::vec4& lightColor() const { return lightColor_; }
 
+    // Background (clear) colour. It doubles as the sky: the orientation checks
+    // expect the top of a horizontal view to be this colour.
+    void setSkyColor(const glm::vec4& color) { skyColor_ = color; }
+    const glm::vec4& skyColor() const { return skyColor_; }
+
 private:
     std::vector<Drawable> drawables_;
     Camera camera_;
+    glm::vec4 skyColor_{0.42f, 0.58f, 0.80f, 1.0f};
     glm::vec4 lightDirection_{-0.4f, -1.0f, -0.3f, 0.0f};
     glm::vec4 lightColor_{1.0f, 1.0f, 1.0f, 1.0f};
 };
