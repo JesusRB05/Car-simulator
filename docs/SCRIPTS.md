@@ -52,6 +52,18 @@ rechaza bytecode precompilado: no se puede colar código compilado malicioso.
 aborta **ese** script sin congelar el simulador. Así un `while true do end` no
 bloquea el juego. El presupuesto se ajusta con `setInstructionBudget()`.
 
+### JIT engine disabled (English note)
+
+LuaJIT does not call debug hooks while executing JIT-compiled traces, so once a
+hot loop such as `while true do end` is compiled the instruction-count hook
+never fires again and the game would hang. `LuaSandbox` therefore calls
+`luaJIT_setmode(L, 0, LUAJIT_MODE_ENGINE | LUAJIT_MODE_OFF)` right after
+creating the state, before any mod script is loaded: all mod code runs in the
+LuaJIT interpreter, where the budget is always enforced. The `jit` and `ffi`
+libraries are never opened and their globals are cleared, so scripts cannot
+turn the engine back on. Mod scripts are small gameplay glue, so the
+interpreter's speed is more than enough; safety wins over raw throughput.
+
 ## Carga
 
 `ScriptHost::loadScript(modId, ruta)` lee el script del VFS y lo ejecuta. Las

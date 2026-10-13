@@ -14,7 +14,8 @@
 namespace sim::scripting {
 
 // A locked-down Lua state. Dangerous libraries (io, os, package, debug, ffi)
-// are never opened; the base library is opened but `load`, `loadstring`,
+// are never opened (and the LuaJIT JIT engine is disabled so the budget hook
+// always fires); the base library is opened but `load`, `loadstring`,
 // `dofile`, `loadfile`, `require` and `string.dump` are removed so that
 // bytecode cannot be loaded. Chunks are loaded in text-only mode to reject
 // precompiled bytecode outright.
@@ -54,8 +55,27 @@ private:
         std::uint64_t used = 0;
     };
 
+    // Owns the raw Lua state and closes it on destruction. Declared before
+    // `view_` so that the sol2 view (which holds registry references) is
+    // destroyed first; closing the state earlier crashes on unref.
+    struct StateOwner
+    {
+        lua_State* state = nullptr;
+        explicit StateOwner(lua_State* s) : state(s) {}
+        ~StateOwner()
+        {
+            if (state != nullptr)
+            {
+                lua_close(state);
+            }
+        }
+        StateOwner(const StateOwner&) = delete;
+        StateOwner& operator=(const StateOwner&) = delete;
+    };
+
     static void instructionHook(lua_State* state, lua_Debug* debug);
 
+    StateOwner owner_;
     lua_State* state_ = nullptr;
     sol::state_view view_;
     Budget* budgetState_ = nullptr;

@@ -4,6 +4,8 @@
 
 #include "core/Log.hpp"
 
+#include <luajit.h>
+
 namespace sim::scripting {
 namespace {
 
@@ -21,14 +23,21 @@ std::string popString(lua_State* state)
 
 } // namespace
 
-LuaSandbox::LuaSandbox() : state_(luaL_newstate()), view_(state_)
+LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(state_)
 {
     budgetState_ = new Budget();
     lua_pushlightuserdata(state_, const_cast<char*>(&kBudgetKey));
     lua_pushlightuserdata(state_, budgetState_);
     lua_rawset(state_, LUA_REGISTRYINDEX);
 
-    // Only safe libraries are opened. io, os, package, debug and ffi stay closed.
+    // LuaJIT does not run debug hooks inside JIT-compiled traces, so a hot loop
+    // such as `while true do end` would escape the instruction budget once it
+    // is compiled. Turn the JIT engine off for this state before any script is
+    // loaded: everything runs in the interpreter, where the count hook fires.
+    luaJIT_setmode(state_, 0, LUAJIT_MODE_ENGINE | LUAJIT_MODE_OFF);
+
+    // Only safe libraries are opened. io, os, package, debug, ffi and jit stay
+    // closed.
     view_.open_libraries(sol::lib::base, sol::lib::coroutine, sol::lib::math, sol::lib::string, sol::lib::table);
 
     // Remove everything that could escape the sandbox or load bytecode.
@@ -42,15 +51,13 @@ LuaSandbox::LuaSandbox() : state_(luaL_newstate()), view_(state_)
     globals["io"] = sol::nil;
     globals["package"] = sol::nil;
     globals["debug"] = sol::nil;
+    globals["ffi"] = sol::nil;
+    globals["jit"] = sol::nil;
 }
 
 LuaSandbox::~LuaSandbox()
 {
-    if (state_ != nullptr)
-    {
-        lua_close(state_);
-        state_ = nullptr;
-    }
+    // The Lua state itself is closed by owner_ after view_ is destroyed.
     delete budgetState_;
     budgetState_ = nullptr;
 }

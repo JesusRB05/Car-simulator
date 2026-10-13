@@ -5,7 +5,8 @@ add_executable(sim_tests
     test_core.cpp
     test_modding.cpp
     test_physics.cpp
-    test_render_math.cpp)
+    test_render_math.cpp
+    test_scripting.cpp)
 
 target_include_directories(sim_tests PRIVATE .)
 
@@ -15,11 +16,15 @@ target_link_libraries(sim_tests
         sim::modding
         sim::physics
         sim::render
+        sim::scripting
+        sim::vfs
         doctest::doctest)
 
 sim_configure_target(sim_tests)
 
 add_test(NAME sim_tests COMMAND sim_tests)
+# Generous timeout: the Lua sandbox tests must never hang on a runaway script.
+set_tests_properties(sim_tests PROPERTIES TIMEOUT 300)
 
 # Headless offscreen GPU smoke tests. They need a Vulkan ICD (SwiftShader
 # locally, Mesa lavapipe in CI) supplied through VK_ICD_FILENAMES. Enable with
