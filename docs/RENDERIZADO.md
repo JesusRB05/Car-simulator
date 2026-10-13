@@ -208,7 +208,9 @@ sus dos extremos y su color (`debug.slang`), sin búfer de vértices por línea.
 dibuja **sin test de profundidad** (`depthTest=false`) como superposición, por lo
 que sirve para rejillas, ejes y gizmos, no como geometría ocluida. En la ventana
 se alterna con `G` (o la casilla «Debug grid» del panel *View*); en headless con
-`--debug-draw`.
+`--debug-draw`. En las **escenas de física** la superposición está activa por
+defecto en ambos modos (rejilla + ejes + las líneas propias de la escena), de
+modo que el estado del mundo se vea sin pasos extra.
 
 ## ImGui
 

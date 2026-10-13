@@ -829,11 +829,16 @@ int Application::run()
         gpuTimer_->begin(commandList, frame_->slot());
         renderer_->renderScene(commandList, scene_, frame_->swapchainAttachment(), frame_->slot());
         gpuTimer_->end(commandList, frame_->slot());
-        if (debugDrawEnabled_ && debugDraw_ != nullptr)
+        const bool physicsOverlay = !sceneWorldName_.empty();
+        if ((debugDrawEnabled_ || physicsOverlay) && debugDraw_ != nullptr)
         {
             debugDraw_->clear();
             debugDraw_->addGrid(20.0f, 1.0f, {0.55f, 0.58f, 0.62f, 1.0f}, {0.75f, 0.30f, 0.20f, 1.0f});
             debugDraw_->addAxes({0.0f, 0.02f, 0.0f}, 3.0f);
+            if (physicsOverlay)
+            {
+                drawPhysicsSceneDebug(sceneWorldName_, *sceneWorld_, *debugDraw_);
+            }
             rhi::ColorAttachment overlay = frame_->swapchainAttachment();
             overlay.loadOp = rhi::LoadOp::Load;
             debugDraw_->render(commandList, scene_.camera(), overlay);
