@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <sstream>
+#include <vector>
 
 // Every interface header is included so that it is compile-checked here.
 #include "vehicle/AntiRollBar.hpp"
@@ -906,6 +907,50 @@ TEST_CASE("the bushing restores its six degrees of freedom per axis") {
     const BushingForces rest = computeBushingForces(c, {});
     CHECK(glm::length(rest.force) == doctest::Approx(0.0));
     CHECK(glm::length(rest.moment) == doctest::Approx(0.0));
+}
+
+TEST_CASE("a quarter car rides and damps at its analytic rate") {
+    const Real m = 300.0;
+    SpringDamperCoefficients c;
+    c.stiffness = 30000.0;
+    c.restLength = 0.30;
+    c.dampingCompression = 2000.0;
+    c.dampingRebound = 2000.0;
+
+    const Real omegaN = std::sqrt(c.stiffness / m);
+    const Real zeta = c.dampingCompression / (2.0 * std::sqrt(c.stiffness * m));
+    const Real omegaD = omegaN * std::sqrt(1.0 - zeta * zeta);
+
+    const Real dt = 1.0e-5;
+    Real x = 0.05; // compression (m), positive in bump
+    Real v = 0.0;
+    std::vector<Real> zeros;
+    std::vector<Real> peaks;
+    const int steps = 200000; // 2 s
+    for (int i = 0; i < steps; ++i) {
+        const SpringDamperForces f = computeSpringDamperForces(c, {c.restLength - x, v});
+        const Real a = -f.total() / m;
+        const Real vNext = v + a * dt;
+        const Real xNext = x + vNext * dt;
+        if (v > 0.0 && vNext <= 0.0) {
+            peaks.push_back(x); // a positive peak of the response
+        }
+        if (x > 0.0 && xNext <= 0.0) {
+            zeros.push_back(static_cast<Real>(i) * dt); // a downward zero crossing
+        }
+        x = xNext;
+        v = vNext;
+    }
+
+    REQUIRE(zeros.size() >= 3);
+    REQUIRE(peaks.size() >= 2);
+
+    const Real measuredOmega = 2.0 * 3.14159265358979323846 / (zeros[1] - zeros[0]);
+    CHECK(measuredOmega == doctest::Approx(omegaD).epsilon(2.0e-3));
+
+    const Real logDecrement = std::log(peaks[0] / peaks[1]);
+    const Real analytic = 2.0 * 3.14159265358979323846 * zeta / std::sqrt(1.0 - zeta * zeta);
+    CHECK(logDecrement == doctest::Approx(analytic).epsilon(2.0e-2));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {

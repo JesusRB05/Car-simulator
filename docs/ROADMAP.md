@@ -198,7 +198,8 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   (`vehicle/SpringDamper.hpp`) adds the coil spring, the asymmetric damper (linear
   or piecewise-linear table) and the progressive bump and rebound stops,
   `AntiRollBar` (`vehicle/AntiRollBar.hpp`) the roll-stiffness couple and
-  `Bushing` (`vehicle/Bushing.hpp`) the per-axis pivot compliance (P2.7).
+  `Bushing` (`vehicle/Bushing.hpp`) the per-axis pivot compliance (P2.7), whose
+  ride and damping are checked against the analytic quarter-car response.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,

@@ -55,10 +55,11 @@ struct SpringDamperCoefficients {
     Real reboundStopExponent = 2.0;  // n >= 1
 };
 
-// State of the element for one step.
+// State of the element for one step. The velocity is the compression rate (the
+// rate at which the element shortens), positive in bump.
 struct SpringDamperState {
     Real length = 0.0;   // l (m)
-    Real velocity = 0.0; // dl/dt (m/s), + = compression
+    Real velocity = 0.0; // compression rate (m/s), + = shortening
 };
 
 // The four contributions, kept apart so they can be validated individually.
