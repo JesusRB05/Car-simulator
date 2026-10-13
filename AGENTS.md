@@ -76,6 +76,6 @@ cmake --build --preset windows-msvc-release --target sim_tests # suite
 ## Git
 
 - Commits lógicos, mensajes estilo Conventional Commits en inglés, y **todos
-  firmados con DCO** (`git commit -s`); ver `docs/CONTRIBUIR.md`.
+  firmados con DCO** (`git commit -s`); ver `docs/CONTRIBUTING.md`.
 - No hacer push automático si no hay credenciales; el remoto `origin` puede ser
   un placeholder.

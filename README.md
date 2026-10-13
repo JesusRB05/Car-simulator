@@ -91,7 +91,7 @@ cmake --preset windows-msvc-debug -DSIM_SLANGC=C:\ruta\slang\bin\slangc.exe
 
 En Linux se ofrecen los presets `linux-gcc-*` y `linux-clang-*`.
 
-Instrucciones detalladas en [`docs/CONSTRUCCION.md`](docs/CONSTRUCCION.md).
+Instrucciones detalladas en [`docs/BUILDING.md`](docs/BUILDING.md).
 
 ## Tests de GPU sin GPU (headless)
 
@@ -193,16 +193,16 @@ docs/                Documentación (español)
 
 ## Documentación
 
-- [Arquitectura](docs/ARQUITECTURA.md)
-- [Compilación](docs/CONSTRUCCION.md)
+- [Arquitectura](docs/ARCHITECTURE.md)
+- [Compilación](docs/BUILDING.md)
 - [Física](docs/FISICA.md)
 - [Renderizado](docs/RENDERIZADO.md)
 - [Sistema de mods](docs/MODS.md)
 - [Scripting (Lua)](docs/SCRIPTS.md)
 - [Plugins nativos](docs/PLUGINS.md)
-- [Contenido y licencias](docs/CONTENIDO.md)
-- [Decisiones de diseño y limitaciones](docs/DECISIONES.md)
-- [Contribuir](docs/CONTRIBUIR.md)
+- [Contenido y licencias](docs/CONTENT.md)
+- [Decisiones de diseño y limitaciones](docs/DECISIONS.md)
+- [Contribuir](docs/CONTRIBUTING.md)
 
 ## Licencia
 

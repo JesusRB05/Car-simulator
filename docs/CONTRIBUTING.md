@@ -15,7 +15,7 @@ mantiene en abierto.
 
 ## Poner en marcha el entorno
 
-Sigue [`CONSTRUCCION.md`](CONSTRUCCION.md). Resumen:
+Sigue [`BUILDING.md`](BUILDING.md). Resumen:
 
 ```powershell
 cmake --preset windows-msvc-debug
@@ -116,7 +116,7 @@ cuyos commits carezcan de `Signed-off-by`.
 El contenido nuevo normalmente va en un **mod** (`mods/`), no en el árbol base.
 Para contribuir al contenido oficial (`content/base`), respeta la licencia
 **CC BY-SA 4.0** y no uses marcas reales. Más detalles en
-[`MODS.md`](MODS.md) y [`CONTENIDO.md`](CONTENIDO.md).
+[`MODS.md`](MODS.md) y [`CONTENT.md`](CONTENT.md).
 
 ## Licencia de las contribuciones
 

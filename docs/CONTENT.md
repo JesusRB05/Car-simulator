@@ -67,7 +67,7 @@ dentro. Se montarán sobre el contenido base y podrán sustituir sus ficheros.
 
 Si quieres contribuir al contenido oficial, añade los ficheros dentro de
 `content/base/` respetando la licencia CC BY-SA 4.0 y actualiza su `mod.toml`
-si procede. Consulta [CONTRIBUIR.md](CONTRIBUIR.md).
+si procede. Consulta [CONTRIBUTING.md](CONTRIBUTING.md).
 
 No hay un formato de malla ni de textura cerrado todavía: mientras el
 renderizador crece, el contenido puede ir en formato intermedio (`cgltf` y `ktx`
