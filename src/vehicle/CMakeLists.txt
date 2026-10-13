@@ -56,6 +56,9 @@ add_library(sim_vehicle STATIC
     # Driveline torsional compliance (Phase 2, P2.10).
     include/vehicle/DrivelineCompliance.hpp
     src/DrivelineCompliance.cpp
+    # Disc brakes and their thermal model (Phase 2, P2.12).
+    include/vehicle/Brake.hpp
+    src/Brake.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

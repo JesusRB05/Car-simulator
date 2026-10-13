@@ -9,6 +9,7 @@
 // Every interface header is included so that it is compile-checked here.
 #include "vehicle/Aerodynamics.hpp"
 #include "vehicle/AntiRollBar.hpp"
+#include "vehicle/Brake.hpp"
 #include "vehicle/Bushing.hpp"
 #include "vehicle/Clutch.hpp"
 #include "vehicle/Differential.hpp"
@@ -1260,6 +1261,34 @@ TEST_CASE("the driveline compliance springs, damps and lashes") {
     CHECK(computeDrivelineTorque(shaft, {0.05, 0.0}) == doctest::Approx(0.0));
     CHECK(computeDrivelineTorque(shaft, {0.30, 0.0}) == doctest::Approx(1000.0 * 0.2));
     CHECK(computeDrivelineTorque(shaft, {-0.30, 0.0}) == doctest::Approx(-1000.0 * 0.2));
+}
+
+TEST_CASE("the disc brake torque and thermal model") {
+    DiscBrake brake;
+    brake.padFrictionCoefficient = 0.4;
+    brake.pistonArea = 0.002;
+    brake.effectiveRadius = 0.13;
+
+    CHECK(brake.torque(1.0e6) == doctest::Approx(2.0 * 0.4 * 0.002 * 1.0e6 * 0.13));
+    brake.thresholdPressure = 2.0e5;
+    CHECK(brake.torque(1.0e5) == doctest::Approx(0.0)); // below the threshold
+    CHECK(brake.torque(2.0e5) == doctest::Approx(0.0));
+
+    const BrakeBias bias{0.6, 2.0e6};
+    CHECK(frontLinePressure(1.0e7, bias) == doctest::Approx(6.0e6));
+    CHECK(rearLinePressure(1.0e7, bias) == doctest::Approx(6.0e6)); // 4e6 + 2e6 from the handbrake
+
+    BrakeThermal thermal;
+    thermal.discMass = 5.0;
+    thermal.specificHeat = 500.0;
+    thermal.convectionCoefficient = 0.0;
+    thermal.emissivity = 0.0;
+    // 200 N*m at 10 rad/s is 2000 W into 2500 J/K, so 0.8 K in one second.
+    CHECK(stepBrakeTemperature(thermal, 293.15, 200.0, 10.0, 1.0) == doctest::Approx(293.95));
+
+    thermal.convectionCoefficient = 50.0; // h A = 5 W/K
+    // At 10 K above ambient the cooling is 50 W, so (2000 - 50)/2500.
+    CHECK(stepBrakeTemperature(thermal, 303.15, 200.0, 10.0, 1.0) == doctest::Approx(303.15 + 1950.0 / 2500.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
