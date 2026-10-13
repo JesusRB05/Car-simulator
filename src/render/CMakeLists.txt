@@ -18,10 +18,3 @@ target_link_libraries(sim_render
         sim::rhi
         glm::glm)
 sim_configure_target(sim_render)
-
-if(SIM_ENABLE_SLANG)
-    sim_slang_shader(sim_render "${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.slang" vertexMain vertex)
-    sim_slang_shader(sim_render "${CMAKE_CURRENT_SOURCE_DIR}/shaders/mesh.slang" fragmentMain fragment)
-    sim_slang_shader(sim_render "${CMAKE_CURRENT_SOURCE_DIR}/shaders/debug.slang" vertexMain vertex)
-    sim_slang_shader(sim_render "${CMAKE_CURRENT_SOURCE_DIR}/shaders/debug.slang" fragmentMain fragment)
-endif()

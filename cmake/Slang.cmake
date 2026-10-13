@@ -46,12 +46,24 @@ message(STATUS "Using slangc: ${SIM_SLANGC}")
 # sim_slang_shader(<target> <shader-file> <entry-point> <stage>)
 #   Compiles one entry point of a .slang file to SPIR-V (and reflection JSON)
 #   at build time and copies the artefacts next to the target executable.
+#
+#   The copy next to the executable is a custom command with its own OUTPUT,
+#   not a POST_BUILD: a POST_BUILD only runs when the target relinks and ninja
+#   treats shader dependencies as order-only, so a pure shader edit never
+#   re-triggered the copy and the runtime kept serving stale SPIR-V.
 function(sim_slang_shader target shader entry stage)
     get_filename_component(_name "${shader}" NAME_WE)
     set(_outdir "${CMAKE_BINARY_DIR}/shaders")
     file(MAKE_DIRECTORY "${_outdir}")
     set(_spv  "${_outdir}/${_name}.${stage}.spv")
     set(_json "${_outdir}/${_name}.${stage}.json")
+    # The top-level project pins a single runtime output directory for all
+    # binaries, so the copy edge can target the executable's directory at
+    # configure time instead of via $<TARGET_FILE_DIR:...> (which cannot be
+    # evaluated inside custom-command OUTPUT genexes).
+    set(_bin_dir "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/shaders")
+    set(_bin_spv  "${_bin_dir}/${_name}.${stage}.spv")
+    set(_bin_json "${_bin_dir}/${_name}.${stage}.json")
 
     add_custom_command(
         OUTPUT "${_spv}" "${_json}"
@@ -67,12 +79,14 @@ function(sim_slang_shader target shader entry stage)
         COMMENT "Slang: ${_name} [${stage}]"
         VERBATIM)
 
-    add_custom_target(${target}_shader_${_name}_${stage} DEPENDS "${_spv}" "${_json}")
-    add_dependencies(${target} ${target}_shader_${_name}_${stage})
-
-    add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:${target}>/shaders"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_spv}"  "$<TARGET_FILE_DIR:${target}>/shaders/${_name}.${stage}.spv"
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_json}" "$<TARGET_FILE_DIR:${target}>/shaders/${_name}.${stage}.json"
+    add_custom_command(
+        OUTPUT "${_bin_spv}" "${_bin_json}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${_bin_dir}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_spv}"  "${_bin_spv}"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${_json}" "${_bin_json}"
+        DEPENDS "${_spv}" "${_json}"
         VERBATIM)
+
+    add_custom_target(${target}_shader_${_name}_${stage} DEPENDS "${_bin_spv}" "${_bin_json}")
+    add_dependencies(${target} ${target}_shader_${_name}_${stage})
 endfunction()

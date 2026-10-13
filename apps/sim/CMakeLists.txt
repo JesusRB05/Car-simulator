@@ -37,13 +37,15 @@ target_link_libraries(sim
 target_compile_definitions(sim PRIVATE IMGUI_IMPL_VULKAN_USE_VOLK)
 
 # The simulator mounts its own directory as the VFS root, so the compiled
-# shaders must live next to the executable (the shader custom targets only
-# stage them next to the render library).
+# shaders must live next to it. Compilation outputs track build/shaders and the
+# copy to bin/shaders is its own OUTPUT edge (a POST_BUILD would only run when
+# the executable relinks, so pure shader edits would keep serving stale SPIR-V).
 if(SIM_ENABLE_SLANG)
-    add_custom_command(TARGET sim POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "$<TARGET_FILE_DIR:sim>/shaders"
-        COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_BINARY_DIR}/shaders" "$<TARGET_FILE_DIR:sim>/shaders"
-        VERBATIM)
+    set(_sim_shader_dir "${CMAKE_CURRENT_SOURCE_DIR}/../../src/render/shaders")
+    sim_slang_shader(sim "${_sim_shader_dir}/mesh.slang" vertexMain vertex)
+    sim_slang_shader(sim "${_sim_shader_dir}/mesh.slang" fragmentMain fragment)
+    sim_slang_shader(sim "${_sim_shader_dir}/debug.slang" vertexMain vertex)
+    sim_slang_shader(sim "${_sim_shader_dir}/debug.slang" fragmentMain fragment)
 endif()
 
 sim_configure_target(sim)
