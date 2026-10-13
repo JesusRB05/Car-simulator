@@ -30,6 +30,9 @@ add_library(sim_vehicle STATIC
     # Anti-roll bar (Phase 2, P2.7).
     include/vehicle/AntiRollBar.hpp
     src/AntiRollBar.cpp
+    # Rubber bushings, per-axis 6-DOF compliance (Phase 2, P2.7).
+    include/vehicle/Bushing.hpp
+    src/Bushing.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

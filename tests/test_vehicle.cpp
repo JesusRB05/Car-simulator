@@ -7,6 +7,7 @@
 
 // Every interface header is included so that it is compile-checked here.
 #include "vehicle/AntiRollBar.hpp"
+#include "vehicle/Bushing.hpp"
 #include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/IAerodynamics.hpp"
 #include "vehicle/IBrakeSystem.hpp"
@@ -887,6 +888,24 @@ TEST_CASE("the anti-roll bar answers only a travel difference") {
     CHECK(rolled.left + rolled.right == doctest::Approx(0.0)); // a couple, no net force
 
     CHECK(computeAntiRollBarForces(kTheta, 0.0, 0.03, 0.01).left == doctest::Approx(0.0));
+}
+
+TEST_CASE("the bushing restores its six degrees of freedom per axis") {
+    BushingCoefficients c;
+    c.translationalStiffness = {1.0e5, 2.0e5, 3.0e5};
+    c.rotationalStiffness = {100.0, 200.0, 300.0};
+
+    const BushingForces f = computeBushingForces(c, {{0.01, 0.02, 0.03}, {0.1, 0.2, 0.3}});
+    CHECK(f.force.x == doctest::Approx(-1000.0));
+    CHECK(f.force.y == doctest::Approx(-4000.0));
+    CHECK(f.force.z == doctest::Approx(-9000.0));
+    CHECK(f.moment.x == doctest::Approx(-10.0));
+    CHECK(f.moment.y == doctest::Approx(-40.0));
+    CHECK(f.moment.z == doctest::Approx(-90.0));
+
+    const BushingForces rest = computeBushingForces(c, {});
+    CHECK(glm::length(rest.force) == doctest::Approx(0.0));
+    CHECK(glm::length(rest.moment) == doctest::Approx(0.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
