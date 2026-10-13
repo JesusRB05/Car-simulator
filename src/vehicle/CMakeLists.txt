@@ -41,6 +41,9 @@ add_library(sim_vehicle STATIC
     src/MassProperties.cpp
     include/vehicle/Aerodynamics.hpp
     src/Aerodynamics.cpp
+    # Engine torque map and friction (Phase 2, P2.10).
+    include/vehicle/Engine.hpp
+    src/Engine.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

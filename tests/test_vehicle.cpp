@@ -11,6 +11,7 @@
 #include "vehicle/AntiRollBar.hpp"
 #include "vehicle/Bushing.hpp"
 #include "vehicle/DoubleWishbone.hpp"
+#include "vehicle/Engine.hpp"
 #include "vehicle/IAerodynamics.hpp"
 #include "vehicle/IBrakeSystem.hpp"
 #include "vehicle/IDrivetrain.hpp"
@@ -1033,6 +1034,29 @@ TEST_CASE("the air density and the aero loads follow the closed form") {
 
     const AeroLoads none = computeAerodynamicLoads({0.0, 0.0, 0.0}, 1.225, 0.3, 1.0, 2.0, {0.0, 0.5, 1.0}, Vec3(0.0));
     CHECK(glm::length(none.force) == doctest::Approx(0.0));
+}
+
+TEST_CASE("the engine map interpolates and the friction follows the polynomial") {
+    EngineTorqueMap map;
+    map.speed = {0.0, 100.0};
+    map.throttle = {0.0, 1.0};
+    // Rows by speed: closed throttle then wide open.
+    map.torque = {-10.0, 50.0, -30.0, 150.0};
+
+    CHECK(map.torqueAt(0.0, 0.0) == doctest::Approx(-10.0));
+    CHECK(map.torqueAt(100.0, 1.0) == doctest::Approx(150.0));
+    CHECK(map.torqueAt(50.0, 0.5) == doctest::Approx(40.0)); // bilinear midpoint
+    CHECK(map.torqueAt(50.0, 0.0) == doctest::Approx(-20.0));
+    CHECK(map.torqueAt(200.0, 1.0) == doctest::Approx(150.0)); // clamped above the grid
+    CHECK(map.torqueAt(-40.0, 0.0) == doctest::Approx(-10.0)); // clamped below the grid
+
+    EngineTorqueMap emptyMap;
+    CHECK(emptyMap.empty());
+    CHECK(emptyMap.torqueAt(100.0, 1.0) == doctest::Approx(0.0));
+
+    EngineFriction friction{5.0, 0.1, 0.001};
+    CHECK(friction.torqueAt(0.0) == doctest::Approx(5.0));
+    CHECK(friction.torqueAt(100.0) == doctest::Approx(25.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {

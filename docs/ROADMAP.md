@@ -203,7 +203,9 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   `Steering` (`vehicle/Steering.hpp`) the Ackermann angles, the rack ratio and the
   column torque (P2.8), and `MassProperties` (`vehicle/MassProperties.hpp`) plus
   `Aerodynamics` (`vehicle/Aerodynamics.hpp`) the parallel-axis mass build-up and
-  the constant-coefficient aero loads (P2.9).
+  the constant-coefficient aero loads (P2.9). `Engine` (`vehicle/Engine.hpp`) opens
+  the powertrain group (P2.10) with the bilinear torque map and the friction
+  polynomial.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,
