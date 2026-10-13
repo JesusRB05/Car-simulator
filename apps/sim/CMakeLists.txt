@@ -8,7 +8,10 @@ add_executable(sim
     src/OrbitCamera.cpp
     src/PhysicsScenes.cpp
     src/Scenes.cpp
-    src/SimUi.cpp)
+    src/SimUi.cpp
+    src/drive/DriveScene.cpp
+    src/drive/RaycastCar.cpp
+    src/drive/Track.cpp)
 
 find_package(Stb REQUIRED)
 target_include_directories(sim PRIVATE src ${Stb_INCLUDE_DIR})

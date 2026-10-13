@@ -25,6 +25,7 @@
 #include "Scenes.hpp"
 #include "core/Log.hpp"
 #include "core/Version.hpp"
+#include "drive/DriveScene.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "render/DebugDraw.hpp"
 #include "render/Mesh.hpp"
@@ -640,8 +641,19 @@ int runHeadless(const HeadlessOptions& options)
 
         render::Scene scene;
         std::unique_ptr<physics::PhysicsWorld> world;
+        std::unique_ptr<drive::DriveScene> driveScene;
         const bool physicsScene = isPhysicsScene(options.scene);
-        if (physicsScene)
+        if (drive::isDriveScene(options.scene))
+        {
+            // The drivable circuit: let the car settle on its springs at the
+            // start line, then frame it with the (snapped) chase camera.
+            driveScene = std::make_unique<drive::DriveScene>(*device);
+            driveScene->simulate(1.0);
+            driveScene->snapCamera();
+            const float aspect = static_cast<float>(options.width) / static_cast<float>(std::max(options.height, 1u));
+            driveScene->buildScene(scene, aspect, 0.0);
+        }
+        else if (physicsScene)
         {
             world = std::make_unique<physics::PhysicsWorld>();
             const double settle = buildPhysicsWorld(options.scene, *world);
@@ -679,6 +691,10 @@ int runHeadless(const HeadlessOptions& options)
             if (physicsScene)
             {
                 drawPhysicsSceneDebug(options.scene, *world, draw);
+            }
+            if (driveScene != nullptr)
+            {
+                driveScene->drawDebug(draw);
             }
         };
         const std::vector<std::uint8_t> pixels =
