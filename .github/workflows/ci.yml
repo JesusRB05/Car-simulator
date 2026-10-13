@@ -7,6 +7,17 @@ on:
     branches: [main, master]
   pull_request:
 
+# Least privilege for a public repository: jobs only read the checkout.
+# The vcpkg GitHub Actions binary cache authenticates with
+# ACTIONS_RUNTIME_TOKEN, which needs no extra GITHUB_TOKEN scope.
+permissions:
+  contents: read
+
+# Cancel superseded runs of the same branch or pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   format:
     name: clang-format
@@ -14,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install clang-format
         run: python3 -m pip install --user "clang-format==18.1.8"
@@ -46,6 +59,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
@@ -102,6 +117,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Bootstrap vcpkg
         shell: pwsh
@@ -141,6 +158,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
