@@ -222,7 +222,8 @@ constraints and force elements. It exposes `createBody()`,
 Shape-vs-shape detection is the "detection half" of Phase 1: a deterministic
 brute-force broadphase (AABB overlap, pairs ordered by `(bodyA, bodyB)`) feeds
 analytic narrowphase routines for **sphere–sphere, sphere–box, box–box (SAT with
-face clipping and edge–edge) and sphere–cylinder**. Each `ContactManifold` carries
+face clipping and edge–edge) and sphere–cylinder**, plus the `Heightfield`
+surface (P1.3). Each `ContactManifold` carries
 up to `kMaxContactPoints = 4` points; `normal` points from A to B and
 `penetration` is the non-negative overlap depth.
 
@@ -245,6 +246,18 @@ Material comes from the bodies: `friction` combines as `sqrt(frictionA·friction
 and `restitution` as `max(restitutionA, restitutionB)`. Accumulated normal and
 tangential impulses are cached per body pair (`ContactImpulseCache`) and both
 warm started and captured in the snapshot.
+
+### Terrain (`physics/Heightfield.hpp`)
+
+`Heightfield` is a regular height grid over the XZ plane (P1.3): samples sit on a
+uniform lattice (`width × depth`, `spacing`) with sample `(0, 0)` at `origin`, and
+the surface between samples is triangulated (every cell splits along its
+`(0, 0)-(1, 1)` diagonal). `heightAt` reads a lattice sample; `sampleHeight` and
+`sampleNormal` evaluate the triangulated surface at any world `(x, z)`, extending
+flat beyond the footprint; `contains`, `minCorner` and `maxCorner` give the
+footprint and bounds. Because `sampleHeight` uses the same triangulation as the
+eventual contacts, the indexed lookup stays consistent with a brute-force
+triangle scan (see the test).
 
 ### Sleeping
 
@@ -375,8 +388,10 @@ SAT/clipping, cylinder), a resting box, the opt-in behaviour, friction (a slidin
 sphere rolling to 5/7 of its speed), restitution (dropped-sphere rebound),
 sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
 5-box stack stable for 60 s, the block-on-ramp friction threshold, an elastic
-Newton's cradle and contact determinism across repeated runs and
-snapshot/restore. `test_vehicle.cpp` covers the placeholder's conventions and the
+Newton's cradle, the heightfield (a brute-force triangle-scan cross-check of
+`sampleHeight`, flat/ramp normals and the footprint) and contact determinism
+across repeated runs and snapshot/restore. `test_vehicle.cpp` covers the
+placeholder's conventions and the
 `MagicFormulaTire` pure-slip curve (origin slope `BCD = K`, peak `μ·Fz`, oddness,
 load sensitivity, the friction-circle bound and the self-aligning moment from the
 pneumatic trail), the `.tir` coefficient parser and the one-sided vertical
@@ -384,7 +399,7 @@ spring-damper with its effective-radius curve.
 
 ## Results
 
-Full suite: **66 cases / 7284 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **69 cases / 7455 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -431,6 +446,8 @@ absolute error in metres/radians/J for physical magnitudes).
 | MF tyre peak | max Fx, Fy at Fz0 = 4000 N | μ·Fz0 = 5600 N | 5600 N | < 1 % | < 1 % | The peak equals `D = μ Fz`; load sensitivity reduces `μ` above `Fz0` |
 | MF tyre self-aligning moment | dMz/dα at α=0 | qDz1·Kyα = 4965.5 N·m/rad | 4965.5 N·m/rad | < 1 % | < 1 % | `Mz = −t Fy` with trail `t(0) = qDz1`; the moment is odd and peaks (288.9 N·m) then falls as the trail collapses |
 | Vertical tyre | Fz at δ = 0.01 m | kz0·δ = 2000 N | 2000 N | 0 | exact | Linear region `kz1 = 0`; a negative deflection or a receding contact clamps to `Fz = 0` |
+| Heightfield sample | \|bilinear − brute-force triangle scan\| | 0 | < 1e-12 | < 1e-12 | < 1e-12 | `sampleHeight` indexes the same triangulation a full scan would find; exact at the lattice nodes |
+| Heightfield normal (flat / slope) | n | (0, 1, 0) / normalize(−a, 1, 0) | exact | 0 | exact | Analytic gradient of the active triangle |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000

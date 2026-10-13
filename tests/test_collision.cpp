@@ -2,9 +2,11 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #include <doctest/doctest.h>
 
+#include <algorithm>
 #include <cmath>
 
 #include "physics/Collision.hpp"
+#include "physics/Heightfield.hpp"
 #include "physics/Math.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "physics/RigidBody.hpp"
@@ -634,4 +636,118 @@ TEST_CASE("detectCollisions returns deterministic ordered manifolds") {
         CHECK(second[i].bodyB == first[i].bodyB);
         CHECK(second[i].count == first[i].count);
     }
+}
+
+namespace {
+
+// Independent triangle scan used to validate the indexed lookup in
+// Heightfield::sampleHeight.
+Real bruteForceHeight(const Heightfield& field, Real x, Real z) {
+    const Real fx = (x - field.origin.x) / field.spacing;
+    const Real fz = (z - field.origin.z) / field.spacing;
+    const int ix = static_cast<int>(std::floor(fx));
+    const int iz = static_cast<int>(std::floor(fz));
+    const Real u = fx - static_cast<Real>(ix);
+    const Real v = fz - static_cast<Real>(iz);
+    const Real h00 = field.heightAt(ix, iz);
+    const Real h10 = field.heightAt(ix + 1, iz);
+    const Real h01 = field.heightAt(ix, iz + 1);
+    const Real h11 = field.heightAt(ix + 1, iz + 1);
+    if (u + v <= 1.0) {
+        return h00 + u * (h10 - h00) + v * (h11 - h10);
+    }
+    return h00 + u * (h11 - h01) + v * (h01 - h00);
+}
+
+Heightfield makeTestField(int width, int depth, Real spacing) {
+    Heightfield field;
+    field.width = width;
+    field.depth = depth;
+    field.spacing = spacing;
+    field.origin = Vec3(0.0);
+    field.heights.resize(static_cast<std::size_t>(width) * depth);
+    for (int iz = 0; iz < depth; ++iz) {
+        for (int ix = 0; ix < width; ++ix) {
+            // A deterministic, non-planar but smooth height field.
+            field.heights[static_cast<std::size_t>(iz) * width + ix] =
+                std::sin(0.3 * static_cast<Real>(ix)) + 0.5 * std::cos(0.4 * static_cast<Real>(iz));
+        }
+    }
+    return field;
+}
+
+} // namespace
+
+TEST_CASE("heightfield sampling matches a brute-force triangle scan") {
+    const Heightfield field = makeTestField(12, 9, 0.5);
+    REQUIRE(field.valid());
+
+    // Exact at the lattice nodes.
+    for (int iz = 0; iz < field.depth; ++iz) {
+        for (int ix = 0; ix < field.width; ++ix) {
+            const Real x = field.origin.x + ix * field.spacing;
+            const Real z = field.origin.z + iz * field.spacing;
+            CHECK(field.sampleHeight(x, z) == doctest::Approx(field.heightAt(ix, iz)));
+        }
+    }
+
+    // Interior points agree with the independent scan to machine precision.
+    for (int i = 0; i < 200; ++i) {
+        const Real x = 0.37 + 0.11 * static_cast<Real>(i);
+        const Real z = 0.23 + 0.07 * static_cast<Real>(i);
+        if (!field.contains(x, z) || x >= field.origin.x + (field.width - 1) * field.spacing ||
+            z >= field.origin.z + (field.depth - 1) * field.spacing) {
+            continue;
+        }
+        CHECK(field.sampleHeight(x, z) == doctest::Approx(bruteForceHeight(field, x, z)).epsilon(1e-12));
+    }
+}
+
+TEST_CASE("heightfield normals are flat on a plane and tilted on a ramp") {
+    Heightfield flat;
+    flat.width = 4;
+    flat.depth = 4;
+    flat.spacing = 1.0;
+    flat.heights.assign(16, 3.0);
+    REQUIRE(flat.valid());
+    CHECK(flat.sampleNormal(1.3, 2.7).y == doctest::Approx(1.0));
+    CHECK(std::abs(flat.sampleNormal(1.3, 2.7).x) < 1e-12);
+    CHECK(std::abs(flat.sampleNormal(1.3, 2.7).z) < 1e-12);
+
+    // A uniform slope dh/dx = a gives the normal normalize(-a, 1, 0).
+    const Real slope = 0.25;
+    Heightfield ramp;
+    ramp.width = 5;
+    ramp.depth = 3;
+    ramp.spacing = 1.0;
+    ramp.heights.resize(15);
+    for (int iz = 0; iz < ramp.depth; ++iz) {
+        for (int ix = 0; ix < ramp.width; ++ix) {
+            ramp.heights[static_cast<std::size_t>(iz) * ramp.width + ix] = slope * static_cast<Real>(ix);
+        }
+    }
+    REQUIRE(ramp.valid());
+    const Vec3 expected = glm::normalize(Vec3(-slope, 1.0, 0.0));
+    const Vec3 normal = ramp.sampleNormal(2.4, 1.1);
+    CHECK(normal.x == doctest::Approx(expected.x));
+    CHECK(normal.y == doctest::Approx(expected.y));
+    CHECK(normal.z == doctest::Approx(expected.z));
+}
+
+TEST_CASE("heightfield footprint and bounds follow the grid") {
+    const Heightfield field = makeTestField(6, 4, 2.0);
+    REQUIRE(field.valid());
+    CHECK(field.contains(0.0, 0.0));
+    CHECK(field.contains(10.0, 6.0));
+    CHECK_FALSE(field.contains(-0.1, 0.0));
+    CHECK_FALSE(field.contains(10.1, 6.0));
+
+    Real lowest = field.heightAt(0, 0);
+    Real highest = field.heightAt(0, 0);
+    for (Real h : field.heights) {
+        lowest = std::min(lowest, h);
+        highest = std::max(highest, h);
+    }
+    CHECK(field.minCorner() == Vec3(0.0, lowest, 0.0));
+    CHECK(field.maxCorner() == Vec3(10.0, highest, 6.0));
 }

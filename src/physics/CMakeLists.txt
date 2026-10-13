@@ -5,6 +5,7 @@ add_library(sim_physics STATIC
     src/Constraint.cpp
     src/Curve.cpp
     src/ForceElements.cpp
+    src/Heightfield.cpp
     src/Integrator.cpp
     src/Joints.cpp
     src/PhysicsWorld.cpp
