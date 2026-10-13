@@ -42,12 +42,15 @@ struct ConstraintRow
 
 // Parameters of a "soft step" constraint: an implicit spring-damper that both
 // enforces the velocity constraint and gently removes position error, without
-// the energy injection of an aggressive Baumgarte term. frequency <= 0 makes
-// the row hard (gamma = 0).
+// the energy injection of an aggressive Baumgarte term. Setting `frequency <= 0`
+// or `stiffness >= 1e18` makes the row effectively rigid (gamma = 0 and bias
+// disabled).
 struct SoftParams
 {
-    Real frequency = 0.0;    // Hz
+    Real frequency = 0.0;    // Hz (0 = rigid)
     Real dampingRatio = 1.0;  // 1 = critically damped
+    Real stiffness = 0.0;    // N/m or N·m/rad (0 = use frequency-based stiffness)
+    bool rigid = false;      // force rigid constraint
 };
 
 // Computes the row's constraint mass  K = J * M^-1 * J^T.

@@ -29,25 +29,29 @@ void configureRow(ConstraintRow& row, Real invEffectiveMass, Real positionError,
     row.bias = 0.0;
     row.softness = 0.0;
 
-    if (soft.frequency > 0.0 && dt > 0.0 && invEffectiveMass > 0.0)
-    {
-        const Real m = 1.0 / invEffectiveMass;
-        const Real omega = kTwoPiPhysics * soft.frequency;
-        const Real d = 2.0 * m * soft.dampingRatio * omega;
-        const Real stiffness = m * omega * omega;
-        const Real denominator = d + dt * stiffness;
-        if (denominator > 0.0)
-        {
-            row.softness = 1.0 / (dt * denominator);
-            row.bias = positionError * dt * stiffness * row.softness;
-        }
-        const Real total = invEffectiveMass + row.softness;
-        row.effectiveMass = total > 0.0 ? 1.0 / total : 0.0;
-    }
-    else
+    const bool forceRigid = soft.rigid || soft.frequency <= 0.0 || soft.stiffness >= 1e18;
+    if (forceRigid || dt <= 0.0 || invEffectiveMass <= 0.0)
     {
         row.effectiveMass = invEffectiveMass > 0.0 ? 1.0 / invEffectiveMass : 0.0;
+        return;
     }
+
+    const Real m = 1.0 / invEffectiveMass;
+    const Real omega = kTwoPiPhysics * soft.frequency;
+    Real k = m * omega * omega;
+    if (soft.stiffness > 0.0)
+    {
+        k = soft.stiffness;
+    }
+    const Real d = 2.0 * m * soft.dampingRatio * std::sqrt(k / (m > 0.0 ? m : 1.0));
+    const Real denominator = d + dt * k;
+    if (denominator > 0.0)
+    {
+        row.softness = 1.0 / (dt * denominator);
+        row.bias = positionError * dt * k * row.softness;
+    }
+    const Real total = invEffectiveMass + row.softness;
+    row.effectiveMass = total > 0.0 ? 1.0 / total : 0.0;
 }
 
 void applyRowImpulse(ConstraintRow& row, Real lambda)
