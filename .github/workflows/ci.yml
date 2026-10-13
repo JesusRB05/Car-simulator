@@ -19,6 +19,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  hygiene:
+    name: Repository hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Hygiene checks
+        run: bash tools/ci/hygiene.sh
+
   format:
     name: clang-format
     runs-on: ubuntu-latest
@@ -102,6 +114,31 @@ jobs:
       - name: Test
         run: ctest --preset linux-${{ matrix.compiler }}-${{ matrix.build_type }}
 
+      # Cross-platform determinism: the GCC Release build publishes the physics
+      # state hash that the `determinism` job compares against Windows.
+      - name: Determinism probe
+        if: matrix.build_type == 'release' && matrix.compiler == 'gcc'
+        run: ./build/linux-gcc-release/bin/sim_determinism | tee statehash.txt
+
+      - name: Upload determinism hash
+        if: matrix.build_type == 'release' && matrix.compiler == 'gcc'
+        uses: actions/upload-artifact@v4
+        with:
+          name: statehash-linux
+          path: statehash.txt
+
+      # Dependency licence report (auditable before a release).
+      - name: Dependency licence report
+        if: matrix.build_type == 'release' && matrix.compiler == 'gcc'
+        run: bash tools/ci/dependency_licenses.sh build/linux-gcc-release/vcpkg_installed
+
+      - name: Upload dependency licence report
+        if: matrix.build_type == 'release' && matrix.compiler == 'gcc'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-licenses
+          path: dependency-licenses.txt
+
   windows:
     name: Windows MSVC ${{ matrix.build_type }}
     runs-on: windows-latest
@@ -146,6 +183,42 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build/windows-msvc-${{ matrix.build_type }} --output-on-failure
+
+      # Cross-platform determinism: publish the physics state hash that the
+      # `determinism` job compares against Linux.
+      - name: Determinism probe (Release)
+        if: matrix.build_type == 'release'
+        shell: pwsh
+        run: |
+          & "build/windows-msvc-release/bin/sim_determinism.exe" | Tee-Object -FilePath statehash.txt
+
+      - name: Upload determinism hash
+        if: matrix.build_type == 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: statehash-windows
+          path: statehash.txt
+
+  determinism:
+    name: Cross-platform determinism
+    runs-on: ubuntu-latest
+    needs: [linux, windows]
+    steps:
+      - name: Download state hashes
+        uses: actions/download-artifact@v4
+        with:
+          pattern: statehash-*
+          path: hashes
+
+      - name: Compare Windows and Linux hashes
+        run: |
+          set -euo pipefail
+          cat hashes/statehash-linux/statehash.txt hashes/statehash-windows/statehash.txt
+          if ! diff -u hashes/statehash-linux/statehash.txt hashes/statehash-windows/statehash.txt; then
+            echo "::error::physics state hash differs between Windows and Linux"
+            exit 1
+          fi
+          echo "Windows and Linux physics state hashes match."
 
   gpu-linux:
     name: Linux headless GPU (lavapipe)
