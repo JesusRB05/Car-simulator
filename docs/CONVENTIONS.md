@@ -30,14 +30,17 @@ Hay una sola convención y se aplica en todo el render:
 - Estructuras de uniformes: `FrameUniforms` y `ObjectPushConstants` en
   `render/Uniforms.hpp`. El layout GPU es std140; cada miembro empieza alineado
   a 16 bytes (matriz = 4 columnas de 16 bytes contiguas).
-- La orientación de pantalla se define **una sola vez** en el RHI:
-  `CommandList::setViewport` (viewport de altura negativa), de modo
-  que `+Y` del mundo cae en la **fila 0** (arriba) de la imagen y `+X` a la
-  derecha. La transformación CPU→píxel que comprueban los tests
-  (`apps/sim/src/HeadlessRunner.cpp`, `checkSemantics`, y
-  `tests/test_render_math.cpp`) espeja exactamente esa conversión; no hay ninguna
-  otra inversión ni compensación (ni en la proyección, ni en los shaders, ni en
-  la subida de matrices).
+- Screen orientation is defined **exactly once**, in the RHI:
+  `CommandList::setViewport` emits a negative-height viewport, so world `+Y`
+  points up in the image and world `+X` points right (standard projection, no
+  other flip anywhere: not in the projection, the shaders or the matrix upload).
+  `tests/test_render_math.cpp` and `checkSemantics` use the standard
+  NDC-to-pixel mapping; `checkOrientation` (headless `orientation` scene)
+  verifies sky-up/ground-down, placement and culling from pixels alone,
+  without the projection matrix.
+- Winding: every mesh is **counter-clockwise seen from outside** and the
+  pipeline uses `VK_FRONT_FACE_COUNTER_CLOCKWISE` with back-face culling
+  (`tests/test_render_math.cpp` checks every built-in mesh).
 
 ## Profundidad (reversed-Z)
 

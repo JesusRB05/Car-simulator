@@ -231,11 +231,12 @@ GraphicsPipeline::GraphicsPipeline(Device& device, const GraphicsPipelineDesc& d
     rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizer.cullMode = toVkCullMode(desc.cullMode);
-    // Winding is evaluated in framebuffer space. The RHI emits a negative-height
-    // viewport (CommandList::setViewport), which mirrors screen Y and so flips
-    // the apparent winding of every triangle; compensating with a clockwise
-    // front face keeps "cull back" meaning the same faces it meant before.
-    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    // Meshes are wound counter-clockwise seen from outside (Mesh::makeCube).
+    // The negative-height viewport (CommandList::setViewport) makes screen-up
+    // equal world-up, so a front face still appears counter-clockwise on screen
+    // and the usual CCW front face applies. A clockwise front face here would
+    // cull the outside of every box and show its interior instead.
+    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
     rasterizer.lineWidth = 1.0f;
 
     VkPipelineMultisampleStateCreateInfo multisampling{};

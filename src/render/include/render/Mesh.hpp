@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
@@ -19,6 +19,20 @@ struct Vertex
     glm::vec3 normal{0.0f, 1.0f, 0.0f};
     glm::vec2 uv{0.0f};
 };
+
+// CPU-side geometry. Triangles are wound counter-clockwise when seen from
+// outside, i.e. (p1 - p0) x (p2 - p0) points along the vertex normals.
+struct MeshData
+{
+    std::vector<Vertex> vertices;
+    std::vector<std::uint32_t> indices;
+};
+
+// Device-free generators, so the winding and normals can be unit-tested.
+MeshData cubeData();
+MeshData sphereData();
+MeshData cylinderData();
+MeshData groundPlaneData(float halfSize);
 
 // A CPU-authored mesh uploaded into immutable vertex and index buffers.
 class Mesh

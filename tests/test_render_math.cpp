@@ -3,11 +3,13 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <string>
 
 #include <doctest/doctest.h>
 #include <glm/glm.hpp>
 
 #include "render/Camera.hpp"
+#include "render/Mesh.hpp"
 #include "render/Uniforms.hpp"
 
 namespace sim::render {
@@ -123,6 +125,57 @@ TEST_CASE("screen orientation is absolute: +Y world renders above, +X world rend
     // of the camera (never a negative clip.w).
     CHECK(high.second < kHeight / 2);
     CHECK(low.second > kHeight / 2);
+}
+
+namespace {
+
+// Every triangle must be counter-clockwise seen from outside: its geometric
+// normal (p1 - p0) x (p2 - p0) has to agree with the vertex normals. The
+// pipeline culls back faces with a CCW front face, so a reversed triangle is
+// invisible from outside and shows the interior instead.
+void checkOutwardWinding(const MeshData& mesh, const std::string& name)
+{
+    REQUIRE(mesh.indices.size() % 3 == 0);
+    int reversed = 0;
+    int badNormals = 0;
+    for (std::size_t i = 0; i < mesh.indices.size(); i += 3)
+    {
+        const Vertex& a = mesh.vertices[mesh.indices[i]];
+        const Vertex& b = mesh.vertices[mesh.indices[i + 1]];
+        const Vertex& c = mesh.vertices[mesh.indices[i + 2]];
+        const glm::vec3 faceNormal = glm::cross(b.position - a.position, c.position - a.position);
+        if (glm::length(faceNormal) < 1e-9f)
+        {
+            continue; // degenerate pole triangle
+        }
+        const glm::vec3 averageNormal = a.normal + b.normal + c.normal;
+        if (glm::dot(faceNormal, averageNormal) <= 0.0f)
+        {
+            ++reversed;
+        }
+        // Flat faces (cube, plane, cylinder caps) must carry the face normal.
+        const glm::vec3 unit = glm::normalize(faceNormal);
+        for (const Vertex* v : {&a, &b, &c})
+        {
+            if (glm::dot(unit, glm::normalize(v->normal)) < 0.1f)
+            {
+                ++badNormals;
+            }
+        }
+    }
+    MESSAGE(name << ": " << reversed << " reversed triangles, " << badNormals << " vertex normals off the face");
+    CHECK(reversed == 0);
+    CHECK(badNormals == 0);
+}
+
+} // namespace
+
+TEST_CASE("built-in meshes are wound counter-clockwise seen from outside")
+{
+    checkOutwardWinding(cubeData(), "cube");
+    checkOutwardWinding(sphereData(), "sphere");
+    checkOutwardWinding(cylinderData(), "cylinder");
+    checkOutwardWinding(groundPlaneData(10.0f), "ground plane");
 }
 
 } // namespace sim::render
