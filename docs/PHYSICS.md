@@ -288,6 +288,25 @@ The vehicle module is organised around header-only abstract interfaces in
 - `IBrakeSystem`: pedal/handbrake → per-wheel brake torque, front bias.
 - `IVehicleElectronics`: ABS/TCS/ESC hooks that filter inputs and modulate brakes.
 
+### `MagicFormulaTire` (Phase 2, P2.2 core)
+
+`vehicle/MagicFormulaTire.hpp` implements `ITireModel` with the Pacejka Magic
+Formula 6.x pure-slip curve
+
+`y(x) = D sin(C arctan(Bx − E(Bx − arctan Bx)))`,
+
+whose slope at the origin is the slip stiffness `BCD = K`. `Fx(κ)` uses the
+longitudinal coefficients (peak `Dx = μx(κ) Fz`, stiffness
+`Kxκ = Fz(pKx1 + pKx2 dfz) exp(pKx3 dfz)`), and `Fy(α)` the lateral ones (peak
+`Dy = μy Fz`, cornering stiffness `Kyα = pKy1 Fz0 sin(2 arctan(Fz / (pKy2 Fz0)))`),
+all with `dfz = (Fz − Fz0)/Fz0` load dependence so the peak grip falls with load
+(load sensitivity). `Fx` opposes the slip ratio (driving is positive) and `Fy`
+opposes the slip angle. A friction-circle clamp keeps
+`√(Fx² + Fy²) ≤ μ_peak Fz` for combined slip. The coefficients live in a plain
+`MagicFormulaCoefficients` struct in the same layout as a `.tir` subset; the full
+`.tir` loader, the moments (`Mz`, `Mx`, `My`) and transient relaxation arrive with
+P2.2/P2.3/P2.4.
+
 ### `PlaceholderVehicle` (TEMPORARY)
 
 **TEMPORARY**: `vehicle/PlaceholderVehicle.hpp` implements `IVehicleModel` with a
@@ -326,7 +345,7 @@ Physics is the heart of the simulator's determinism:
 With this, the same input sequence produces exactly the same trajectory on any
 machine.
 
-## Tests (`tests/test_physics.cpp`, `tests/test_collision.cpp`)
+## Tests (`tests/test_physics.cpp`, `tests/test_collision.cpp`, `tests/test_vehicle.cpp`)
 
 Analytic suite covering: free fall and projectile motion (against the exact
 solution), mass-spring oscillator period (< 0.5 %), energy drift bounded over
@@ -343,11 +362,13 @@ sphere rolling to 5/7 of its speed), restitution (dropped-sphere rebound),
 sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
 5-box stack stable for 60 s, the block-on-ramp friction threshold, an elastic
 Newton's cradle and contact determinism across repeated runs and
-snapshot/restore.
+snapshot/restore. `test_vehicle.cpp` covers the placeholder's conventions and the
+`MagicFormulaTire` pure-slip curve (origin slope `BCD = K`, peak `μ·Fz`, oddness,
+load sensitivity and the friction-circle bound).
 
 ## Results
 
-Full suite: **63 cases / 7236 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **64 cases / 7257 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -389,6 +410,9 @@ absolute error in metres/radians/J for physical magnitudes).
 | Sliding sphere, friction μ = 0 | Rolled speed | v₀ = 2.0 m/s | 2.0 m/s | 0 | < 2e-2 | No friction rows carry impulse, so the horizontal speed is preserved |
 | Dropped sphere, restitution e = 0.8 | Rebound apex (centre y) | 1.46 m | 1.5718 m | 0.112 | < 0.22 (15 %) | Rebound height = e²·drop; the ~8 % excess is the discrete contact detection giving a slightly faster approach than the ideal free-fall at the sampled step |
 | Dropped sphere, restitution e = 0 | Rebound apex (centre y) | ≤ 0.5 m | 0.546 m | — | < 0.6 | No restitution: the sphere settles at its resting height (plus contact slop), it does not bounce |
+| MF tyre longitudinal stiffness | dFx/dκ at κ=0 | BCD = 96000 N | 96000 N | < 1e-3 | < 1e-3 | The Magic Formula's origin slope is exactly `BCD = K`; the model reads `K` from `Kxκ` |
+| MF tyre cornering stiffness | dFy/dα at α=0 | `Kyα` = 41379.3 N/rad | 41379.3 N/rad | < 1e-3 | < 1e-3 | Same property for the lateral curve; `Kyα = pKy1 Fz0 sin(2 arctan(Fz/(pKy2 Fz0)))` |
+| MF tyre peak | max Fx, Fy at Fz0 = 4000 N | μ·Fz0 = 5600 N | 5600 N | < 1 % | < 1 % | The peak equals `D = μ Fz`; load sensitivity reduces `μ` above `Fz0` |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000

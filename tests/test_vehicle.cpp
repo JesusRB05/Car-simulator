@@ -12,6 +12,7 @@
 #include "vehicle/ITireModel.hpp"
 #include "vehicle/IVehicleElectronics.hpp"
 #include "vehicle/IVehicleModel.hpp"
+#include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/PlaceholderVehicle.hpp"
 
 using namespace sim::vehicle;
@@ -75,4 +76,92 @@ TEST_CASE("PlaceholderVehicle positive steer turns left (towards -X)") {
     run(mirrored, input, 2000);
     CHECK(mirrored.position().x > 0.0);
     CHECK(mirrored.position().x == doctest::Approx(-car.position().x));
+}
+
+TEST_CASE("MagicFormulaTire matches the pure-slip Magic Formula curve") {
+    MagicFormulaTire tire;
+    const MagicFormulaCoefficients& c = tire.coefficients();
+    const Real fz0 = c.nominalLoad;
+
+    const auto state = [&](Real kappa, Real alpha) {
+        TireState s;
+        s.slipRatio = kappa;
+        s.slipAngle = alpha;
+        s.normalLoad = fz0;
+        return s;
+    };
+
+    SUBCASE("zero slip gives zero force and a lifted tyre too") {
+        const TireForces rest = tire.computeForces(state(0.0, 0.0));
+        CHECK(rest.longitudinal == doctest::Approx(0.0));
+        CHECK(rest.lateral == doctest::Approx(0.0));
+
+        TireState lifted = state(0.2, 0.1);
+        lifted.normalLoad = 0.0;
+        const TireForces none = tire.computeForces(lifted);
+        CHECK(none.longitudinal == doctest::Approx(0.0));
+        CHECK(none.lateral == doctest::Approx(0.0));
+    }
+
+    SUBCASE("slope at the origin equals the slip stiffness BCD = K") {
+        const Real eps = 1e-5;
+        const Real fx = tire.computeForces(state(eps, 0.0)).longitudinal;
+        const Real kx = fz0 * (c.pKx1 + c.pKx2 * 0.0) * std::exp(c.pKx3 * 0.0);
+        CHECK(fx / eps == doctest::Approx(kx).epsilon(1e-3));
+
+        const Real fy = tire.computeForces(state(0.0, eps)).lateral;
+        const Real ky = c.pKy1 * fz0 * std::sin(2.0 * std::atan(fz0 / (c.pKy2 * fz0)));
+        CHECK(-fy / eps == doctest::Approx(ky).epsilon(1e-3));
+        MESSAGE("tire origin slopes: Kx = " << kx << " N, Ky = " << ky << " N/rad");
+    }
+
+    SUBCASE("the peak force equals mu times the load") {
+        Real fxPeak = 0.0;
+        Real fyPeak = 0.0;
+        for (int i = 0; i <= 2000; ++i) {
+            const Real x = 0.5 * static_cast<Real>(i) / 2000.0;
+            fxPeak = std::max(fxPeak, tire.computeForces(state(x, 0.0)).longitudinal);
+            fyPeak = std::max(fyPeak, std::abs(tire.computeForces(state(0.0, x)).lateral));
+        }
+        CHECK(fxPeak == doctest::Approx(c.pDx1 * fz0).epsilon(0.01));
+        CHECK(fyPeak == doctest::Approx(c.pDy1 * fz0).epsilon(0.01));
+        MESSAGE("tire peak force at Fz0=4000 N: Fx = " << fxPeak << " N, Fy = " << fyPeak << " N");
+    }
+
+    SUBCASE("the force is odd in the slip and opposes the slip angle") {
+        const Real a = tire.computeForces(state(0.15, 0.0)).longitudinal;
+        const Real b = tire.computeForces(state(-0.15, 0.0)).longitudinal;
+        CHECK(a == doctest::Approx(-b));
+
+        const Real left = tire.computeForces(state(0.0, 0.1)).lateral;
+        const Real right = tire.computeForces(state(0.0, -0.1)).lateral;
+        CHECK(left < 0.0);
+        CHECK(right > 0.0);
+        CHECK(left == doctest::Approx(-right));
+    }
+
+    SUBCASE("the peak grip falls with load (load sensitivity)") {
+        const auto peakAt = [&](Real load) {
+            Real peak = 0.0;
+            for (int i = 0; i <= 2000; ++i) {
+                TireState s = state(0.5 * static_cast<Real>(i) / 2000.0, 0.0);
+                s.normalLoad = load;
+                peak = std::max(peak, tire.computeForces(s).longitudinal);
+            }
+            return peak;
+        };
+        const Real light = peakAt(fz0);
+        const Real heavy = peakAt(2.0 * fz0);
+        CHECK(heavy > light);       // more load still grips more
+        CHECK(heavy < 2.0 * light); // but less than proportionally
+    }
+
+    SUBCASE("combined slip stays inside the friction circle") {
+        TireState s = state(0.18, 0.14);
+        const TireForces f = tire.computeForces(s);
+        const Real magnitude = std::sqrt(f.longitudinal * f.longitudinal + f.lateral * f.lateral);
+        CHECK(magnitude <= c.pDx1 * fz0 * 1.0000001);
+    }
+
+    CHECK(tire.unloadedRadius() == doctest::Approx(c.radius));
 }

@@ -91,11 +91,11 @@ manoeuvres and the numbered work packages are in the
 |---|---|
 | Rigid-body core | Done: fixed step, deterministic, soft and rigid joints with an exact island block solve, 1:1000 mass-ratio tests, energy and angular-momentum tests |
 | Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, AABB broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, sleep-capable and deterministic. Still missing: convex hulls, triangle-mesh/heightfield terrain and speculative contacts/sub-stepping. The raycast-wheel car still uses an analytic ground |
-| Vehicle | Interfaces only (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics) plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
+| Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a pure-slip Magic Formula `MagicFormulaTire` (P2.2 core) plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
 | App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit |
 | Mods | Sandboxed Lua (JIT disabled, instruction budget), mod VFS with priorities, native plugin API skeleton |
-| CI | Defined (format, Linux, Windows, gpu-linux) but **never run**: repository not pushed yet |
+| CI | Defined (format, Linux, Windows, gpu-linux); runs on push once the repository has CI enabled |
 
 ## Milestones
 
@@ -170,6 +170,10 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
 - **Exit:** two fictional cars (for example a front-wheel-drive hatchback and a
   rear-wheel-drive coupe) defined only by data files behave measurably differently
   and pass the Phase 3 tests.
+- **Started:** `MagicFormulaTire` (`vehicle/MagicFormulaTire.hpp`) implements
+  `ITireModel` with the pure-slip Magic Formula 6.x curve, load-dependent peaks
+  and stiffness, and a friction-circle bound (P2.2 core; the `.tir` loader,
+  moments and transient relaxation are still pending).
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,

@@ -9,6 +9,9 @@ add_library(sim_vehicle STATIC
     include/vehicle/ITireModel.hpp
     include/vehicle/IVehicleElectronics.hpp
     include/vehicle/IVehicleModel.hpp
+    # Pure-slip Pacejka Magic Formula tyre model (Phase 2, P2.2 core).
+    include/vehicle/MagicFormulaTire.hpp
+    src/MagicFormulaTire.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)
