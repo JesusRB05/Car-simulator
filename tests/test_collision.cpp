@@ -510,6 +510,50 @@ TEST_CASE("a resting stack sleeps, stays frozen and is woken by a projectile") {
     CHECK(boxes.back()->position.y != frozen.back().y);
 }
 
+TEST_CASE("a block on a ramp holds while tan(theta) <= mu and slides otherwise") {
+    const Real mu = 0.5;
+    const auto slides = [&](Real slopeTangent) {
+        PhysicsWorld world;
+        const Real theta = std::atan(slopeTangent);
+        const Quat rampRotation = quaternionFromAxisAngle(Vec3(0.0, 0.0, 1.0), theta);
+        const Vec3 normal = rotateVector(rampRotation, Vec3(0.0, 1.0, 0.0));
+
+        RigidBody& ramp = world.createBody();
+        ramp.shape = Shape::box(Vec3(5.0, 0.5, 5.0));
+        ramp.setType(BodyType::Static);
+        ramp.setMass(0.0);
+        ramp.orientation = rampRotation;
+        ramp.position = -normal * 0.5; // the ramp's top face passes through the origin
+        ramp.friction = mu;
+        ramp.collisionEnabled = true;
+        ramp.updateCache();
+
+        RigidBody& block = world.createBody();
+        block.shape = Shape::box(Vec3(0.5));
+        block.setMass(1.0);
+        block.setShapeInertia();
+        block.orientation = rampRotation;
+        block.position = normal * 0.5;
+        block.friction = mu;
+        block.collisionEnabled = true;
+        block.updateCache();
+        const Vec3 start = block.position;
+
+        for (int i = 0; i < 2000; ++i) {
+            world.step(1.0 / 1000.0);
+        }
+        MESSAGE("  slope " << slopeTangent << ": displacement = " << glm::length(block.position - start) << " m, |v| = "
+                           << glm::length(block.linearVelocity) << " m/s, sleeping = " << block.sleeping);
+        return glm::length(block.position - start);
+    };
+
+    const Real holding = slides(0.4);  // tan(theta) = 0.4 < mu = 0.5
+    const Real slipping = slides(0.7); // tan(theta) = 0.7 > mu = 0.5
+    MESSAGE("block on ramp: tan=0.4 -> drift " << holding << " m, tan=0.7 -> drift " << slipping << " m");
+    CHECK(holding < 0.01);
+    CHECK(slipping > 0.1);
+}
+
 TEST_CASE("detectCollisions returns deterministic ordered manifolds") {
     PhysicsWorld world;
     RigidBody& ground = world.createBody();
