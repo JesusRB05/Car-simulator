@@ -205,11 +205,12 @@ constraints and force elements. It exposes `createBody()`,
 2. apply force elements
 3. integrateVelocities(dt)          // gravity + implicit gyroscopic
 4. prepare(dt) of each joint
-5. buildContacts(dt)                 // detectCollisions() + warm-start seeding
+5. buildContacts(dt)                 // detectCollisions(), wake sleeping bodies, warm-start seeding
 6. warmStart() of every joint and contact
 7. velocity solve per island          // exact block solve, or velocityIterations × PGS
 8. integratePositions(dt)           // positions and orientations
 9. projectPositions()               // rigid rows only: Newton projection onto C = 0
+10. updateSleeping(dt)              // quiet bodies accrue sleep time and are frozen
 ```
 
 `advance(elapsed)` consumes real time in `fixedStep` substeps. By default
@@ -245,6 +246,20 @@ and `restitution` as `max(restitutionA, restitutionB)`. Accumulated normal and
 tangential impulses are cached per body pair (`ContactImpulseCache`) and both
 warm started and captured in the snapshot.
 
+### Sleeping
+
+A dynamic body whose linear speed stays below `sleepLinearThreshold` (1 cm/s) and
+angular speed below `sleepAngularThreshold` (0.05 rad/s) for `sleepTime` (0.5 s)
+is put to sleep: its velocities are zeroed, it is not integrated, and the solver
+treats it as static (`constraintMass` adds nothing for it and `applyRowImpulse`
+skips it), so a resting stack is free. Before the contacts are configured each
+step, `wakeBodies()` wakes any sleeping body that a **moving** awake body is
+touching, jointed to or coupled to through a force element, propagating along the
+chain; a fully resting stack has no moving member, so it stays asleep. Applied
+impulses and `RigidBody::wake()` also wake a body. The sleep flag and timer are
+part of `stateHash` and the snapshot, so sleeping is reproducible and restorable.
+`enableSleeping = false` disables it (and wakes everything).
+
 ### Determinism and snapshots
 
 - Ids and creation order (bodies, constraints, elements) are fixed, so the
@@ -252,8 +267,8 @@ warm started and captured in the snapshot.
 - `stateHash()` is a 64-bit FNV-1a over every `double` of the state (position,
   orientation, velocities) plus time.
 - `saveSnapshot()` / `restoreSnapshot()` store body state, each row's
-  joint rows' accumulated impulses, the contact warm-start cache and time, for
-  interactive reset and the determinism test.
+  joint rows' accumulated impulses, the contact warm-start cache, the per-body
+  sleep state and time, for interactive reset and the determinism test.
 
 ## Vehicle (`vehicle/`)
 
@@ -324,12 +339,14 @@ the analytic rate, revolute motor reaching its target speed, bit-for-bit
 determinism (20000 steps + snapshot/restore) and a benchmark of the 20-link
 chain. `test_collision.cpp` covers the detection primitives (AABB, broadphase,
 SAT/clipping, cylinder), a resting box, the opt-in behaviour, friction (a sliding
-sphere rolling to 5/7 of its speed), restitution (dropped-sphere rebound) and
-contact determinism across repeated runs and snapshot/restore.
+sphere rolling to 5/7 of its speed), restitution (dropped-sphere rebound),
+sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
+5-box stack stable for 60 s and contact determinism across repeated runs and
+snapshot/restore.
 
 ## Results
 
-Full suite: **59 cases / 7216 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **61 cases / 7230 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -360,9 +377,11 @@ absolute error in metres/radians/J for physical magnitudes).
 | Rigid weld, arm cantilevered 1 m, disturbed (5 s) | Anchor / angle error | 0 | 4.65e-19 m / 4.58e-19 rad | 4.65e-19 / 4.58e-19 | < 1e-6 | The block solve removes the disturbance before positions move; requirement 0.1 mm |
 | Linear damping (1 s) | v with d = 1 | 3.67879 m/s | 3.68063 m/s | 5.00e-4 | < 1e-2 | Per-step decay 1/(1+d·dt); continuum limit e^(−dt); discrete error ~3e-4 |
 | Revolute motor (3 s) | Angular velocity | 3.0 rad/s | 3.0 rad/s | 0 | < 5 % | No opposing torque (gravity aligned with the axis): the motor reaches and holds the speed |
-| Determinism (2×20000) | stateHash | equal | 8902566875956907469 | 0 | bit-for-bit | Same thread, fixed order, /fp:precise, no ffast-math |
-| Snapshot/restore | stateHash | equal | 8902566875956907469 | 0 | bit-for-bit | Stores state, accumulated impulses and time |
-| Contact determinism (2×20000, box + sphere on ground) | contact_hash | equal | 1443709001998688999 | 0 | bit-for-bit | `sim_determinism` also steps an all-`collisionEnabled` scene (box + sphere onto a ground box) and compares `contact_hash` between Windows and Linux |
+| Determinism (2×20000) | stateHash | equal | 5269089099883223357 | 0 | bit-for-bit | Same thread, fixed order, /fp:precise, no ffast-math |
+| Snapshot/restore | stateHash | equal | 5269089099883223357 | 0 | bit-for-bit | Stores body state, accumulated joint impulses, the contact warm-start cache and the sleep timers |
+| Contact determinism (2×20000, box + sphere on ground) | contact_hash | equal | 9837289854647932968 | 0 | bit-for-bit | `sim_determinism` also steps an all-`collisionEnabled` scene (box + sphere onto a ground box) and compares `contact_hash` between Windows and Linux |
+| Box stack (5 boxes, 60 s) | Max horizontal drift / height error / residual speed | 0 | 9.15e-5 m / 1.47e-4 m / 0 | < 0.05 m / 0.05 m / 0.05 m/s | Warm-started PGS holds the stack essentially rigid; it sleeps, so the residual speed is exactly zero |
+| Resting stack wakes on impact | Woken bodies | 3 | 3 | 0 | exact | A projectile dropped on the sleeping stack wakes every box through the contact graph |
 | Sliding sphere, friction μ = 0.6 | Rolled speed | 5/7·v₀ = 1.42857 m/s | 1.42857 m/s | < 1e-5 | < 1e-2 | Starts sliding, rolls without slipping once the contact point stops: v → 5/7 v₀ for a solid sphere (I = 2/5 m r²); the discrete friction impulses land on the analytic value |
 | Sliding sphere, friction μ = 0 | Rolled speed | v₀ = 2.0 m/s | 2.0 m/s | 0 | < 2e-2 | No friction rows carry impulse, so the horizontal speed is preserved |
 | Dropped sphere, restitution e = 0.8 | Rebound apex (centre y) | 1.46 m | 1.5718 m | 0.112 | < 0.22 (15 %) | Rebound height = e²·drop; the ~8 % excess is the discrete contact detection giving a slightly faster approach than the ideal free-fall at the sampled step |
