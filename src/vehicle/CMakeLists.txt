@@ -44,6 +44,9 @@ add_library(sim_vehicle STATIC
     # Engine torque map and friction (Phase 2, P2.10).
     include/vehicle/Engine.hpp
     src/Engine.cpp
+    # Friction and centrifugal clutches (Phase 2, P2.10).
+    include/vehicle/Clutch.hpp
+    src/Clutch.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

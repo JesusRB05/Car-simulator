@@ -10,6 +10,7 @@
 #include "vehicle/Aerodynamics.hpp"
 #include "vehicle/AntiRollBar.hpp"
 #include "vehicle/Bushing.hpp"
+#include "vehicle/Clutch.hpp"
 #include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/Engine.hpp"
 #include "vehicle/IAerodynamics.hpp"
@@ -1125,6 +1126,38 @@ TEST_CASE("the engine dynamics lag, limit and idle") {
         }
         CHECK(engine.angularVelocity() == doctest::Approx(100.0).epsilon(0.01));
     }
+}
+
+TEST_CASE("the clutch slips at its capacity and locks below it") {
+    FrictionClutch clutch;
+    clutch.frictionCoefficient = 0.5;
+    clutch.maxClampForce = 1000.0;
+    clutch.frictionFaces = 2;
+    clutch.outerRadius = 0.1;
+    clutch.innerRadius = 0.05;
+
+    CHECK(clutch.effectiveRadius() == doctest::Approx(0.07777778));
+    CHECK(clutch.capacity() == doctest::Approx(77.77778));
+
+    // A fast slip transmits the whole capacity along the slip direction.
+    const ClutchTorque drive = computeClutchTorque(clutch, 10.0, 0.0);
+    CHECK(drive.torque == doctest::Approx(clutch.capacity()));
+    CHECK(drive.slipping);
+    const ClutchTorque coast = computeClutchTorque(clutch, -10.0, 0.0);
+    CHECK(coast.torque == doctest::Approx(-clutch.capacity()));
+
+    // Locked, it passes the needed torque until the clamp is hit.
+    const ClutchTorque locked = computeClutchTorque(clutch, 0.0, 10.0);
+    CHECK(locked.torque == doctest::Approx(10.0));
+    CHECK_FALSE(locked.slipping);
+
+    const ClutchTorque clamped = computeClutchTorque(clutch, 0.0, 200.0);
+    CHECK(clamped.torque == doctest::Approx(clutch.capacity()));
+    CHECK(clamped.slipping);
+
+    // The centrifugal clutch engages only above its speed.
+    CHECK(centrifugalClutchCapacity(0.001, 300.0, 100.0) == doctest::Approx(80.0));
+    CHECK(centrifugalClutchCapacity(0.001, 50.0, 100.0) == doctest::Approx(0.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
