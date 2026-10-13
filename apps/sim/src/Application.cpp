@@ -49,9 +49,9 @@ std::filesystem::path executableDirectory()
     {
         return std::filesystem::current_path();
     }
-    std::filesystem::path path(base);
-    SDL_free(const_cast<char*>(base));
-    return path;
+    // SDL3 owns and caches this string: freeing it would leave later calls
+    // returning freed memory.
+    return std::filesystem::path(base);
 }
 
 std::filesystem::path searchForRoot()
