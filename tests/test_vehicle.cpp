@@ -20,6 +20,7 @@
 #include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/PlaceholderVehicle.hpp"
 #include "vehicle/SpringDamper.hpp"
+#include "vehicle/Steering.hpp"
 #include "vehicle/TireBristle.hpp"
 #include "vehicle/TireVertical.hpp"
 #include "vehicle/WheelSpin.hpp"
@@ -951,6 +952,39 @@ TEST_CASE("a quarter car rides and damps at its analytic rate") {
     const Real logDecrement = std::log(peaks[0] / peaks[1]);
     const Real analytic = 2.0 * 3.14159265358979323846 * zeta / std::sqrt(1.0 - zeta * zeta);
     CHECK(logDecrement == doctest::Approx(analytic).epsilon(2.0e-2));
+}
+
+TEST_CASE("the steering gives Ackermann angles and a column torque") {
+    const Real pi = 3.14159265358979323846;
+    const AckermannGeometry geom{1.5, 2.6};
+
+    SUBCASE("the outer wheel satisfies the Ackermann condition") {
+        const Real inner = 20.0 * pi / 180.0;
+        const Real outer = ackermannOuterAngle(geom, inner);
+        CHECK(1.0 / std::tan(outer) - 1.0 / std::tan(inner) == doctest::Approx(geom.track / geom.wheelbase));
+        CHECK(outer < inner); // the outer wheel steers less
+    }
+
+    SUBCASE("the Ackermann percentage blends parallel to full") {
+        const Real inner = 0.3;
+        const Real ideal = ackermannOuterAngle(geom, inner);
+        CHECK(steerAngles(geom, inner, 0.0).outer == doctest::Approx(inner));
+        CHECK(steerAngles(geom, inner, 1.0).outer == doctest::Approx(ideal));
+        CHECK(steerAngles(geom, inner, 0.5).outer == doctest::Approx(0.5 * (inner + ideal)));
+    }
+
+    SUBCASE("the rack ratio scales the steering wheel angle") {
+        CHECK(roadWheelAngle(15.0, 0.5 * pi) == doctest::Approx(0.5 * pi / 15.0));
+        CHECK(roadWheelAngle(0.0, 1.0) == doctest::Approx(0.0));
+    }
+
+    SUBCASE("the column torque sums the aligning torques and the assist") {
+        const std::vector<WheelSteerLoad> wheels{{20.0, 3000.0, 0.03, 0.02}, {20.0, 3000.0, 0.03, 0.02}};
+        // Each wheel: 20 + 3000*(0.03 + 0.02) = 170 N*m, two of them 340.
+        CHECK(steeringColumnTorque(wheels, 0.9, -100.0, 5.0) == doctest::Approx(340.0 / 0.9 - 100.0 + 5.0));
+        // A zero efficiency falls back to 1 instead of dividing by zero.
+        CHECK(steeringColumnTorque(wheels, 0.0, 0.0, 0.0) == doctest::Approx(340.0));
+    }
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {

@@ -33,6 +33,9 @@ add_library(sim_vehicle STATIC
     # Rubber bushings, per-axis 6-DOF compliance (Phase 2, P2.7).
     include/vehicle/Bushing.hpp
     src/Bushing.cpp
+    # Steering geometry, Ackermann and column torque (Phase 2, P2.8).
+    include/vehicle/Steering.hpp
+    src/Steering.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)
