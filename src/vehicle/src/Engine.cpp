@@ -2,6 +2,7 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #include "vehicle/Engine.hpp"
 
+#include <cmath>
 #include <cstddef>
 
 namespace sim::vehicle {
@@ -70,6 +71,54 @@ Real EngineTorqueMap::torqueAt(Real angularVelocity, Real throttlePosition) cons
 
 Real EngineFriction::torqueAt(Real angularVelocity) const {
     return constant + linear * angularVelocity + quadratic * angularVelocity * angularVelocity;
+}
+
+void Engine::reset() {
+    angularVelocity_ = 0.0;
+    effectiveThrottle_ = 0.0;
+    idleIntegral_ = 0.0;
+    fuelCut_ = false;
+}
+
+Real Engine::step(Real deltaSeconds, Real throttle, Real loadTorque) {
+    if (config.throttleTimeConstant > 0.0) {
+        const Real decay = std::exp(-deltaSeconds / config.throttleTimeConstant);
+        effectiveThrottle_ = throttle + (effectiveThrottle_ - throttle) * decay;
+    } else {
+        effectiveThrottle_ = throttle;
+    }
+
+    if (angularVelocity_ > config.revLimit) {
+        fuelCut_ = true;
+    } else if (angularVelocity_ < config.revLimit - config.revLimitHysteresis) {
+        fuelCut_ = false;
+    }
+
+    const Real command = fuelCut_ ? 0.0 : effectiveThrottle_;
+    Real torque = map.torqueAt(angularVelocity_, command);
+
+    if (effectiveThrottle_ <= config.idleThrottleThreshold) {
+        const Real error = config.idleSpeed - angularVelocity_;
+        if (error > 0.0) {
+            idleIntegral_ += error * deltaSeconds;
+            const Real cap = 50.0; // anti-windup on the accumulated error
+            if (idleIntegral_ > cap) {
+                idleIntegral_ = cap;
+            }
+            torque += config.idleProportionalGain * error + config.idleIntegralGain * idleIntegral_;
+        } else {
+            idleIntegral_ = 0.0;
+        }
+    } else {
+        idleIntegral_ = 0.0;
+    }
+
+    const Real net = torque - friction.torqueAt(angularVelocity_) - loadTorque;
+    angularVelocity_ += net / config.inertia * deltaSeconds;
+    if (angularVelocity_ < 0.0) {
+        angularVelocity_ = 0.0;
+    }
+    return torque;
 }
 
 } // namespace sim::vehicle

@@ -1059,6 +1059,74 @@ TEST_CASE("the engine map interpolates and the friction follows the polynomial")
     CHECK(friction.torqueAt(100.0) == doctest::Approx(25.0));
 }
 
+TEST_CASE("the engine dynamics lag, limit and idle") {
+    SUBCASE("the effective throttle follows a first-order lag") {
+        Engine engine;
+        engine.config.throttleTimeConstant = 0.1;
+        engine.reset();
+        engine.step(0.1, 1.0, 0.0);
+        CHECK(engine.effectiveThrottle() == doctest::Approx(1.0 - std::exp(-1.0)));
+    }
+
+    SUBCASE("a constant closed-throttle torque coasts the engine down analytically") {
+        Engine engine;
+        EngineConfig& cfg = engine.config;
+        cfg.inertia = 0.5;
+        cfg.throttleTimeConstant = 0.0;
+        cfg.idleSpeed = 0.0; // disable the idle controller
+        engine.map.speed = {0.0, 1000.0};
+        engine.map.throttle = {0.0, 1.0};
+        engine.map.torque = {-20.0, 100.0, -20.0, 100.0}; // -20 N*m closed throttle at any speed
+        engine.reset();
+
+        const Real dt = 1.0e-3;
+        for (int i = 0; i < 500; ++i) { // wide open for 0.5 s: 100/0.5 * 0.5 = 100 rad/s
+            engine.step(dt, 1.0, 0.0);
+        }
+        CHECK(engine.angularVelocity() == doctest::Approx(100.0));
+
+        for (int i = 0; i < 500; ++i) { // coast for 0.5 s: -20/0.5 * 0.5 = -20 rad/s
+            engine.step(dt, 0.0, 0.0);
+        }
+        CHECK(engine.angularVelocity() == doctest::Approx(80.0));
+    }
+
+    SUBCASE("the rev limiter keeps the engine near the limit") {
+        Engine engine;
+        EngineConfig& cfg = engine.config;
+        cfg.inertia = 0.5;
+        cfg.throttleTimeConstant = 0.0;
+        cfg.revLimit = 100.0;
+        cfg.revLimitHysteresis = 30.0;
+        cfg.idleSpeed = 0.0;
+        cfg.idleThrottleThreshold = 0.0; // keep the idle controller out of the way
+        engine.map.speed = {0.0, 1000.0};
+        engine.map.throttle = {0.0, 1.0};
+        engine.map.torque = {-20.0, 200.0, -20.0, 200.0};
+        engine.reset();
+        for (int i = 0; i < 5000; ++i) {
+            engine.step(1.0e-3, 1.0, 0.0);
+        }
+        CHECK(engine.angularVelocity() <= cfg.revLimit + 5.0);
+        CHECK(engine.angularVelocity() >= cfg.revLimit - cfg.revLimitHysteresis - 5.0);
+    }
+
+    SUBCASE("the idle controller holds the target speed") {
+        Engine engine;
+        EngineConfig& cfg = engine.config;
+        cfg.inertia = 0.5;
+        cfg.throttleTimeConstant = 0.0;
+        cfg.idleSpeed = 100.0;
+        cfg.idleProportionalGain = 1.0;
+        cfg.idleIntegralGain = 0.0;
+        engine.reset();
+        for (int i = 0; i < 3000; ++i) {
+            engine.step(1.0e-3, 0.0, 0.0);
+        }
+        CHECK(engine.angularVelocity() == doctest::Approx(100.0).epsilon(0.01));
+    }
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 

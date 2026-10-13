@@ -34,4 +34,43 @@ struct EngineFriction {
     Real torqueAt(Real angularVelocity) const;
 };
 
+// Engine dynamics (PHYSICS_PLAN Section 7.1): the crankshaft inertia integrated
+// from the map torque minus the friction and the load, with a first-order
+// throttle lag, a rev limiter by fuel cut with hysteresis and a PI idle
+// controller.
+struct EngineConfig {
+    Real inertia = 0.5;               // J_e (kg*m^2)
+    Real throttleTimeConstant = 0.05; // tau_theta (s)
+    Real revLimit = 700.0;            // rad/s
+    Real revLimitHysteresis = 30.0;   // rad/s
+    Real idleSpeed = 90.0;            // rad/s
+    Real idleProportionalGain = 1.0;  // N*m/(rad/s)
+    Real idleIntegralGain = 2.0;      // N*m/(rad*s)
+    Real idleThrottleThreshold = 0.02;
+};
+
+class Engine {
+public:
+    EngineConfig config;
+    EngineTorqueMap map;
+    EngineFriction friction;
+
+    void reset();
+
+    // One fixed step: advances the throttle lag, applies the rev limiter and the
+    // idle controller, integrates the crankshaft and returns the torque at the
+    // crankshaft (N*m).
+    Real step(Real deltaSeconds, Real throttle, Real loadTorque);
+
+    Real angularVelocity() const { return angularVelocity_; }
+    Real effectiveThrottle() const { return effectiveThrottle_; }
+    bool fuelCut() const { return fuelCut_; }
+
+private:
+    Real angularVelocity_ = 0.0;
+    Real effectiveThrottle_ = 0.0;
+    Real idleIntegral_ = 0.0;
+    bool fuelCut_ = false;
+};
+
 } // namespace sim::vehicle
