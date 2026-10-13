@@ -1,7 +1,17 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Car Simulator contributors
 add_library(sim_vehicle STATIC
-    src/Vehicle.cpp)
+    # Header-only abstract interfaces (listed for IDE visibility).
+    include/vehicle/IAerodynamics.hpp
+    include/vehicle/IBrakeSystem.hpp
+    include/vehicle/IDrivetrain.hpp
+    include/vehicle/ISuspension.hpp
+    include/vehicle/ITireModel.hpp
+    include/vehicle/IVehicleElectronics.hpp
+    include/vehicle/IVehicleModel.hpp
+    # TEMPORARY kinematic placeholder implementing IVehicleModel.
+    include/vehicle/PlaceholderVehicle.hpp
+    src/PlaceholderVehicle.cpp)
 add_library(sim::vehicle ALIAS sim_vehicle)
 
 target_include_directories(sim_vehicle PUBLIC include)

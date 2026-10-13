@@ -6,7 +6,8 @@ add_executable(sim_tests
     test_modding.cpp
     test_physics.cpp
     test_render_math.cpp
-    test_scripting.cpp)
+    test_scripting.cpp
+    test_vehicle.cpp)
 
 target_include_directories(sim_tests PRIVATE .)
 
@@ -18,6 +19,7 @@ target_link_libraries(sim_tests
         sim::render
         sim::scripting
         sim::vfs
+        sim::vehicle
         doctest::doctest)
 
 sim_configure_target(sim_tests)

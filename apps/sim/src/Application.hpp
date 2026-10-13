@@ -35,7 +35,7 @@
 #include "scripting/LuaSandbox.hpp"
 #include "scripting/ScriptHost.hpp"
 #include "telemetry/Telemetry.hpp"
-#include "vehicle/Vehicle.hpp"
+#include "vehicle/PlaceholderVehicle.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
 #include <volk.h>
@@ -201,7 +201,7 @@ private:
 
     // Simulation.
     physics::PhysicsWorld world_;
-    vehicle::Vehicle vehicle_;
+    vehicle::PlaceholderVehicle vehicle_; // TEMPORARY until the real IVehicleModel lands
     std::thread physicsThread_;
     std::atomic<bool> physicsRunning_{false};
     core::FixedStepClock physicsClock_{1.0 / 1000.0, 16};

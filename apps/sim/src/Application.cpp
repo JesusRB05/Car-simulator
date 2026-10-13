@@ -505,6 +505,8 @@ void Application::updateScene(const SimSnapshot& interpolated)
     const float heading = static_cast<float>(interpolated.heading);
     const float steer = static_cast<float>(interpolated.steer);
 
+    // Heading is a plain yaw about +Y; the car body and wheel offsets are
+    // authored with -Z forward, so no axis conversion is needed.
     const glm::mat4 headingRotation = glm::rotate(glm::mat4(1.0f), heading, glm::vec3(0.0f, 1.0f, 0.0f));
     const glm::mat4 base = glm::translate(glm::mat4(1.0f), position) * headingRotation;
 
@@ -519,7 +521,8 @@ void Application::updateScene(const SimSnapshot& interpolated)
         {
             wheel = wheel * glm::rotate(glm::mat4(1.0f), steer, glm::vec3(0.0f, 1.0f, 0.0f));
         }
-        wheel = wheel * glm::rotate(glm::mat4(1.0f), static_cast<float>(interpolated.wheelSpin[i]), glm::vec3(1.0f, 0.0f, 0.0f));
+        // Rolling forward (towards -Z) is a rotation about body -X.
+        wheel = wheel * glm::rotate(glm::mat4(1.0f), static_cast<float>(interpolated.wheelSpin[i]), glm::vec3(-1.0f, 0.0f, 0.0f));
         wheel = wheel * glm::scale(glm::mat4(1.0f), glm::vec3(0.68f));
         scene_.add(cubeMesh_, wheel, glm::vec4(0.08f, 0.08f, 0.09f, 1.0f));
     }
@@ -542,7 +545,8 @@ void Application::updateScene(const SimSnapshot& interpolated)
     }
     else
     {
-        const glm::vec3 forward(std::sin(heading), 0.0f, std::cos(heading));
+        // Vehicle forward is body -Z rotated by heading about +Y (heading 0 faces -Z).
+        const glm::vec3 forward(-std::sin(heading), 0.0f, -std::cos(heading));
         const glm::vec3 eye = position - forward * 8.0f + glm::vec3(0.0f, 3.4f, 0.0f);
         scene_.camera().lookAt(eye, focus, glm::vec3(0.0f, 1.0f, 0.0f));
     }

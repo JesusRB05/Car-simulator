@@ -7,12 +7,15 @@ archivo; los detalles de cada módulo viven en sus propios documentos
 ## Sistema de coordenadas
 
 - Mundo en coordenadas **diestras**: `+X` a la derecha, `+Y` arriba, **`-Z`
-  adelante** (render y escenas de física).
+  adelante** en todo el proyecto, **sin excepciones** (render, escenas de física
+  y vehículo).
 - Ángulos en **radianes**, tiempo en **segundos**, distancias en **metros**
   (unidades SI, nunca otra unidad).
-- Excepción deliberada: el vehículo usa **forward = (sin h, 0, cos h)**, es decir
-  `+Z` a rumbo 0. Al construir la matriz de modelo del coche hay que convertir a
-  la base general (`-Z` adelante). Ver [`FISICA.md`](FISICA.md).
+- Vehicle: heading `h` is a yaw about `+Y`; heading 0 faces `-Z`, so
+  `forward = (-sin h, 0, -cos h)` and `right = (cos h, 0, -sin h)`. Positive
+  heading, yaw rate and steer turn **left** (counter-clockwise seen from `+Y`).
+  The car's model matrix is just `translate(p) * rotate(h, +Y)`, no axis
+  conversion. See [`FISICA.md`](FISICA.md).
 
 ## Convención de matrices (render)
 

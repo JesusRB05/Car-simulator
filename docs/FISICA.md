@@ -180,10 +180,30 @@ estables), restricciones y elementos de fuerza. Expone `createBody()`,
   acumulados de cada fila y el tiempo, para el reinicio interactivo y el test de
   determinismo.
 
-## Vehículo (`vehicle/Vehicle.hpp`)
+## Vehículo (`vehicle/`)
 
-Modelo de **bicicleta cinemático determinista**, pensado para ser creíble y
-reproducible, no un modelo de neumáticos completo todavía.
+### Interfaces
+
+The vehicle module is organised around header-only abstract interfaces in
+`src/vehicle/include/vehicle/` (SI units, `physics::Real`/`Vec3`):
+
+- `IVehicleModel`: top-level model (`setInput`, `reset`, fixed-step `step(dt)`,
+  pose/velocity queries). `VehicleInput` holds throttle/brake/steer/handbrake.
+- `ITireModel`: contact-patch forces from slip ratio, slip angle, normal load,
+  camber and friction coefficient.
+- `ISuspension`: hardpoint-based corner (`SuspensionHardpoints` in the chassis
+  frame); wheel pose, spring/damper length and motion ratios.
+- `IDrivetrain`: engine torque → clutch → gearbox → differential → wheel torques.
+- `IAerodynamics`: drag/downforce/moments from the chassis-relative air velocity.
+- `IBrakeSystem`: pedal/handbrake → per-wheel brake torque, front bias.
+- `IVehicleElectronics`: ABS/TCS/ESC hooks that filter inputs and modulate brakes.
+
+### `PlaceholderVehicle` (TEMPORARY)
+
+**TEMPORARY**: `vehicle/PlaceholderVehicle.hpp` implements `IVehicleModel` with a
+**deterministic kinematic bicycle model**, only so that the app, renderer and
+telemetry have something to drive. It will be replaced by a real model built on
+the interfaces above; do not extend it.
 
 - 4 ruedas en orden **FL, FR, RL, RR**; las delanteras giran (`steered`), las
   traseras traccionan (`driven`).
@@ -197,11 +217,12 @@ reproducible, no un modelo de neumáticos completo todavía.
 
 ### Convención de orientación del vehículo
 
-El vehículo usa **forward = (sin h, 0, cos h)**, es decir **+Z a rumbo 0**.
-Conviene tenerlo presente porque la convención general del motor es **-Z
-adelante**; el render y la física de escena usan -Z, mientras que el vehículo
-usa esta base propia. Al construir la matriz de modelo del coche hay que tener
-en cuenta esta diferencia.
+The vehicle follows the project-wide frame with no exceptions: heading `h` is
+a yaw about `+Y`, heading 0 faces **-Z**, `forward = (-sin h, 0, -cos h)` and
+`right = (cos h, 0, -sin h)`. Positive steer, yaw rate and heading turn **left**
+(counter-clockwise seen from `+Y`; a car starting at heading 0 drifts towards
+`-X`). The car's model matrix is `translate(p) * rotate(h, +Y)` with no axis
+conversion. `tests/test_vehicle.cpp` pins both facts.
 
 ## Determinismo
 

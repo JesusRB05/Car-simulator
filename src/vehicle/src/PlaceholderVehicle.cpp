@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 The Car Simulator contributors
-#include "vehicle/Vehicle.hpp"
+// TEMPORARY placeholder vehicle model; see PlaceholderVehicle.hpp.
+#include "vehicle/PlaceholderVehicle.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -14,7 +15,7 @@ constexpr Real kPi = 3.14159265358979323846;
 
 } // namespace
 
-Vehicle::Vehicle(const VehicleConfig& config) : config_(config)
+PlaceholderVehicle::PlaceholderVehicle(const VehicleConfig& config) : config_(config)
 {
     const Real halfTrack = config_.trackWidth * 0.5;
     const Real halfWheelBase = config_.wheelBase * 0.5;
@@ -38,11 +39,12 @@ Vehicle::Vehicle(const VehicleConfig& config) : config_(config)
     wheels_ = {frontLeft, frontRight, rearLeft, rearRight};
 }
 
-void Vehicle::reset(const Vec3& position, Real headingRadians)
+void PlaceholderVehicle::reset(const Vec3& position, Real headingRadians)
 {
     position_ = position;
     heading_ = headingRadians;
     speed_ = 0.0;
+    yawRate_ = 0.0;
     steerAngle_ = 0.0;
     engineRpm_ = kIdleRpm;
     for (Wheel& wheel : wheels_)
@@ -53,7 +55,7 @@ void Vehicle::reset(const Vec3& position, Real headingRadians)
     }
 }
 
-bool Vehicle::step(Real deltaSeconds)
+bool PlaceholderVehicle::step(Real deltaSeconds)
 {
     if (deltaSeconds <= 0.0)
     {
@@ -95,12 +97,12 @@ bool Vehicle::step(Real deltaSeconds)
         }
     }
 
-    // Kinematic bicycle yaw rate.
-    const Real yawRate = speed_ / config_.wheelBase * std::tan(steerAngle_);
-    heading_ += yawRate * deltaSeconds;
+    // Kinematic bicycle yaw rate. Positive steer (left) with forward speed
+    // gives a positive yaw rate about +Y, i.e. a left turn.
+    yawRate_ = speed_ / config_.wheelBase * std::tan(steerAngle_);
+    heading_ += yawRate_ * deltaSeconds;
 
-    const Vec3 forwardVec(std::sin(heading_), 0.0, std::cos(heading_));
-    position_ += forwardVec * speed_ * deltaSeconds;
+    position_ += forward() * speed_ * deltaSeconds;
 
     engineRpm_ = std::clamp(kIdleRpm + std::abs(speed_) * 180.0, kIdleRpm, kRedlineRpm);
 
@@ -108,7 +110,7 @@ bool Vehicle::step(Real deltaSeconds)
     return true;
 }
 
-void Vehicle::updateWheels(Real deltaSeconds)
+void PlaceholderVehicle::updateWheels(Real deltaSeconds)
 {
     for (Wheel& wheel : wheels_)
     {
@@ -118,14 +120,20 @@ void Vehicle::updateWheels(Real deltaSeconds)
     }
 }
 
-Vec3 Vehicle::forward() const
+// Body axes rotated by heading_ about +Y: body -Z -> forward, body +X -> right.
+Vec3 PlaceholderVehicle::forward() const
 {
-    return Vec3(std::sin(heading_), 0.0, std::cos(heading_));
+    return Vec3(-std::sin(heading_), 0.0, -std::cos(heading_));
 }
 
-Vec3 Vehicle::right() const
+Vec3 PlaceholderVehicle::right() const
 {
     return Vec3(std::cos(heading_), 0.0, -std::sin(heading_));
+}
+
+Quat PlaceholderVehicle::orientation() const
+{
+    return glm::angleAxis(heading_, Vec3(0.0, 1.0, 0.0));
 }
 
 } // namespace sim::vehicle

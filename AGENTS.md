@@ -11,8 +11,9 @@ ImGui/ImPlot, modding y plugin API. La documentación del proyecto está en `doc
 
 ## Convenciones esenciales
 
-- Unidades SI, radianes, segundos, metros. Mundo diestro con `-Z` adelante
-  (excepto el vehículo, que usa `+Z` a rumbo 0).
+- Unidades SI, radianes, segundos, metros. Mundo diestro con `-Z` adelante,
+  `+Y` arriba, `+X` a la derecha, sin excepciones (el vehículo incluido: rumbo 0
+  mira a `-Z`).
 - Matrices **column-major** en GLM y **`column_major`** + `mul(M, v)` en Slang;
   se suben verbatim con `writeMatrix()`, sin transponer nunca.
 - Profundidad inversa (reversed-Z): `GreaterEqual`, clear a `0.0f`.
