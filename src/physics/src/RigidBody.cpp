@@ -219,15 +219,18 @@ void RigidBody::applyForceAtLocalPoint(const Vec3& force, const Vec3& localPoint
 }
 
 void RigidBody::applyCentralImpulse(const Vec3& impulse) {
+    wake();
     linearVelocity += impulse * inverseMass;
 }
 
 void RigidBody::applyImpulseAtWorldPoint(const Vec3& impulse, const Vec3& worldPoint) {
+    wake();
     linearVelocity += impulse * inverseMass;
     angularVelocity += inverseInertiaWorld() * glm::cross(worldPoint - position, impulse);
 }
 
 void RigidBody::applyAngularImpulse(const Vec3& impulse) {
+    wake();
     angularVelocity += inverseInertiaWorld() * impulse;
 }
 

@@ -9,13 +9,15 @@ namespace sim::physics {
 
 Real constraintMass(const ConstraintRow& row) {
     Real k = 0.0;
+    // A sleeping body behaves as static (infinite mass): it contributes nothing
+    // to the row's constraint mass and receives no impulse.
     const RigidBody* a = row.bodyA;
     const RigidBody* b = row.bodyB;
-    if (a != nullptr) {
+    if (a != nullptr && !a->sleeping) {
         k += a->inverseMass * glm::dot(row.linearA, row.linearA);
         k += glm::dot(row.angularA, a->inverseInertiaWorld() * row.angularA);
     }
-    if (b != nullptr) {
+    if (b != nullptr && !b->sleeping) {
         k += b->inverseMass * glm::dot(row.linearB, row.linearB);
         k += glm::dot(row.angularB, b->inverseInertiaWorld() * row.angularB);
     }
@@ -64,11 +66,11 @@ void applyRowImpulse(ConstraintRow& row, Real lambda) {
     if (lambda == 0.0) {
         return;
     }
-    if (row.bodyA != nullptr) {
+    if (row.bodyA != nullptr && !row.bodyA->sleeping) {
         row.bodyA->linearVelocity += row.bodyA->inverseMass * row.linearA * lambda;
         row.bodyA->angularVelocity += row.bodyA->inverseInertiaWorld() * row.angularA * lambda;
     }
-    if (row.bodyB != nullptr) {
+    if (row.bodyB != nullptr && !row.bodyB->sleeping) {
         row.bodyB->linearVelocity += row.bodyB->inverseMass * row.linearB * lambda;
         row.bodyB->angularVelocity += row.bodyB->inverseInertiaWorld() * row.angularB * lambda;
     }

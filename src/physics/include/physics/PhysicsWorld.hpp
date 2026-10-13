@@ -28,6 +28,8 @@ struct BodyState {
     Quat orientation{1.0, 0.0, 0.0, 0.0};
     Vec3 linearVelocity{0.0};
     Vec3 angularVelocity{0.0};
+    bool sleeping = false;
+    Real sleepTimer = 0.0;
 };
 
 // Warm-start impulses of one contact pair, captured so a restore resumes the
@@ -83,6 +85,16 @@ public:
     Real contactBaumgarte = 0.2;
     Real contactSlop = 1e-3;
 
+    // Sleeping. A dynamic body whose linear speed stays below
+    // `sleepLinearThreshold` and angular speed below `sleepAngularThreshold`
+    // for `sleepTime` seconds is frozen (velocities zeroed, not integrated and
+    // treated as static by the solver) until it is woken by a moving body it is
+    // in contact with or jointed to, by an applied impulse, or explicitly.
+    bool enableSleeping = true;
+    Real sleepLinearThreshold = 0.01;  // m/s
+    Real sleepAngularThreshold = 0.05; // rad/s
+    Real sleepTime = 0.5;              // s below the thresholds to fall asleep
+
     RigidBody& createBody();
     std::size_t bodyCount() const { return bodies_.size(); }
     RigidBody& body(std::size_t index) { return bodies_[index]; }
@@ -130,6 +142,14 @@ private:
     // seeds them with the previous step's impulses (warm starting).
     void buildContacts(Real dt);
     void storeContactImpulses();
+
+    // Wakes every sleeping body that a moving awake body is touching (given the
+    // freshly detected manifolds), jointed to or coupled to through a force
+    // element, propagating along the chain. Called before the contacts are
+    // configured so a woken body's rows use its real mass.
+    void wakeBodies(const std::vector<ContactManifold>& manifolds);
+    // Advances each dynamic body's sleep timer and puts the quiet ones to sleep.
+    void updateSleeping(Real dt);
 
     std::vector<std::vector<Constraint*>> buildIslands(const std::vector<Constraint*>& all) const;
     void solveVelocities(const std::vector<std::vector<Constraint*>>& islands);

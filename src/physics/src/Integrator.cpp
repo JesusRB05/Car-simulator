@@ -5,7 +5,7 @@
 namespace sim::physics::integrator {
 
 void integrateVelocities(RigidBody& body, const Vec3& gravity, Real dt) {
-    if (!body.isDynamic()) {
+    if (!body.isDynamic() || body.sleeping) {
         return;
     }
 
@@ -40,7 +40,7 @@ void integrateVelocities(RigidBody& body, const Vec3& gravity, Real dt) {
 }
 
 void integratePositions(RigidBody& body, Real dt) {
-    if (body.isStatic()) {
+    if (body.isStatic() || body.sleeping) {
         return;
     }
 

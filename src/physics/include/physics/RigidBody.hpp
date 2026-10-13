@@ -75,6 +75,20 @@ public:
     Vec3 forceAccumulator{0.0};
     Vec3 torqueAccumulator{0.0};
 
+    // --- Sleeping ---------------------------------------------------------
+    // A dynamic body whose linear and angular speed stay below the world's
+    // thresholds for `PhysicsWorld::sleepTime` seconds is put to sleep: its
+    // velocities are zeroed, it is not integrated and the solver treats it as
+    // static geometry until something wakes it (a contact or joint with a
+    // moving body, an applied impulse, or a call to wake()).
+    bool sleeping = false;
+    Real sleepTimer = 0.0; // seconds spent below the sleep thresholds
+
+    void wake() {
+        sleeping = false;
+        sleepTimer = 0.0;
+    }
+
     // --- Material ---------------------------------------------------------
     Real linearDamping = 0.0; // per-second exponential decay rate
     Real angularDamping = 0.0;

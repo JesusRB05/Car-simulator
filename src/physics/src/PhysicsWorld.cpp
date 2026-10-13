@@ -181,7 +181,7 @@ Real rowVelocity(const ConstraintRow& row) {
 // Moves a body by the position-level counterpart of an impulse,
 // dx = M^-1 J^T lambda, applying the rotation through the exponential map.
 void applyPositionImpulse(RigidBody* body, const Vec3& linear, const Vec3& angular, Real lambda) {
-    if (body == nullptr || !body->isDynamic() || lambda == 0.0) {
+    if (body == nullptr || !body->isDynamic() || body->sleeping || lambda == 0.0) {
         return;
     }
     body->position += body->inverseMass * linear * lambda;
@@ -401,6 +401,7 @@ void PhysicsWorld::step(Real dt) {
     }
 
     projectPositions(islands, dt);
+    updateSleeping(dt);
     storeContactImpulses();
 
     time_ += static_cast<double>(dt);
@@ -411,6 +412,7 @@ void PhysicsWorld::buildContacts(Real dt) {
     contactKeys_.clear();
 
     const std::vector<ContactManifold> manifolds = detectCollisions(*this);
+    wakeBodies(manifolds);
     contacts_.reserve(manifolds.size());
     contactKeys_.reserve(manifolds.size());
     for (const ContactManifold& manifold : manifolds) {
@@ -436,6 +438,92 @@ void PhysicsWorld::storeContactImpulses() {
         static_cast<ContactConstraint*>(contacts_[i].get())
             ->getImpulses(cache.normal, cache.tangent1, cache.tangent2, cache.count);
         contactCache_.emplace(contactKeys_[i], cache);
+    }
+}
+
+void PhysicsWorld::wakeBodies(const std::vector<ContactManifold>& manifolds) {
+    if (!enableSleeping) {
+        return;
+    }
+
+    // A body is "active" when it is a moving dynamic body, or a sleeping one
+    // that has just been woken in this pass; only active bodies wake their
+    // neighbours, so a fully resting stack stays asleep.
+    std::unordered_map<const RigidBody*, std::size_t> index;
+    index.reserve(bodies_.size());
+    std::vector<char> active(bodies_.size(), 0);
+    for (std::size_t i = 0; i < bodies_.size(); ++i) {
+        index.emplace(&bodies_[i], i);
+        const RigidBody& body = bodies_[i];
+        if (body.isDynamic() && !body.sleeping &&
+            (glm::length(body.linearVelocity) > sleepLinearThreshold ||
+             glm::length(body.angularVelocity) > sleepAngularThreshold)) {
+            active[i] = 1;
+        }
+    }
+
+    const auto consider = [&](RigidBody* a, RigidBody* b, bool& changed) {
+        if (a == nullptr || b == nullptr) {
+            return;
+        }
+        const auto ia = index.find(a);
+        const auto ib = index.find(b);
+        if (ia == index.end() || ib == index.end()) {
+            return;
+        }
+        if (active[ia->second] && b->isDynamic() && b->sleeping) {
+            b->wake();
+            active[ib->second] = 1;
+            changed = true;
+        }
+        if (active[ib->second] && a->isDynamic() && a->sleeping) {
+            a->wake();
+            active[ia->second] = 1;
+            changed = true;
+        }
+    };
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const ContactManifold& manifold : manifolds) {
+            consider(&bodies_[manifold.bodyA], &bodies_[manifold.bodyB], changed);
+        }
+        for (const auto& constraint : constraints_) {
+            consider(constraint->bodyA, constraint->bodyB, changed);
+        }
+        for (const auto& element : forceElements_) {
+            consider(element->bodyA, element->bodyB, changed);
+        }
+    }
+}
+
+void PhysicsWorld::updateSleeping(Real dt) {
+    if (!enableSleeping) {
+        for (RigidBody& body : bodies_) {
+            if (body.sleeping) {
+                body.wake();
+            }
+        }
+        return;
+    }
+
+    for (RigidBody& body : bodies_) {
+        if (!body.isDynamic() || body.sleeping) {
+            continue;
+        }
+        const bool quiet = glm::length(body.linearVelocity) <= sleepLinearThreshold &&
+                           glm::length(body.angularVelocity) <= sleepAngularThreshold;
+        if (!quiet) {
+            body.sleepTimer = 0.0;
+            continue;
+        }
+        body.sleepTimer += dt;
+        if (body.sleepTimer >= sleepTime) {
+            body.sleeping = true;
+            body.linearVelocity = Vec3(0.0);
+            body.angularVelocity = Vec3(0.0);
+        }
     }
 }
 
@@ -616,11 +704,11 @@ Real PhysicsWorld::advance(Real elapsed) {
 std::uint64_t PhysicsWorld::stateHash() const {
     std::uint64_t hash = 1469598103934665603ULL;
     for (const RigidBody& body : bodies_) {
-        const double values[13] = {body.position.x,       body.position.y,        body.position.z,
-                                   body.orientation.w,    body.orientation.x,     body.orientation.y,
-                                   body.orientation.z,    body.linearVelocity.x,  body.linearVelocity.y,
-                                   body.linearVelocity.z, body.angularVelocity.x, body.angularVelocity.y,
-                                   body.angularVelocity.z};
+        const double values[15] = {body.position.x,        body.position.y,        body.position.z,
+                                   body.orientation.w,     body.orientation.x,     body.orientation.y,
+                                   body.orientation.z,     body.linearVelocity.x,  body.linearVelocity.y,
+                                   body.linearVelocity.z,  body.angularVelocity.x, body.angularVelocity.y,
+                                   body.angularVelocity.z, body.sleepTimer,        body.sleeping ? 1.0 : 0.0};
         for (double value : values) {
             hashMix(hash, value);
         }
@@ -639,6 +727,8 @@ WorldSnapshot PhysicsWorld::saveSnapshot() const {
         state.orientation = body.orientation;
         state.linearVelocity = body.linearVelocity;
         state.angularVelocity = body.angularVelocity;
+        state.sleeping = body.sleeping;
+        state.sleepTimer = body.sleepTimer;
         snapshot.bodies.push_back(state);
     }
     snapshot.impulses.reserve(constraints_.size());
@@ -675,6 +765,8 @@ void PhysicsWorld::restoreSnapshot(const WorldSnapshot& snapshot) {
         body.orientation = snapshot.bodies[i].orientation;
         body.linearVelocity = snapshot.bodies[i].linearVelocity;
         body.angularVelocity = snapshot.bodies[i].angularVelocity;
+        body.sleeping = snapshot.bodies[i].sleeping;
+        body.sleepTimer = snapshot.bodies[i].sleepTimer;
         body.updateCache();
     }
     const std::size_t constraintCount = std::min(constraints_.size(), snapshot.impulses.size());

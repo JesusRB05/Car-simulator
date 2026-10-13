@@ -396,6 +396,120 @@ TEST_CASE("restitution makes a dropped sphere bounce") {
     CHECK(dead < 0.6);
 }
 
+TEST_CASE("a box stack stays stable for 60 s") {
+    PhysicsWorld world;
+    RigidBody& ground = world.createBody();
+    ground.shape = Shape::box(Vec3(5.0, 0.5, 5.0));
+    ground.setType(BodyType::Static);
+    ground.setMass(0.0);
+    ground.position = Vec3(0.0, -0.5, 0.0);
+    ground.friction = 0.8;
+    ground.collisionEnabled = true;
+    ground.updateCache();
+
+    constexpr int kBoxes = 5;
+    std::vector<RigidBody*> boxes;
+    for (int i = 0; i < kBoxes; ++i) {
+        RigidBody& box = world.createBody();
+        box.shape = Shape::box(Vec3(0.5));
+        box.setMass(1.0);
+        box.setShapeInertia();
+        box.position = Vec3(0.0, 0.5 + static_cast<Real>(i), 0.0);
+        box.friction = 0.8;
+        box.collisionEnabled = true;
+        box.updateCache();
+        boxes.push_back(&box);
+    }
+
+    const int steps = 60000; // 60 s at dt = 1 ms
+    for (int step = 0; step < steps; ++step) {
+        world.step(1.0 / 1000.0);
+    }
+
+    Real maxDrift = 0.0;
+    Real maxHeightError = 0.0;
+    Real maxSpeed = 0.0;
+    for (int i = 0; i < kBoxes; ++i) {
+        const Vec3 position = boxes[static_cast<std::size_t>(i)]->position;
+        maxDrift = std::max(maxDrift, std::sqrt(position.x * position.x + position.z * position.z));
+        maxHeightError = std::max(maxHeightError, std::abs(position.y - (0.5 + static_cast<Real>(i))));
+        maxSpeed = std::max(maxSpeed, glm::length(boxes[static_cast<std::size_t>(i)]->linearVelocity));
+    }
+    MESSAGE("box stack over 60 s: max horizontal drift = " << maxDrift << " m, max height error = " << maxHeightError
+                                                           << " m, max speed = " << maxSpeed << " m/s");
+    CHECK(maxDrift < 0.05);
+    CHECK(maxHeightError < 0.05);
+    CHECK(maxSpeed < 0.05);
+}
+
+TEST_CASE("a resting stack sleeps, stays frozen and is woken by a projectile") {
+    PhysicsWorld world;
+    RigidBody& ground = world.createBody();
+    ground.shape = Shape::box(Vec3(5.0, 0.5, 5.0));
+    ground.setType(BodyType::Static);
+    ground.setMass(0.0);
+    ground.position = Vec3(0.0, -0.5, 0.0);
+    ground.friction = 0.8;
+    ground.collisionEnabled = true;
+    ground.updateCache();
+
+    constexpr int kBoxes = 3;
+    std::vector<RigidBody*> boxes;
+    for (int i = 0; i < kBoxes; ++i) {
+        RigidBody& box = world.createBody();
+        box.shape = Shape::box(Vec3(0.5));
+        box.setMass(1.0);
+        box.setShapeInertia();
+        box.position = Vec3(0.0, 0.5 + static_cast<Real>(i), 0.0);
+        box.friction = 0.8;
+        box.collisionEnabled = true;
+        box.updateCache();
+        boxes.push_back(&box);
+    }
+
+    for (int i = 0; i < 3000; ++i) {
+        world.step(1.0 / 1000.0);
+    }
+    for (RigidBody* box : boxes) {
+        CHECK(box->sleeping);
+    }
+
+    // A sleeping body is not integrated: its pose and timer are frozen.
+    std::vector<Vec3> frozen;
+    for (RigidBody* box : boxes) {
+        frozen.push_back(box->position);
+    }
+    for (int i = 0; i < 1000; ++i) {
+        world.step(1.0 / 1000.0);
+    }
+    for (int i = 0; i < kBoxes; ++i) {
+        CHECK(boxes[static_cast<std::size_t>(i)]->position == frozen[static_cast<std::size_t>(i)]);
+        CHECK(boxes[static_cast<std::size_t>(i)]->sleeping);
+    }
+
+    // A projectile dropped onto the stack wakes it.
+    RigidBody& ball = world.createBody();
+    ball.shape = Shape::sphere(0.4);
+    ball.setMass(5.0);
+    ball.setShapeInertia();
+    ball.position = Vec3(0.0, 6.0, 0.0);
+    ball.restitution = 0.2;
+    ball.collisionEnabled = true;
+    ball.updateCache();
+
+    bool anyAwake = false;
+    for (int i = 0; i < 2000 && !anyAwake; ++i) {
+        world.step(1.0 / 1000.0);
+        for (RigidBody* box : boxes) {
+            anyAwake = anyAwake || !box->sleeping;
+        }
+    }
+    MESSAGE("stack woken by projectile: top box sleeping = " << boxes.back()->sleeping << ", awake = " << anyAwake);
+    CHECK(anyAwake);
+    // The impact pushed the top of the stack down (the boxes moved).
+    CHECK(boxes.back()->position.y != frozen.back().y);
+}
+
 TEST_CASE("detectCollisions returns deterministic ordered manifolds") {
     PhysicsWorld world;
     RigidBody& ground = world.createBody();
