@@ -129,10 +129,54 @@ m_{\text{eff}} = \frac{1}{K + \gamma},\qquad
 \lambda = -\,m_{\text{eff}}\left(\dot C + b + \gamma\,\lambda_{\text{acum}}\right),
 $$
 
-con `λ` limitado a `[lower, upper]`. Si `f = 0` la fila es dura (`γ = β = 0`) y
-solo corrige velocidad; con `f > 0` se elimina el error de posición de forma
-suave, sin la energía que inyecta un Baumgarte agresivo. Frecuencia por defecto
-de las articulaciones: ~60 Hz.
+con `λ` limitado a `[lower, upper]`. Con `f > 0` se elimina el error de
+posición de forma suave, sin la energía que inyecta un Baumgarte agresivo.
+Frecuencia por defecto de las articulaciones: ~60 Hz.
+
+### Compliance modes (`SoftParams`)
+
+Each joint carries its own `SoftParams` (`soft`, and `limitSoft` for limits),
+with three modes:
+
+| Mode | How to select it | Velocity row | Position error |
+|---|---|---|---|
+| Rigid | `rigid = true` (or `SoftParams::makeRigid()`), or `stiffness >= 1e18` | hard (`γ = 0`, no bias) | removed by the projection pass (below) |
+| Soft step | `stiffness > 0` (N/m or N·m/rad) or `frequency > 0` with `dampingRatio` | `γ`, `b` as above; an explicit `stiffness` overrides `m·ω²`, with `d = 2ζ√(k·m)` | removed gently by the bias |
+| Velocity-only | `frequency = 0`, `stiffness = 0`, not rigid | hard | **none** (only for motor rows; a positional joint configured like this drifts) |
+
+Soft joints sag by roughly `F/k`, and `k` scales with the row's own reduced
+mass, so a soft joint whose light body carries a much heavier one stretches a
+lot (0.17 m for a 1 kg link holding 1000 kg at 60 Hz). Use rigid mode there.
+
+**Rigid mode.** Rigid rows are hard velocity rows, so the velocity solve never
+injects energy, and after `integratePositions` a projection pass puts the
+bodies back on the constraint manifold: up to `positionIterations` (default 4)
+Newton steps that re-run `prepare()` at the current pose and move the bodies by
+`Δx = M⁻¹Jᵀ·Δλ` with `K·Δλ = −C` (rotations through the exponential map). The
+velocities are not touched. The pass stops once every rigid row error is below
+`positionTolerance` (1e-10 m/rad) and a single pass never corrects a row by more
+than `maxPositionCorrection` (0.2 m/rad). This was chosen over Baumgarte (which
+needs a velocity bias that injects energy and still leaves a steady-state error
+under load) and over substepping (which multiplies the cost and only shrinks
+the drift). The remaining cost is the usual O(dt) numerical damping of velocity
+projection: the swing energy of a rigid pendulum decays slowly (1–5 % in 60 s in
+the tests) and is never gained beyond ~1e-3 transients.
+
+### Island block solve
+
+Plain PGS converges at a rate set by the mass ratio: with a 1 kg link between a
+static anchor and a 1000 kg body, 8 iterations leave 3 mm of error and 100
+iterations still 0.22 mm. `step()` therefore groups joints into **islands**
+(joints connected through dynamic bodies; static and kinematic bodies do not
+connect them). For each island whose bilateral rows fit in
+`directSolverMaxRows` (default 128) the bilateral rows are solved **exactly**
+with an LDLᵀ factorisation of the Delassus matrix `K + Γ` (the matrix form of
+the soft-step update), done within the matrix envelope so a chain created in
+order costs O(n). Bounded rows (motors, limits) are relaxed with block
+Gauss-Seidel around that solve. Bigger islands fall back to PGS for velocities
+and to a per-joint non-linear Gauss-Seidel projection for positions. Redundant
+rows (zero pivots) receive no impulse instead of an unbounded one.
+`directSolverMaxRows = 0` restores plain PGS everywhere.
 
 ### Articulaciones
 
@@ -163,12 +207,14 @@ estables), restricciones y elementos de fuerza. Expone `createBody()`,
 3. integrateVelocities(dt)          // gravedad + giroscópico implícito
 4. prepare(dt) de cada restricción
 5. warmStart() de cada restricción
-6. velocityIterations × solveVelocity()
+6. velocity solve per island          // exact block solve, or velocityIterations × PGS
 7. integratePositions(dt)           // posiciones y orientaciones
+8. projectPositions()               // rigid rows only: Newton projection onto C = 0
 ```
 
 `advance(elapsed)` consume tiempo real en subpasos de `fixedStep`. Por defecto
-`gravity = (0, -9.80665, 0)`, `velocityIterations = 8`, `fixedStep = 1/1000`.
+`gravity = (0, -9.80665, 0)`, `velocityIterations = 8`, `fixedStep = 1/1000`,
+`directSolverMaxRows = 128`, `positionIterations = 4`.
 
 ### Determinismo y snapshots
 
@@ -242,14 +288,16 @@ Suite analítica que cubre: caída libre y tiro parabólico (contra la solución
 exacta), periodo del oscilador masa-muelle (< 0,5 %), deriva de energía acotada
 60 s, momento angular de un trompo libre (< 0,1 % en 10 s), giroscopio a 3000 rpm
 (sin ganancia de energía y precesión < 2 %), cadena de 20 eslabones (error
-acotado 60 s), relación de masas 1:1000 estable 60 s, articulación fija bajo
+acotado 60 s), rigid 20-link chain and rigid weld (< 0.1 mm), 1:1000 mass ratio
+as a loaded double pendulum (anchor → 1 kg → 1000 kg and the reverse order,
+joint error and energy drift over 60 s), articulación fija bajo
 perturbación, decaimiento de la amortiguación lineal al ritmo analítico, motor de
 bisagra que alcanza su velocidad objetivo, determinismo bit a bit (20000 pasos +
 snapshot/restore) y un benchmark de la cadena de 20 eslabones.
 
 ## Resultados
 
-Suite completa: **25 casos / 68 aserciones, todos verdes** (`sim_tests`,
+Suite completa: **31 casos / 114 aserciones, todos verdes** (`sim_tests`,
 MSVC Release, paso fijo `dt = 1/1000 s`). Los errores se refieren a la medida
 sobre el valor analítico (error relativo cuando ambas cantidades son del mismo
 tipo, error absoluto en metros/radianes/J para las magnitudes físicas).
@@ -260,8 +308,8 @@ tipo, error absoluto en metros/radianes/J para las magnitudes físicas).
 | Caída libre | y final (1 s) | 4,90333 m | 4,89843 m | 1,00e-3 | < 2e-3 | Retardo dt/t = 1e-3 inherente al semi-implícito; el error medido define la cota |
 | Tiro parabólico | x (1 s) | 10,0 m | 10,0 m | 1,69e-14 | < 1e-12 | Movimiento horizontal no forzado: exacto salvo redondeo |
 | Tiro parabólico | y (1 s) | 5,09668 m | 5,09167 m | 9,62e-4 | < 2e-3 | Mismo retardo dt/t que la caída libre |
-| Oscilador masa-muelle | Periodo | 0,628319 s | 0,628318 s | 1,12e-6 | < 2e-5 | Desviación O((ω·dt)²) del integrador semi-implícito/simpléctico; medido 1,12e-6, margen ~18× |
-| Péndulo simple | Periodo | 2,00641 s | 2,00678 s | 3,24e-5 | < 1e-4 | Muelles blandos de 60 Hz + dt; el error medido está ~3× por debajo de la cota |
+| Oscilador masa-muelle | Periodo | 0,628319 s | 0,628316 s | 4,17e-6 | < 2e-5 | Desviación O((ω·dt)²) del integrador semi-implícito/simpléctico; medido 4,17e-6, margen ~5× |
+| Péndulo simple | Periodo | 2,00641 s | 2,00679 s | 3,43e-5 | < 1e-4 | Muelles blandos de 60 Hz + dt; el error medido está ~3× por debajo de la cota |
 | Energía oscilador (60 s) | Deriva máxima | 0 | 0,00503337 (rel) | 5,03e-3 | < 8e-3 | Deriva de energía del integrador a ω·dt ~ 0,1; cota ~1,6× sobre la medida |
 | Momento angular libre (10 s) | \|I·ω\| rel | 1,0 | 1,0 | 3,20e-15 | < 1e-12 | Conservación del invariante cuadrático; el error es O(dt³) de redondeo (cota ajustada desde 1e-9) |
 | Dzhánibekov | ω eje intermedio | inversión | −6,0 rad/s | — | < −0,5 | El signo cambia de +6 a −6: giro inverso inequívoco |
@@ -269,13 +317,26 @@ tipo, error absoluto en metros/radianes/J para las magnitudes físicas).
 | Giroscopio 3000 rpm | Precesión (20 s) | 0,312155 rad | 0,313539 rad | 4,43e-3 | < 1e-2 | Precesión \|Ω·d/(I₃·ω)\|; cumplimiento de la rótula blanda + dt (~2,3× margen) |
 | Giroscopio 3000 rpm | Crecimiento de energía | 0 | 0 | 0 | < 1e-4 | Integrador conserva la energía del volante; la cota es solo redondeo |
 | Cadena 20 eslabones (60 s) | Máx. error articulación | 0 | 0,00447127 m | 4,47e-3 m | < 7e-3 | Asiento ~2,8 mm por el propio peso + balanco; cota 1,6× sobre la medida |
-| Masas 1:1000 (60 s) | Máx. error articulación | 0 | 1,82e-12 m | 1,82e-12 m | < 1e-10 | m_eff ~ 1 kg: articulación bien condicionada (cota ajustada desde 1e-6) |
+| Rigid 20-link chain, bottom link kicked (60 s) | Max joint error | 0 | 3.34e-12 m | 3.34e-12 m | < 1e-6 | Exact island block solve + position projection; requirement 0.1 mm, bound keeps >10^5 headroom over round-off |
+| 1:1000, anchor → 1 kg → 1000 kg, rigid ball joints (60 s) | Max joint error | 0 | 4.22e-12 m | 4.22e-12 m | < 1e-6 | Hard ordering: 8 PGS iterations leave 3.0 mm, 100 leave 0.22 mm, soft 60 Hz joints stretch 0.17 m; the block solve is exact |
+| 1:1000, anchor → 1 kg → 1000 kg (60 s) | Swing-energy drift max \|E−E₀\|/(E₀−E_rest) | 0 | 1.46e-2 (−1.34e-2 at 60 s) | 1.46e-2 | < 3e-2 | O(dt) damping of velocity projection: steady decay, ~2× margin |
+| 1:1000, anchor → 1 kg → 1000 kg (60 s) | Max energy gain (E−E₀)/(E₀−E_rest) | 0 | 6.48e-4 | 6.48e-4 | < 2e-3 | No energy injection: only a transient within one swing |
+| 1:1000 reference, anchor → 1000 kg → 1 kg (60 s) | Max joint error | 0 | 2.55e-12 m | 2.55e-12 m | < 1e-6 | Easy ordering (plain PGS also holds it to ~1e-13 m) |
+| 1:1000 reference, anchor → 1000 kg → 1 kg (60 s) | Swing-energy drift max \|E−E₀\|/(E₀−E_rest) | 0 | 4.67e-2 (−4.41e-2 at 60 s) | 4.67e-2 | < 8e-2 | The light tip whips faster, so the projection damping is larger; ~1.7× margin |
+| 1:1000 reference, anchor → 1000 kg → 1 kg (60 s) | Max energy gain | 0 | 1.29e-3 | 1.29e-3 | < 3e-3 | No energy injection beyond a transient |
 | Articulación fija (5 s) | Posición / orientación | 0 | 5,75e-4 m / 1,96e-7 | 5,75e-4 / 1,96e-7 | < 5e-3 | Asiento estático ~7e-5 m + transitorio por la perturbación inicial |
+| Rigid weld, arm cantilevered 1 m, disturbed (5 s) | Anchor / angle error | 0 | 4.65e-19 m / 4.58e-19 rad | 4.65e-19 / 4.58e-19 | < 1e-6 | The block solve removes the disturbance before positions move; requirement 0.1 mm |
 | Amortiguación lineal (1 s) | v con d = 1 | 3,67879 m/s | 3,68063 m/s | 5,00e-4 | < 1e-2 | Decaimiento 1/(1+d·dt) por paso; límite continuo e^(−dt); error discreto ~3e-4 |
 | Motor de bisagra (3 s) | Velocidad angular | 3,0 rad/s | 3,0 rad/s | 0 | < 5 % | Sin par opuesto (gravedad alineada con el eje): el motor alcanza y mantiene la velocidad |
-| Determinismo (2×20000) | stateHash | igual | 5810096845073562880 | 0 | bit a bit | Mismo hilo, orden fijo, /fp:precise, sin ffast-math |
-| Snapshot/restore | stateHash | igual | 5810096845073562880 | 0 | bit a bit | Guarda estado, impulsos acumulados y tiempo |
-| Benchmark (cadena 20) | Rendimiento | — | 0,0124 ms/paso (80749 pasos/s) | — | informativo | 10000 pasos en 123,8 ms en esta máquina |
+| Determinismo (2×20000) | stateHash | igual | 8902566875956907469 | 0 | bit a bit | Mismo hilo, orden fijo, /fp:precise, sin ffast-math |
+| Snapshot/restore | stateHash | igual | 8902566875956907469 | 0 | bit a bit | Guarda estado, impulsos acumulados y tiempo |
+| Benchmark (cadena 20) | Rendimiento | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
+
+Note on the 1:1000 cases: an earlier version of this table reported a 1:1000
+"mass ratio" joint error of 1.8e-12 m. That test joined two free-falling
+bodies with a distance joint, so the joint carried no load and the number
+proved nothing about mass-ratio conditioning; it has been replaced by the
+loaded double-pendulum cases above.
 
 El resto de la suite (`test_core`: 3 casos, `test_modding`: 5 casos) queda en
 verde: programación por paso fijo, resolución de configuraciones JSON, análisis
