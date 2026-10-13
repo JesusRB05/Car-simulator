@@ -24,6 +24,7 @@ struct DebugDrawFlags
     bool springs = true;
     bool velocities = true;
     bool reference = true;
+    bool driveForces = true; // drive scene: suspension rays, contacts, tyre forces
 };
 
 // Which panels are open. Persisted in the ImGui .ini file under [SimUi][Panels].
@@ -44,6 +45,7 @@ struct SimUiFrame
 {
     std::string activeScene;                        // empty = interactive driving scene
     const physics::PhysicsWorld* world = nullptr;   // the live physics scene, if any
+    bool driveActive = false;                       // the keyboard-drivable scene owns keys and camera
     bool hasEnergy = false;
     double totalEnergy = 0.0;                       // J
     double cpuFrameMs = 0.0;

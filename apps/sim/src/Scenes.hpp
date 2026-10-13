@@ -38,6 +38,7 @@ std::vector<std::string> sceneNames();
 // Browser grouping of the built-in scenes.
 enum class SceneCategory
 {
+    Driving,    // keyboard-drivable scenes (apps/sim/src/drive)
     Physics,    // live PhysicsWorld scenes stepped with the fixed step
     RenderTest, // static scenes used by the headless render checks
 };
@@ -55,7 +56,7 @@ struct SceneInfo
 // one-line description each.
 const std::vector<SceneInfo>& sceneCatalog();
 
-// Human-readable label of a category ("Physics", "Render tests").
+// Human-readable label of a category ("Driving", "Physics", "Render tests").
 const char* sceneCategoryLabel(SceneCategory category);
 
 // Applies the shared demo key light (direction + colour) to the given scene.

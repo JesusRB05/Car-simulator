@@ -64,6 +64,13 @@ constexpr ShortcutEntry kShortcuts[] = {
     {"F", "Frame the scene"},
     {"G", "Toggle the ground grid"},
     {"C", "Cycle chase / orbit / free camera (driving scene)"},
+    {"-- drive scene --", "These keys replace the shortcuts above"},
+    {"W / Up, S / Down", "Throttle, brake / reverse"},
+    {"A / D, Left / Right", "Steer"},
+    {"Space", "Handbrake (play / pause is disabled)"},
+    {"R", "Reset the car to the start line"},
+    {"C", "Cycle chase / cockpit / orbit camera"},
+    {"G", "Toggle suspension / tyre force overlay"},
     {"Left drag", "Orbit the camera (inspection scenes)"},
     {"Right drag", "Pan the camera (inspection scenes)"},
     {"Mouse wheel", "Zoom"},
@@ -233,6 +240,11 @@ void SimUi::handleShortcuts(const SimUiFrame& frame, SimUiActions& actions)
     {
         showShortcuts_ = !showShortcuts_;
     }
+    if (frame.driveActive)
+    {
+        // The drive scene owns Space/R/G/C and the camera (see Application).
+        return;
+    }
     if (ImGui::IsKeyPressed(ImGuiKey_G, false) && !io.KeyCtrl)
     {
         debug_.grid = !debug_.grid;
@@ -264,7 +276,7 @@ void SimUi::handleCameraMouse(const SimUiFrame& frame, OrbitCamera& camera)
 {
     // The driving scene keeps its own chase/orbit/free camera controls.
     const ImGuiIO& io = ImGui::GetIO();
-    if (frame.activeScene.empty() || io.WantCaptureMouse)
+    if (frame.activeScene.empty() || frame.driveActive || io.WantCaptureMouse)
     {
         return;
     }
@@ -355,7 +367,7 @@ void SimUi::drawSceneMenuItems(const SimUiFrame& frame, SimUiActions& actions)
         actions.loadScene = true;
         actions.scene.clear();
     }
-    for (const SceneCategory category : {SceneCategory::Physics, SceneCategory::RenderTest})
+    for (const SceneCategory category : {SceneCategory::Driving, SceneCategory::Physics, SceneCategory::RenderTest})
     {
         if (!ImGui::BeginMenu(sceneCategoryLabel(category)))
         {
@@ -443,7 +455,7 @@ void SimUi::drawSceneBrowser(const SimUiFrame& frame, SimUiActions& actions)
     }
     ImGui::SetItemTooltip("Interactive vehicle on the physics thread.");
 
-    for (const SceneCategory category : {SceneCategory::Physics, SceneCategory::RenderTest})
+    for (const SceneCategory category : {SceneCategory::Driving, SceneCategory::Physics, SceneCategory::RenderTest})
     {
         ImGui::SetNextItemOpen(true, ImGuiCond_FirstUseEver);
         if (!ImGui::CollapsingHeader(sceneCategoryLabel(category)))
@@ -482,6 +494,14 @@ void SimUi::drawSimulation(const SimUiFrame& frame, SimUiActions& actions)
     placeWindow(-10.0f, 10.0f, 320.0f, 200.0f);
     if (!ImGui::Begin(kSimulationTitle, &panels_.simulation))
     {
+        ImGui::End();
+        return;
+    }
+    if (frame.driveActive)
+    {
+        ImGui::TextDisabled("Drive scene: real-time, fixed 1 ms step.");
+        ImGui::TextDisabled("Play / pause / step are disabled; Space is");
+        ImGui::TextDisabled("the handbrake and R resets the car.");
         ImGui::End();
         return;
     }
@@ -549,6 +569,10 @@ void SimUi::drawDebugDraw(const SimUiFrame& frame)
     }
     ImGui::Checkbox("Ground grid (G)", &debug_.grid);
     ImGui::Checkbox("World axes", &debug_.worldAxes);
+    ImGui::SeparatorText("Drive scene");
+    ImGui::BeginDisabled(!frame.driveActive);
+    ImGui::Checkbox("Rays, contacts, tyre forces (G)", &debug_.driveForces);
+    ImGui::EndDisabled();
     ImGui::SeparatorText("Physics scenes");
     ImGui::BeginDisabled(frame.world == nullptr);
     ImGui::Checkbox("Body local axes", &debug_.bodyAxes);
@@ -627,6 +651,13 @@ void SimUi::drawCamera(const SimUiFrame& frame, OrbitCamera& camera, SimUiAction
         return;
     }
     ImGui::SliderFloat("FOV", &camera.fovDegrees, 20.0f, 110.0f, "%.0f deg");
+    if (frame.driveActive)
+    {
+        ImGui::TextDisabled("Drive: C cycles chase/cockpit/orbit;");
+        ImGui::TextDisabled("in orbit, right-drag looks, wheel zooms.");
+        ImGui::End();
+        return;
+    }
     if (frame.activeScene.empty())
     {
         ImGui::TextDisabled("Driving: C cycles chase/orbit/free,");

@@ -23,6 +23,7 @@ int main(int argc, char** argv)
     sim::app::HeadlessOptions headless;
     headless.executablePath = argc > 0 ? argv[0] : "";
     bool runHeadless = false;
+    bool sceneGiven = false;
 
     for (int i = 1; i < argc; ++i)
     {
@@ -54,6 +55,7 @@ int main(int argc, char** argv)
         else if (matches(arg, "--scene") && next != nullptr)
         {
             headless.scene = next;
+            sceneGiven = true;
             ++i;
         }
         else if (matches(arg, "--screenshot") && next != nullptr)
@@ -118,6 +120,10 @@ int main(int argc, char** argv)
             return sim::app::runHeadless(headless);
         }
         sim::app::Application application;
+        if (sceneGiven)
+        {
+            application.setStartupScene(headless.scene);
+        }
         return application.run();
     }
     catch (const std::exception& error)

@@ -47,6 +47,10 @@ namespace sim::app {
 class ImGuiLayer;
 class SimUi;
 
+namespace drive {
+class DriveScene;
+} // namespace drive
+
 // One physics state, produced by the physics thread and consumed by the render
 // thread. Copied through a lock-free single-producer/single-consumer ring.
 struct SimSnapshot
@@ -108,6 +112,10 @@ public:
 
     int run();
 
+    // Scene loaded right after start-up (`sim --scene <name>`): "drive", any
+    // entry of sceneCatalog(), or "driving" for the interactive vehicle.
+    void setStartupScene(const std::string& name) { startupScene_ = name; }
+
 private:
     bool initialise();
     void shutdown();
@@ -126,6 +134,8 @@ private:
     void loadScene(const std::string& name);
     void frameScene();
     void drawDebugOverlay(rhi::CommandList& commandList);
+    void stepDriveScene(double delta);
+    bool driveActive() const { return drive_ != nullptr; }
 
     enum class CameraMode
     {
@@ -193,6 +203,13 @@ private:
     // Mouse-driven camera of the inspection scenes (also owns the FOV used by
     // the driving cameras).
     OrbitCamera sceneCamera_;
+
+    // Keyboard-drivable circuit (apps/sim/src/drive), simulated on the main
+    // thread while the scene named "drive" is active. Its own chase camera
+    // replaces sceneCamera_ for as long as it exists.
+    std::unique_ptr<drive::DriveScene> drive_;
+    double frameDelta_ = 0.0;
+    std::string startupScene_;
 
     // Windowed-mode ImGui interface (menus, panels, shortcuts).
     std::unique_ptr<SimUi> ui_;

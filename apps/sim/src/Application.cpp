@@ -22,6 +22,7 @@
 #include "SimUi.hpp"
 #include "core/Log.hpp"
 #include "core/Version.hpp"
+#include "drive/DriveScene.hpp"
 
 namespace sim::app {
 namespace {
@@ -224,6 +225,7 @@ void Application::shutdown()
     audio_.reset();
     telemetry_.reset();
 
+    scene_.clear();
     if (device_ != nullptr)
     {
         device_->waitIdle();
@@ -231,6 +233,7 @@ void Application::shutdown()
 
     imgui_.reset();
     debugDraw_.reset();
+    drive_.reset();
     renderer_.reset();
     frame_.reset();
     gpuTimer_.reset();
@@ -445,8 +448,30 @@ void Application::gatherSnapshots(SimSnapshot& interpolated)
     }
 }
 
+void Application::stepDriveScene(double delta)
+{
+    // The drive keys take priority over the UI shortcuts; ImGui widgets that
+    // want the keyboard (text fields) still win.
+    drive::DriveKeys keys;
+    if (!ImGui::GetIO().WantCaptureKeyboard)
+    {
+        keys.throttle = keyDown(input_.get(), SDL_SCANCODE_W) || keyDown(input_.get(), SDL_SCANCODE_UP);
+        keys.brake = keyDown(input_.get(), SDL_SCANCODE_S) || keyDown(input_.get(), SDL_SCANCODE_DOWN);
+        keys.left = keyDown(input_.get(), SDL_SCANCODE_A) || keyDown(input_.get(), SDL_SCANCODE_LEFT);
+        keys.right = keyDown(input_.get(), SDL_SCANCODE_D) || keyDown(input_.get(), SDL_SCANCODE_RIGHT);
+        keys.handbrake = keyDown(input_.get(), SDL_SCANCODE_SPACE);
+    }
+    drive_->setKeys(keys);
+    drive_->advance(delta); // the fixed 1 ms step is internal; no pause / time scale
+}
+
 void Application::stepScenePhysics(double delta)
 {
+    if (driveActive())
+    {
+        stepDriveScene(delta);
+        return;
+    }
     if (sceneWorld_ == nullptr || ui_ == nullptr || ui_->paused())
     {
         return;
@@ -462,12 +487,26 @@ void Application::loadScene(const std::string& name)
 {
     sceneName_ = name;
     sceneWorld_.reset();
+    if (drive_ != nullptr)
+    {
+        // Leaving the drive scene hands the camera back to sceneCamera_. Its
+        // meshes may still be in flight on the GPU: drop every reference first.
+        scene_.clear();
+        device_->waitIdle();
+        drive_.reset();
+    }
     if (ui_ != nullptr)
     {
         ui_->resetHistory();
     }
     if (name.empty())
     {
+        return;
+    }
+    if (drive::isDriveScene(name))
+    {
+        drive_ = std::make_unique<drive::DriveScene>(*device_);
+        drive_->snapCamera();
         return;
     }
 
@@ -510,6 +549,12 @@ void Application::updateScene(const SimSnapshot& interpolated)
     const float aspect = swapchain_->extent().height > 0
                              ? static_cast<float>(swapchain_->extent().width) / static_cast<float>(swapchain_->extent().height)
                              : 16.0f / 9.0f;
+
+    if (driveActive())
+    {
+        drive_->buildScene(scene_, aspect, frameDelta_);
+        return;
+    }
 
     if (!sceneName_.empty())
     {
@@ -584,6 +629,31 @@ void Application::handleCameraKeys()
 {
     ImGuiIO& io = ImGui::GetIO();
 
+    if (driveActive())
+    {
+        if (!io.WantTextInput)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_C, false))
+            {
+                drive_->cycleCamera();
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_R, false) && !io.KeyCtrl)
+            {
+                drive_->reset();
+            }
+            if (ImGui::IsKeyPressed(ImGuiKey_G, false) && !io.KeyCtrl)
+            {
+                ui_->debugFlags().driveForces = !ui_->debugFlags().driveForces;
+            }
+        }
+        if (!io.WantCaptureMouse)
+        {
+            const bool looking = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+            drive_->orbitInput(looking ? io.MouseDelta.x : 0.0f, looking ? io.MouseDelta.y : 0.0f, io.MouseWheel);
+        }
+        return;
+    }
+
     if (ImGui::IsKeyPressed(ImGuiKey_C, false))
     {
         cameraMode_ = cameraMode_ == CameraMode::Chase    ? CameraMode::Orbit
@@ -646,6 +716,7 @@ void Application::drawUi()
 {
     SimUiFrame frame;
     frame.activeScene = sceneName_;
+    frame.driveActive = driveActive();
     frame.world = sceneWorld_.get();
     if (sceneWorld_ != nullptr)
     {
@@ -664,6 +735,10 @@ void Application::drawUi()
     frame.viewportHeight = static_cast<float>(swapchain_->extent().height);
 
     const SimUiActions actions = ui_->draw(frame, sceneCamera_);
+    if (driveActive())
+    {
+        drive_->drawHud();
+    }
     if (actions.quit)
     {
         window_->requestClose();
@@ -809,11 +884,18 @@ void Application::drawDebugOverlay(rhi::CommandList& commandList)
     }
     const DebugDrawFlags& flags = ui_->debugFlags();
     debugDraw_->clear();
-    if (flags.grid)
+    if (driveActive())
+    {
+        if (flags.driveForces)
+        {
+            drive_->drawDebug(*debugDraw_);
+        }
+    }
+    else if (flags.grid)
     {
         debugDraw_->addGrid(20.0f, 1.0f, {0.55f, 0.58f, 0.62f, 1.0f}, {0.75f, 0.30f, 0.20f, 1.0f});
     }
-    if (flags.worldAxes)
+    if (!driveActive() && flags.worldAxes)
     {
         debugDraw_->addAxes({0.0f, 0.02f, 0.0f}, 3.0f);
     }
@@ -846,6 +928,21 @@ int Application::run()
 
     auto log = core::Log::get();
 
+    if (!startupScene_.empty() && startupScene_ != "driving")
+    {
+        const std::vector<SceneInfo>& catalog = sceneCatalog();
+        const bool known = std::any_of(catalog.begin(), catalog.end(),
+                                       [&](const SceneInfo& info) { return info.name == startupScene_; });
+        if (known)
+        {
+            loadScene(startupScene_);
+        }
+        else
+        {
+            log->warn("unknown scene '{}', starting the interactive driving scene", startupScene_);
+        }
+    }
+
     while (running_)
     {
         const double frameStart = wallNow();
@@ -857,6 +954,7 @@ int Application::run()
         {
             delta = 1.0 / 60.0;
         }
+        frameDelta_ = delta;
 
         if (!window_->pumpEvents())
         {

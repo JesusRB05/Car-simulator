@@ -87,6 +87,8 @@ const std::vector<SceneInfo>& sceneCatalog()
 {
     static const std::vector<SceneInfo> catalog = [] {
         std::vector<SceneInfo> entries;
+        entries.push_back({"drive", SceneCategory::Driving,
+                           "Keyboard-drivable raycast car on a test circuit (WASD, Space, R, C, G)."});
         for (const std::string& name : physicsSceneNames())
         {
             entries.push_back({name, SceneCategory::Physics, physicsSceneDescription(name)});
@@ -110,7 +112,16 @@ const std::vector<SceneInfo>& sceneCatalog()
 
 const char* sceneCategoryLabel(SceneCategory category)
 {
-    return category == SceneCategory::Physics ? "Physics" : "Render tests";
+    switch (category)
+    {
+    case SceneCategory::Driving:
+        return "Driving";
+    case SceneCategory::Physics:
+        return "Physics";
+    case SceneCategory::RenderTest:
+        break;
+    }
+    return "Render tests";
 }
 
 void setDefaultLight(render::Scene& scene)
