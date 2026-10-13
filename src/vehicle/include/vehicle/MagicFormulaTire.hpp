@@ -48,14 +48,15 @@ struct MagicFormulaCoefficients {
     Real qEz1 = -1.0;  // trail curvature
 
     // Residual self-aligning torque Mzr = Dr cos(Cr atan(Br alpha_r)) cos(alpha),
-    // with alpha_r = alpha + SHr, Br = qBz * (qBr1 + qBr2 dfz), Dr = Fz R0 (qDr).
-    // It adds a small torque that survives as the pneumatic trail vanishes.
-    Real qCr1 = 1.0;  // residual torque shape
-    Real qBr1 = 0.1;  // residual stiffness at the nominal load
-    Real qBr2 = 0.0;  // residual stiffness load sensitivity
-    Real qDr1 = 0.01; // residual peak (as a fraction of Fz R0)
-    Real qDr2 = 0.0;  // residual peak load sensitivity
-    Real qHr1 = 0.0;  // residual horizontal shift (rad)
+    // with alpha_r = alpha + SHr, Br = qBr1 + qBr2 dfz, Dr = Fz R0 (qDr1 + qDr2 dfz).
+    // It adds a small, even-in-alpha torque that survives as the trail vanishes.
+    // Zero by default, which is correct for a symmetric tyre.
+    Real qCr1 = 1.0; // residual torque shape
+    Real qBr1 = 0.1; // residual stiffness at the nominal load
+    Real qBr2 = 0.0; // residual stiffness load sensitivity
+    Real qDr1 = 0.0; // residual peak (as a fraction of Fz R0)
+    Real qDr2 = 0.0; // residual peak load sensitivity
+    Real qHr1 = 0.0; // residual horizontal shift (rad)
 
     // Overturning moment Mx = R0 Fz (qSx1 - qSx2 gamma + qSx3 Fy / Fz0).
     Real qSx1 = 0.0;

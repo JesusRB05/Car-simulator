@@ -230,11 +230,29 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
     const Real alphaT = state.slipAngle;
     const Real dtScale = c.qDz1 + c.qDz2 * dfz;
     const Real trail = dtScale * std::cos(c.qCz1 * std::atan(magicArgument(c.qBz1, c.qEz1, alphaT))) * std::cos(alphaT);
-    const Real mz = -trail * fy;
+    const Real trailTorque = -trail * fy;
+
+    // Residual torque: a small, even-in-alpha term that survives as the trail
+    // vanishes. It is zero for a symmetric tyre (the default coefficients).
+    const Real alphaR = state.slipAngle + c.qHr1;
+    const Real br = c.qBr1 + c.qBr2 * dfz;
+    const Real dr = fz * c.radius * (c.qDr1 + c.qDr2 * dfz);
+    const Real residualTorque = dr * std::cos(c.qCr1 * std::atan(br * alphaR)) * std::cos(state.slipAngle);
+
+    // Overturning moment Mx about the longitudinal axis (camber and lateral force).
+    const Real mx = c.radius * fz * (c.qSx1 - c.qSx2 * state.camber + c.qSx3 * fy / fz0);
+
+    // Rolling resistance Crr(v) Fz applied as a moment about the wheel axis. The
+    // loaded radius is approximated by the unloaded radius (deflection is small).
+    const Real crr = c.rollingResistanceC0 + c.rollingResistanceC1 * state.contactSpeed +
+                     c.rollingResistanceC2 * state.contactSpeed * state.contactSpeed;
+    const Real my = -crr * fz * c.radius;
 
     forces.longitudinal = fx;
     forces.lateral = fy;
-    forces.aligningMoment = mz;
+    forces.aligningMoment = trailTorque + residualTorque;
+    forces.overturningMoment = mx;
+    forces.rollingResistanceMoment = my;
     return forces;
 }
 

@@ -278,6 +278,67 @@ TEST_CASE("the slip-vector form aligns the resultant with the slip direction") {
     CHECK(mirrored.lateral == doctest::Approx(-f.lateral));
 }
 
+TEST_CASE("the residual, overturning and rolling-resistance moments follow their coefficients") {
+    const MagicFormulaCoefficients c;
+    MagicFormulaTire tire(c);
+    const Real fz0 = c.nominalLoad;
+
+    const auto state = [&](Real alpha, Real v) {
+        TireState s;
+        s.normalLoad = fz0;
+        s.slipAngle = alpha;
+        s.contactSpeed = v;
+        return s;
+    };
+
+    SUBCASE("rolling resistance grows with speed") {
+        const TireForces slow = tire.computeForces(state(0.0, 0.0));
+        CHECK(slow.rollingResistanceMoment == doctest::Approx(-c.rollingResistanceC0 * fz0 * c.radius));
+
+        MagicFormulaCoefficients faster = c;
+        faster.rollingResistanceC1 = 0.002;
+        MagicFormulaTire fastTire(faster);
+        const TireForces fast = fastTire.computeForces(state(0.0, 30.0));
+        CHECK(std::abs(fast.rollingResistanceMoment) > std::abs(slow.rollingResistanceMoment));
+    }
+
+    SUBCASE("overturning moment follows camber and lateral force") {
+        MagicFormulaCoefficients oc = c;
+        oc.qSx1 = 0.02;
+        oc.qSx2 = 0.05;
+        oc.qSx3 = 0.1;
+        MagicFormulaTire overTire(oc);
+
+        TireState s = state(0.0, 0.0);
+        CHECK(overTire.computeForces(s).overturningMoment == doctest::Approx(c.radius * fz0 * 0.02));
+
+        s.camber = 0.1;
+        CHECK(overTire.computeForces(s).overturningMoment == doctest::Approx(c.radius * fz0 * (0.02 - 0.05 * 0.1)));
+
+        s.camber = 0.0;
+        s.slipAngle = 0.1;
+        const TireForces f = overTire.computeForces(s);
+        CHECK(f.overturningMoment == doctest::Approx(c.radius * fz0 * (0.02 + 0.1 * f.lateral / fz0)));
+    }
+
+    SUBCASE("the residual torque is off by default and even in the slip angle") {
+        CHECK(tire.computeForces(state(0.0, 0.0)).aligningMoment == doctest::Approx(0.0));
+
+        MagicFormulaCoefficients rc = c;
+        rc.qDr1 = 0.02;
+        MagicFormulaTire resTire(rc);
+        const Real expected = c.radius * fz0 * 0.02;
+        CHECK(resTire.computeForces(state(0.0, 0.0)).aligningMoment == doctest::Approx(expected));
+
+        // The trail torque is odd in alpha, so the mean of the two signs is the
+        // even residual torque.
+        const Real a = 0.05;
+        const Real plus = resTire.computeForces(state(a, 0.0)).aligningMoment;
+        const Real minus = resTire.computeForces(state(-a, 0.0)).aligningMoment;
+        CHECK(0.5 * (plus + minus) == doctest::Approx(expected).epsilon(0.02));
+    }
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 
