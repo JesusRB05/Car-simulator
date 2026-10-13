@@ -306,8 +306,13 @@ opposes the slip angle. A friction-circle clamp keeps
 `MagicFormulaCoefficients` struct in the same layout as a `.tir` subset.
 `parseMagicFormulaCoefficients`/`loadMagicFormulaCoefficients` read that subset
 from a TNO `.tir` stream or file (sections, `!`/`$` comments, `KEY = value`), so
-real datasets can be dropped in; the moments (`Mz`, `Mx`, `My`) and transient
-relaxation still arrive with P2.3/P2.4.
+real datasets can be dropped in.
+
+The self-aligning moment is `Mz = −t(α)·Fy`, with the pneumatic trail
+`t(α) = Dt cos(Cz atan(Bz α − Ez(Bz α − atan(Bz α)))) cos α` and
+`Dt = qDz1 + qDz2 dfz`, so the trail vanishes as the tyre saturates — the curve
+that drives force feedback. The overturning/rolling-resistance moments (`Mx`,
+`My`) and transient relaxation still arrive with P2.3/P2.4.
 
 ### `PlaceholderVehicle` (TEMPORARY)
 
@@ -366,12 +371,12 @@ sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
 Newton's cradle and contact determinism across repeated runs and
 snapshot/restore. `test_vehicle.cpp` covers the placeholder's conventions and the
 `MagicFormulaTire` pure-slip curve (origin slope `BCD = K`, peak `μ·Fz`, oddness,
-load sensitivity and the friction-circle bound) and the `.tir` coefficient
-parser.
+load sensitivity, the friction-circle bound and the self-aligning moment from the
+pneumatic trail) and the `.tir` coefficient parser.
 
 ## Results
 
-Full suite: **65 cases / 7266 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **65 cases / 7273 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -416,6 +421,7 @@ absolute error in metres/radians/J for physical magnitudes).
 | MF tyre longitudinal stiffness | dFx/dκ at κ=0 | BCD = 96000 N | 96000 N | < 1e-3 | < 1e-3 | The Magic Formula's origin slope is exactly `BCD = K`; the model reads `K` from `Kxκ` |
 | MF tyre cornering stiffness | dFy/dα at α=0 | `Kyα` = 41379.3 N/rad | 41379.3 N/rad | < 1e-3 | < 1e-3 | Same property for the lateral curve; `Kyα = pKy1 Fz0 sin(2 arctan(Fz/(pKy2 Fz0)))` |
 | MF tyre peak | max Fx, Fy at Fz0 = 4000 N | μ·Fz0 = 5600 N | 5600 N | < 1 % | < 1 % | The peak equals `D = μ Fz`; load sensitivity reduces `μ` above `Fz0` |
+| MF tyre self-aligning moment | dMz/dα at α=0 | qDz1·Kyα = 4965.5 N·m/rad | 4965.5 N·m/rad | < 1 % | < 1 % | `Mz = −t Fy` with trail `t(0) = qDz1`; the moment is odd and peaks (288.9 N·m) then falls as the trail collapses |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000

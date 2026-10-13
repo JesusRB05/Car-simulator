@@ -40,6 +40,13 @@ struct MagicFormulaCoefficients {
     Real pKy1 = 15.0; // cornering stiffness Kya = pKy1 Fz0 sin(2 atan(Fz / (pKy2 Fz0)))
     Real pKy2 = 2.5;
 
+    // Pneumatic trail, the source of the self-aligning moment Mz = -t Fy.
+    Real qBz1 = 8.0;   // trail stiffness factor
+    Real qCz1 = 1.1;   // trail shape
+    Real qDz1 = 0.12;  // trail scale at the nominal load (m)
+    Real qDz2 = -0.05; // trail load sensitivity
+    Real qEz1 = -1.0;  // trail curvature
+
     Real radius = 0.31; // unloaded tyre radius (m)
 };
 

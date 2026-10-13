@@ -17,6 +17,12 @@ Real magic(Real b, Real c, Real d, Real e, Real x) {
     return d * std::sin(c * std::atan(bx - e * (bx - std::atan(bx))));
 }
 
+// The argument inside atan, Bx - E (Bx - atan Bx).
+Real magicArgument(Real b, Real e, Real x) {
+    const Real bx = b * x;
+    return bx - e * (bx - std::atan(bx));
+}
+
 } // namespace
 
 MagicFormulaCoefficients parseMagicFormulaCoefficients(std::istream& input) {
@@ -116,8 +122,17 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
         fy *= scale;
     }
 
+    // Self-aligning moment from the pneumatic trail t(alpha); t0 and its shape
+    // follow the Magic Formula so the trail falls to zero as the tyre saturates,
+    // which is the classic self-aligning torque that feeds force feedback.
+    const Real alphaT = state.slipAngle;
+    const Real dtScale = c.qDz1 + c.qDz2 * dfz;
+    const Real trail = dtScale * std::cos(c.qCz1 * std::atan(magicArgument(c.qBz1, c.qEz1, alphaT))) * std::cos(alphaT);
+    const Real mz = -trail * fy;
+
     forces.longitudinal = fx;
     forces.lateral = fy;
+    forces.aligningMoment = mz;
     return forces;
 }
 

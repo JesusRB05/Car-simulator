@@ -164,6 +164,36 @@ TEST_CASE("MagicFormulaTire matches the pure-slip Magic Formula curve") {
         CHECK(magnitude <= c.pDx1 * fz0 * 1.0000001);
     }
 
+    SUBCASE("self-aligning moment follows the pneumatic trail") {
+        const Real eps = 1e-5;
+        const Real ky = c.pKy1 * fz0 * std::sin(2.0 * std::atan(fz0 / (c.pKy2 * fz0)));
+        const Real mz = tire.computeForces(state(0.0, eps)).aligningMoment;
+        CHECK(mz / eps == doctest::Approx(c.qDz1 * ky).epsilon(1e-2));
+
+        // Mz is odd in the slip angle and vanishes at zero slip.
+        CHECK(tire.computeForces(state(0.0, 0.0)).aligningMoment == doctest::Approx(0.0));
+        const Real left = tire.computeForces(state(0.0, 0.1)).aligningMoment;
+        const Real right = tire.computeForces(state(0.0, -0.1)).aligningMoment;
+        CHECK(left == doctest::Approx(-right));
+
+        // The trail falls as the tyre saturates: |Mz| peaks then decreases.
+        Real best = 0.0;
+        int bestIndex = 0;
+        constexpr int kSamples = 400;
+        for (int i = 1; i <= kSamples; ++i) {
+            const Real alpha = 0.8 * static_cast<Real>(i) / kSamples;
+            const Real magnitude = std::abs(tire.computeForces(state(0.0, alpha)).aligningMoment);
+            if (magnitude > best) {
+                best = magnitude;
+                bestIndex = i;
+            }
+        }
+        MESSAGE("peak self-aligning moment = " << best << " N*m at alpha sample " << bestIndex);
+        CHECK(bestIndex > 0);
+        CHECK(bestIndex < kSamples);
+        CHECK(best > 0.0);
+    }
+
     CHECK(tire.unloadedRadius() == doctest::Approx(c.radius));
 }
 
