@@ -40,6 +40,26 @@ struct MagicFormulaCoefficients {
     Real pKy1 = 15.0; // cornering stiffness Kya = pKy1 Fz0 sin(2 atan(Fz / (pKy2 Fz0)))
     Real pKy2 = 2.5;
 
+    // Camber (inclination gamma). It reduces the peaks and the cornering
+    // stiffness, and adds a camber thrust as a lateral force shift.
+    Real pDx3 = 0.0; // gamma^2 reduction of the longitudinal peak
+    Real pDy3 = 0.0; // gamma^2 reduction of the lateral peak
+    Real pKy3 = 0.0; // |gamma| reduction of the cornering stiffness
+
+    // Pure-slip horizontal and vertical shifts S_H, S_V (MF 6.x subset). The
+    // horizontal shifts move the slip at which the force vanishes, and the
+    // vertical shifts add a force that survives at zero slip (ply steer and
+    // camber thrust). Zero by default, which is correct for a symmetric tyre.
+    Real pHx1 = 0.0;
+    Real pHx2 = 0.0;
+    Real pVx1 = 0.0;
+    Real pVx2 = 0.0;
+    Real pHy1 = 0.0;
+    Real pHy2 = 0.0;
+    Real pVy1 = 0.0;
+    Real pVy2 = 0.0;
+    Real pVy3 = 0.0; // camber thrust (times tan gamma)
+
     // Pneumatic trail, the source of the self-aligning moment Mz = -t Fy.
     Real qBz1 = 8.0;   // trail stiffness factor
     Real qCz1 = 1.1;   // trail shape

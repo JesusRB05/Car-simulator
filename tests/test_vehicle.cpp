@@ -296,6 +296,66 @@ TEST_CASE("the slip-vector form aligns the resultant with the slip direction") {
     CHECK(mirrored.lateral == doctest::Approx(-f.lateral));
 }
 
+TEST_CASE("camber modifies the tyre through thrust, peaks and shifts") {
+    const MagicFormulaCoefficients c;
+    const Real fz0 = c.nominalLoad;
+
+    const auto state = [&](Real kappa, Real alpha, Real gamma) {
+        TireState s;
+        s.normalLoad = fz0;
+        s.slipRatio = kappa;
+        s.slipAngle = alpha;
+        s.camber = gamma;
+        return s;
+    };
+
+    SUBCASE("camber thrust adds a lateral force even at zero slip") {
+        MagicFormulaCoefficients cc = c;
+        cc.pVy3 = -0.3;
+        MagicFormulaTire tire(cc);
+        const Real gamma = 0.08;
+        const TireForces f = tire.computeForces(state(0.0, 0.0, gamma));
+        CHECK(f.lateral == doctest::Approx(fz0 * cc.pVy3 * std::tan(gamma)));
+        CHECK(tire.computeForces(state(0.0, 0.0, 0.0)).lateral == doctest::Approx(0.0));
+    }
+
+    SUBCASE("camber reduces both peaks") {
+        MagicFormulaCoefficients cc = c;
+        cc.pDx3 = 0.5;
+        cc.pDy3 = 0.4;
+        MagicFormulaTire tire(cc);
+        const Real gamma = 0.2;
+
+        Real fxPeak = 0.0;
+        Real fyPeak = 0.0;
+        for (int i = 0; i <= 2000; ++i) {
+            const Real x = 0.5 * static_cast<Real>(i) / 2000.0;
+            fxPeak = std::max(fxPeak, tire.computeForces(state(x, 0.0, gamma)).longitudinal);
+            fyPeak = std::max(fyPeak, std::abs(tire.computeForces(state(0.0, x, gamma)).lateral));
+        }
+        CHECK(fxPeak == doctest::Approx(c.pDx1 * fz0 * (1.0 - cc.pDx3 * gamma * gamma)).epsilon(0.01));
+        CHECK(fyPeak == doctest::Approx(c.pDy1 * fz0 * (1.0 - cc.pDy3 * gamma * gamma)).epsilon(0.01));
+    }
+
+    SUBCASE("camber reduces the cornering stiffness") {
+        MagicFormulaCoefficients cc = c;
+        cc.pKy3 = 0.5;
+        MagicFormulaTire tire(cc);
+        const Real gamma = 0.2;
+        const Real eps = 1e-5;
+        const Real ky = c.pKy1 * fz0 * std::sin(2.0 * std::atan(fz0 / (c.pKy2 * fz0)));
+        const TireForces f = tire.computeForces(state(0.0, eps, gamma));
+        CHECK(-f.lateral / eps == doctest::Approx(ky * (1.0 - cc.pKy3 * gamma)).epsilon(1e-3));
+    }
+
+    SUBCASE("the horizontal shift moves the zero crossing") {
+        MagicFormulaCoefficients cc = c;
+        cc.pHx1 = 0.05;
+        MagicFormulaTire tire(cc);
+        CHECK(std::abs(tire.computeForces(state(-cc.pHx1, 0.0, 0.0)).longitudinal) < 1e-9);
+    }
+}
+
 TEST_CASE("the residual, overturning and rolling-resistance moments follow their coefficients") {
     const MagicFormulaCoefficients c;
     MagicFormulaTire tire(c);
@@ -594,6 +654,9 @@ TEST_CASE("a .tir file parses into the pure-slip coefficients") {
                            "RBY2 = 7.5\n"
                            "RCY1 = 1.2\n"
                            "RHY1 = 0.01\n"
+                           "PDX3 = 0.4\n"
+                           "PVY3 = -0.25\n"
+                           "PHX1 = 0.02\n"
                            "QSX1 = 0.02\n"
                            "QDR1 = 0.015\n"
                            "ROLLING_RESISTANCE = 0.012\n"
@@ -615,6 +678,9 @@ TEST_CASE("a .tir file parses into the pure-slip coefficients") {
     CHECK(c.rBy2 == doctest::Approx(7.5));
     CHECK(c.rCy1 == doctest::Approx(1.2));
     CHECK(c.rHy1 == doctest::Approx(0.01));
+    CHECK(c.pDx3 == doctest::Approx(0.4));
+    CHECK(c.pVy3 == doctest::Approx(-0.25));
+    CHECK(c.pHx1 == doctest::Approx(0.02));
     CHECK(c.qSx1 == doctest::Approx(0.02));
     CHECK(c.qDr1 == doctest::Approx(0.015));
     CHECK(c.rollingResistanceC0 == doctest::Approx(0.012));

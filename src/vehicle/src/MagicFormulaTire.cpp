@@ -72,6 +72,30 @@ MagicFormulaCoefficients parseMagicFormulaCoefficients(std::istream& input) {
             c.pKy1 = value;
         } else if (key == "PKY2") {
             c.pKy2 = value;
+        } else if (key == "PDX3") {
+            c.pDx3 = value;
+        } else if (key == "PDY3") {
+            c.pDy3 = value;
+        } else if (key == "PKY3") {
+            c.pKy3 = value;
+        } else if (key == "PHX1") {
+            c.pHx1 = value;
+        } else if (key == "PHX2") {
+            c.pHx2 = value;
+        } else if (key == "PVX1") {
+            c.pVx1 = value;
+        } else if (key == "PVX2") {
+            c.pVx2 = value;
+        } else if (key == "PHY1") {
+            c.pHy1 = value;
+        } else if (key == "PHY2") {
+            c.pHy2 = value;
+        } else if (key == "PVY1") {
+            c.pVy1 = value;
+        } else if (key == "PVY2") {
+            c.pVy2 = value;
+        } else if (key == "PVY3") {
+            c.pVy3 = value;
         } else if (key == "QBZ1") {
             c.qBz1 = value;
         } else if (key == "QCZ1") {
@@ -173,20 +197,31 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
 
     const Real fz0 = c.nominalLoad;
     const Real dfz = (fz - fz0) / fz0;
+    const Real gamma = state.camber;
+
+    // Peaks with camber: the inclination reduces both peaks (load sensitivity).
+    const Real muX = (c.pDx1 + c.pDx2 * dfz) * (1.0 - c.pDx3 * gamma * gamma);
+    const Real muY = (c.pDy1 + c.pDy2 * dfz) * (1.0 - c.pDy3 * gamma * gamma);
 
     // Pure-slip forces. fx0 uses the longitudinal stiffness kx; fy0 uses the
-    // cornering stiffness ky and acts against the slip, hence the sign.
+    // cornering stiffness ky (reduced by camber) and acts against the slip. The
+    // horizontal shifts move the zero crossing and the vertical shifts add a
+    // force that survives at zero slip (ply steer and camber thrust).
     const Real cx = c.pCx1;
-    const Real dx = (c.pDx1 + c.pDx2 * dfz) * fz;
+    const Real dx = muX * fz;
     const Real kx = fz * (c.pKx1 + c.pKx2 * dfz) * std::exp(c.pKx3 * dfz);
     const Real bx = (cx * dx != 0.0) ? kx / (cx * dx) : 0.0;
-    const Real fx0 = magic(bx, cx, dx, c.pEx1, state.slipRatio);
+    const Real kappaShift = state.slipRatio + c.pHx1 + c.pHx2 * dfz;
+    const Real shiftX = fz * (c.pVx1 + c.pVx2 * dfz);
+    const Real fx0 = magic(bx, cx, dx, c.pEx1, kappaShift) + shiftX;
 
     const Real cy = c.pCy1;
-    const Real dy = (c.pDy1 + c.pDy2 * dfz) * fz;
-    const Real ky = c.pKy1 * fz0 * std::sin(2.0 * std::atan(fz / (c.pKy2 * fz0)));
+    const Real dy = muY * fz;
+    const Real ky = c.pKy1 * fz0 * std::sin(2.0 * std::atan(fz / (c.pKy2 * fz0))) * (1.0 - c.pKy3 * std::abs(gamma));
     const Real by = (cy * dy != 0.0) ? ky / (cy * dy) : 0.0;
-    const Real fy0 = -magic(by, cy, dy, c.pEy1, state.slipAngle);
+    const Real alphaShift = state.slipAngle + c.pHy1 + c.pHy2 * dfz;
+    const Real shiftY = fz * (c.pVy1 + c.pVy2 * dfz + c.pVy3 * std::tan(gamma));
+    const Real fy0 = -magic(by, cy, dy, c.pEy1, alphaShift) + shiftY;
 
     // Combined slip (Section 4.3). Both forms reduce to the pure-slip force when
     // the other slip is zero; the friction bound below still applies to both.
@@ -235,8 +270,6 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
 
     // Friction-circle bound so a combined (kappa, alpha) input never asks for
     // more grip than the peak available on this surface.
-    const Real muX = c.pDx1 + c.pDx2 * dfz;
-    const Real muY = c.pDy1 + c.pDy2 * dfz;
     const Real limit = std::max(0.0, std::max(muX, muY) * state.frictionCoefficient) * fz;
     const Real magnitude = std::sqrt(fx * fx + fy * fy);
     if (magnitude > limit && magnitude > 0.0) {
