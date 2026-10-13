@@ -168,18 +168,101 @@ TEST_CASE("sphere-cylinder side and cap contacts") {
     CHECK(points[0].position.y == doctest::Approx(1.0));
 }
 
-TEST_CASE("unsupported shape combinations report no contact") {
+TEST_CASE("box and cylinder combinations use the generic convex path") {
     const RigidBody box = makeBox(Vec3(0.5), Vec3(0.0));
-    const RigidBody cylinder = makeCylinder(0.5, 0.5, Vec3(0.0));
+    const RigidBody cylinder = makeCylinder(0.5, 0.5, Vec3(0.6, 0.0, 0.0));
 
     ContactPoint points[kMaxContactPoints];
-    CHECK(collide(box, cylinder, points, kMaxContactPoints) == 0);
-    CHECK(collide(cylinder, box, points, kMaxContactPoints) == 0);
-    CHECK(collide(cylinder, cylinder, points, kMaxContactPoints) == 0);
+    // Box-cylinder and cylinder-cylinder are no longer skipped: they go through
+    // GJK/EPA and report one witness point with the normal pointing from A to B.
+    const int count = collide(box, cylinder, points, kMaxContactPoints);
+    REQUIRE(count == 1);
+    CHECK(glm::length(points[0].normal) == doctest::Approx(1.0));
+    CHECK(points[0].normal.x > 0.9);
+    CHECK(points[0].penetration == doctest::Approx(0.4).epsilon(0.05));
+
+    // Swapping the operands flips the normal so it still points from A to B.
+    ContactPoint reversed[kMaxContactPoints];
+    REQUIRE(collide(cylinder, box, reversed, kMaxContactPoints) == 1);
+    CHECK(reversed[0].normal.x == doctest::Approx(-points[0].normal.x));
+
+    const RigidBody cylinderA = makeCylinder(0.5, 0.5, Vec3(0.0));
+    const RigidBody cylinderB = makeCylinder(0.5, 0.5, Vec3(0.6, 0.0, 0.0));
+    REQUIRE(collide(cylinderA, cylinderB, points, kMaxContactPoints) == 1);
+    CHECK(points[0].normal.x > 0.9);
+
+    // A heightfield pair is still skipped: supportWorld only approximates a
+    // heightfield as a unit box, so it must not reach the convex path.
+    RigidBody terrain;
+    terrain.shape.type = ShapeType::Heightfield;
+    terrain.updateCache();
+    CHECK(collide(terrain, cylinderA, points, kMaxContactPoints) == 0);
 
     // Zero-capacity output is a no-op rather than an overflow.
     const RigidBody sphere = makeSphere(0.5, Vec3(0.0));
     CHECK(collide(sphere, box, points, 0) == 0);
+}
+
+TEST_CASE("AABB-tree broadphase matches the brute-force reference") {
+    PhysicsWorld world;
+
+    // A static ground slab (top face at y = 0) and a cluster of dynamic boxes,
+    // some overlapping and one far away.
+    RigidBody& ground = world.createBody();
+    ground.shape = Shape::box(Vec3(10.0, 0.5, 10.0));
+    ground.setType(BodyType::Static);
+    ground.setMass(0.0);
+    ground.collisionEnabled = true;
+    ground.position = Vec3(0.0, -0.5, 0.0);
+    ground.updateCache();
+
+    const Vec3 positions[] = {Vec3(0.0, 0.5, 0.0), Vec3(0.9, 0.5, 0.0), Vec3(5.0, 0.5, 0.0), Vec3(0.0, 0.5, 0.9),
+                              Vec3(20.0, 0.5, 0.0)};
+    for (const Vec3& position : positions) {
+        RigidBody& box = world.createBody();
+        box.shape = Shape::box(Vec3(0.5));
+        box.setMass(1.0);
+        box.collisionEnabled = true;
+        box.position = position;
+        box.updateCache();
+    }
+
+    // A collidable box with collisions disabled on the body is never a candidate.
+    RigidBody& ghost = world.createBody();
+    ghost.shape = Shape::box(Vec3(0.5));
+    ghost.setMass(1.0);
+    ghost.collisionEnabled = false;
+    ghost.position = Vec3(0.0, 0.5, 0.0);
+    ghost.updateCache();
+
+    // Brute-force reference over the same rules (the pre-tree behaviour).
+    std::vector<BodyPair> expected;
+    const std::size_t count = world.bodyCount();
+    for (std::size_t i = 0; i < count; ++i) {
+        if (!world.body(i).collisionEnabled) {
+            continue;
+        }
+        for (std::size_t j = i + 1; j < count; ++j) {
+            if (!world.body(j).collisionEnabled) {
+                continue;
+            }
+            if (!world.body(i).isDynamic() && !world.body(j).isDynamic()) {
+                continue;
+            }
+            if (computeAabb(world.body(i)).overlaps(computeAabb(world.body(j)))) {
+                expected.push_back(BodyPair{i, j});
+            }
+        }
+    }
+
+    const std::vector<BodyPair> actual = broadphase(world);
+    REQUIRE(actual.size() == expected.size());
+    for (std::size_t k = 0; k < actual.size(); ++k) {
+        CHECK(actual[k].bodyA == expected[k].bodyA);
+        CHECK(actual[k].bodyB == expected[k].bodyB);
+    }
+    // The cluster really does produce overlaps, so the comparison is meaningful.
+    CHECK(expected.size() >= 4);
 }
 
 TEST_CASE("broadphase is ordered and ignores non-dynamic pairs") {

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Car Simulator contributors
 add_library(sim_physics STATIC
+    src/Broadphase.cpp
     src/Collision.cpp
     src/Convex.cpp
     src/Constraint.cpp

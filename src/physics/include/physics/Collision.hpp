@@ -3,7 +3,7 @@
 #pragma once
 
 // Shape-vs-shape collision detection for the physics engine: world-space AABBs,
-// a deterministic brute-force broadphase and analytic narrowphase routines.
+// a deterministic AABB-tree broadphase and analytic narrowphase routines.
 //
 // This is the detection half of Phase 1 (see docs/ROADMAP.md). It finds contacts
 // but does not yet resolve them: the solver integration that turns these
@@ -65,8 +65,8 @@ struct BodyPair {
 };
 
 // Deterministic broadphase: every collidable pair whose world-space AABBs
-// overlap, ordered by (bodyA, bodyB). Brute force for now; a sweep or grid can
-// replace the body without changing the signature.
+// overlap, ordered by (bodyA, bodyB). Backed by an AABB tree (physics/Broadphase.hpp);
+// the signature hides the acceleration structure so scenes are unaware of it.
 std::vector<BodyPair> broadphase(const PhysicsWorld& world);
 
 // Narrowphase for a single pair. Writes up to `maxPoints` contacts and returns

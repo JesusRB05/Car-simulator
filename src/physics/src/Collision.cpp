@@ -6,6 +6,7 @@
 #include <cmath>
 #include <vector>
 
+#include "physics/Broadphase.hpp"
 #include "physics/Convex.hpp"
 #include "physics/Heightfield.hpp"
 #include "physics/PhysicsWorld.hpp"
@@ -714,32 +715,47 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
         }
         return count;
     }
-    // Cylinder-cylinder and box-cylinder narrowphase is not implemented yet; the
-    // pair is skipped (see docs/ROADMAP.md, Phase 1).
+    // Box/cylinder combinations without an analytic routine (box-cylinder and
+    // cylinder-cylinder) go through the generic GJK/EPA path, which returns a
+    // single witness point. Heightfield pairs are excluded: supportWorld only
+    // approximates a heightfield as a unit box, so they must not take this route.
+    const bool boxOrCylinderA = typeA == ShapeType::Box || typeA == ShapeType::Cylinder;
+    const bool boxOrCylinderB = typeB == ShapeType::Box || typeB == ShapeType::Cylinder;
+    if (boxOrCylinderA && boxOrCylinderB) {
+        const ConvexContact contact = convexContact(a, b);
+        if (!contact.intersecting) {
+            return 0;
+        }
+        out[0].normal = contact.normal;
+        out[0].penetration = contact.depth;
+        out[0].position = 0.5 * (contact.pointA + contact.pointB);
+        return 1;
+    }
     return 0;
 }
 
 std::vector<BodyPair> broadphase(const PhysicsWorld& world) {
     const std::size_t count = world.bodyCount();
     std::vector<Aabb> boxes(count);
+    std::vector<std::size_t> collidable;
     for (std::size_t i = 0; i < count; ++i) {
         boxes[i] = computeAabb(world.body(i));
-    }
-
-    std::vector<BodyPair> pairs;
-    for (std::size_t i = 0; i < count; ++i) {
-        for (std::size_t j = i + 1; j < count; ++j) {
-            if (!world.body(i).collisionEnabled || !world.body(j).collisionEnabled) {
-                continue;
-            }
-            if (!world.body(i).isDynamic() && !world.body(j).isDynamic()) {
-                continue;
-            }
-            if (boxes[i].overlaps(boxes[j])) {
-                pairs.push_back(BodyPair{i, j});
-            }
+        if (world.body(i).collisionEnabled) {
+            collidable.push_back(i);
         }
     }
+
+    AabbTree tree;
+    tree.build(boxes, collidable);
+    std::vector<BodyPair> pairs = tree.overlappingPairs(boxes);
+
+    // A pair is only a candidate when at least one body is dynamic: two static
+    // bodies never need a contact (matching the brute-force reference).
+    pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
+                               [&](const BodyPair& pair) {
+                                   return !world.body(pair.bodyA).isDynamic() && !world.body(pair.bodyB).isDynamic();
+                               }),
+                pairs.end());
     return pairs;
 }
 
