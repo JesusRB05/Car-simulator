@@ -33,6 +33,9 @@ add_library(sim_vehicle STATIC
     # Rubber bushings, per-axis 6-DOF compliance (Phase 2, P2.7).
     include/vehicle/Bushing.hpp
     src/Bushing.cpp
+    # Kart chassis torsion between the two halves (Phase 2, Section 5.6).
+    include/vehicle/FrameTorsion.hpp
+    src/FrameTorsion.cpp
     # Steering geometry, Ackermann and column torque (Phase 2, P2.8).
     include/vehicle/Steering.hpp
     src/Steering.cpp

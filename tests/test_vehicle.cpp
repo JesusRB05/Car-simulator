@@ -16,6 +16,7 @@
 #include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/DrivelineCompliance.hpp"
 #include "vehicle/Engine.hpp"
+#include "vehicle/FrameTorsion.hpp"
 #include "vehicle/Gearbox.hpp"
 #include "vehicle/IAerodynamics.hpp"
 #include "vehicle/IBrakeSystem.hpp"
@@ -1289,6 +1290,17 @@ TEST_CASE("the disc brake torque and thermal model") {
     thermal.convectionCoefficient = 50.0; // h A = 5 W/K
     // At 10 K above ambient the cooling is 50 W, so (2000 - 50)/2500.
     CHECK(stepBrakeTemperature(thermal, 303.15, 200.0, 10.0, 1.0) == doctest::Approx(303.15 + 1950.0 / 2500.0));
+}
+
+TEST_CASE("the kart frame twists between its halves") {
+    FrameTorsion torsion{2000.0, 100.0}; // k_t, c_t
+
+    // Pure twist of 0.05 rad and no rate.
+    CHECK(computeFrameTorsionMoment(torsion, 0.05, 0.0, 0.0, 0.0) == doctest::Approx(2000.0 * 0.05));
+    // No twist, but the halves rotate at different rates.
+    CHECK(computeFrameTorsionMoment(torsion, 0.0, 0.0, 1.0, 0.0) == doctest::Approx(100.0));
+    // Both effects cancel when they oppose.
+    CHECK(computeFrameTorsionMoment(torsion, 0.05, 0.0, -1.0, 0.0) == doctest::Approx(2000.0 * 0.05 - 100.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
