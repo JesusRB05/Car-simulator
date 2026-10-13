@@ -2,12 +2,16 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
+#include <memory>
 #include <string>
 
 #include "physics/Math.hpp"
 #include "physics/PhysicsTypes.hpp"
 
 namespace sim::physics {
+
+// Defined in physics/Heightfield.hpp; only referenced through a shared pointer.
+struct Heightfield;
 
 enum class BodyType {
     Static,
@@ -19,19 +23,25 @@ enum class ShapeType {
     Box,
     Sphere,
     Cylinder,
+    Heightfield,
 };
 
 // A primitive used for automatic inertia computation and, later, collisions and
-// debug rendering. Dimensions are half-extents in the body frame.
+// debug rendering. Dimensions are half-extents in the body frame. A `Heightfield`
+// shape carries no inertia and is meant for static terrain; the field is authored
+// directly in world coordinates, so the terrain body must stay at the identity
+// transform.
 struct Shape {
     ShapeType type = ShapeType::Box;
-    Vec3 halfExtents{0.5, 0.5, 0.5}; // Box
-    Real radius = 0.5;               // Sphere, Cylinder
-    Real halfHeight = 0.5;           // Cylinder (local +Y axis)
+    Vec3 halfExtents{0.5, 0.5, 0.5};                // Box
+    Real radius = 0.5;                              // Sphere, Cylinder
+    Real halfHeight = 0.5;                          // Cylinder (local +Y axis)
+    std::shared_ptr<const Heightfield> heightfield; // Heightfield
 
     static Shape box(const Vec3& halfExtents);
     static Shape sphere(Real radius);
     static Shape cylinder(Real radius, Real halfHeight);
+    static Shape terrain(std::shared_ptr<const Heightfield> field);
 };
 
 // Computes the principal inertia moments of a uniform solid shape of the given

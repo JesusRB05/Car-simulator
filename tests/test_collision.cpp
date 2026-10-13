@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <memory>
 
 #include "physics/Collision.hpp"
 #include "physics/Heightfield.hpp"
@@ -732,6 +733,135 @@ TEST_CASE("heightfield normals are flat on a plane and tilted on a ramp") {
     CHECK(normal.x == doctest::Approx(expected.x));
     CHECK(normal.y == doctest::Approx(expected.y));
     CHECK(normal.z == doctest::Approx(expected.z));
+}
+
+namespace {
+
+std::shared_ptr<const Heightfield> flatField(int size, Real spacing, Real height) {
+    auto field = std::make_shared<Heightfield>();
+    field->width = size;
+    field->depth = size;
+    field->spacing = spacing;
+    field->origin = Vec3(0.0);
+    field->heights.assign(static_cast<std::size_t>(size) * size, height);
+    return field;
+}
+
+} // namespace
+
+TEST_CASE("heightfield AABB covers the grid footprint and height range") {
+    const std::shared_ptr<const Heightfield> field = flatField(6, 2.0, 3.0);
+    RigidBody terrain;
+    terrain.shape = Shape::terrain(field);
+    terrain.setType(BodyType::Static);
+    terrain.updateCache();
+    const Aabb box = computeAabb(terrain);
+    CHECK(box.min == Vec3(0.0, 3.0, 0.0));
+    CHECK(box.max == Vec3(10.0, 3.0, 10.0));
+}
+
+TEST_CASE("a sphere contacts a flat heightfield") {
+    const std::shared_ptr<const Heightfield> field = flatField(5, 1.0, 0.0);
+    RigidBody terrain;
+    terrain.shape = Shape::terrain(field);
+    terrain.setType(BodyType::Static);
+    terrain.updateCache();
+
+    RigidBody sphere = makeSphere(0.5, Vec3(2.0, 0.4, 2.0));
+
+    ContactPoint points[kMaxContactPoints];
+    const int count = collide(terrain, sphere, points, kMaxContactPoints);
+    REQUIRE(count == 1);
+    CHECK(points[0].penetration == doctest::Approx(0.1));
+    CHECK(points[0].normal == Vec3(0.0, 1.0, 0.0));
+
+    // Flipped order keeps the normal pointing from A to B.
+    ContactPoint flipped[kMaxContactPoints];
+    const int flippedCount = collide(sphere, terrain, flipped, kMaxContactPoints);
+    REQUIRE(flippedCount == 1);
+    CHECK(flipped[0].normal == Vec3(0.0, -1.0, 0.0));
+}
+
+TEST_CASE("a box rests on a flat heightfield with four contacts") {
+    const std::shared_ptr<const Heightfield> field = flatField(6, 1.0, 0.0);
+    RigidBody terrain;
+    terrain.shape = Shape::terrain(field);
+    terrain.setType(BodyType::Static);
+    terrain.updateCache();
+
+    RigidBody box = makeBox(Vec3(0.5), Vec3(2.5, 0.4, 2.5));
+
+    ContactPoint points[kMaxContactPoints];
+    const int count = collide(terrain, box, points, kMaxContactPoints);
+    REQUIRE(count == 4);
+    for (int i = 0; i < count; ++i) {
+        CHECK(points[i].penetration == doctest::Approx(0.1));
+        CHECK(points[i].normal == Vec3(0.0, 1.0, 0.0));
+    }
+}
+
+TEST_CASE("heightfield contacts follow a slope normal") {
+    auto field = std::make_shared<Heightfield>();
+    field->width = 6;
+    field->depth = 6;
+    field->spacing = 1.0;
+    field->origin = Vec3(0.0);
+    field->heights.resize(36);
+    const Real slope = 0.3;
+    for (int iz = 0; iz < 6; ++iz) {
+        for (int ix = 0; ix < 6; ++ix) {
+            field->heights[static_cast<std::size_t>(iz) * 6 + ix] = slope * static_cast<Real>(ix);
+        }
+    }
+    RigidBody terrain;
+    terrain.shape = Shape::terrain(field);
+    terrain.setType(BodyType::Static);
+    terrain.updateCache();
+
+    // A sphere just touching the ramp: the normal is the surface normal.
+    const Real surface = field->sampleHeight(3.0, 3.0);
+    RigidBody sphere = makeSphere(0.5, Vec3(3.0, surface + 0.4, 3.0));
+    ContactPoint points[kMaxContactPoints];
+    const int count = collide(terrain, sphere, points, kMaxContactPoints);
+    REQUIRE(count == 1);
+    const Vec3 expected = glm::normalize(Vec3(-slope, 1.0, 0.0));
+    CHECK(points[0].normal.x == doctest::Approx(expected.x));
+    CHECK(points[0].normal.y == doctest::Approx(expected.y));
+    CHECK(points[0].normal.z == doctest::Approx(expected.z));
+}
+
+TEST_CASE("a sphere falls onto terrain and comes to rest") {
+    auto field = std::make_shared<Heightfield>();
+    field->width = 8;
+    field->depth = 8;
+    field->spacing = 1.0;
+    field->origin = Vec3(0.0);
+    field->heights.assign(64, 0.0);
+
+    PhysicsWorld world;
+    RigidBody& terrain = world.createBody();
+    terrain.shape = Shape::terrain(field);
+    terrain.setType(BodyType::Static);
+    terrain.setMass(0.0);
+    terrain.collisionEnabled = true;
+    terrain.updateCache();
+
+    RigidBody& sphere = world.createBody();
+    sphere.shape = Shape::sphere(0.5);
+    sphere.setType(BodyType::Dynamic);
+    sphere.setMass(1.0);
+    sphere.setShapeInertia();
+    sphere.position = Vec3(3.5, 2.0, 3.5);
+    sphere.collisionEnabled = true;
+    sphere.updateCache();
+
+    for (int i = 0; i < 4000; ++i) {
+        world.step(1.0 / 1000.0);
+    }
+
+    MESSAGE("sphere resting y = " << sphere.position.y << " (contact slop at r = 0.5)");
+    CHECK(sphere.position.y == doctest::Approx(0.5).epsilon(0.05));
+    CHECK(std::abs(sphere.linearVelocity.y) < 0.05);
 }
 
 TEST_CASE("heightfield footprint and bounds follow the grid") {

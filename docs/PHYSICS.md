@@ -40,9 +40,10 @@ Pure, stateless header, double precision. It includes:
 `BodyType` is `Static`, `Kinematic` or `Dynamic`. Only dynamic bodies respond to
 forces; static bodies have zero inverse mass and inverse inertia.
 
-Shapes (`ShapeType`): `Box` (`halfExtents`), `Sphere` (`radius`) and `Cylinder`
-(`radius`, `halfHeight` about the local +Y axis). `shapeInertia()` returns the
-principal moments of a uniform solid.
+Shapes (`ShapeType`): `Box` (`halfExtents`), `Sphere` (`radius`), `Cylinder`
+(`radius`, `halfHeight` about the local +Y axis) and `Heightfield` (a shared
+`Heightfield`, for static terrain; see below). `shapeInertia()` returns the
+principal moments of a uniform solid (zero for terrain).
 
 `RigidBody` stores:
 
@@ -256,8 +257,17 @@ the surface between samples is triangulated (every cell splits along its
 `sampleNormal` evaluate the triangulated surface at any world `(x, z)`, extending
 flat beyond the footprint; `contains`, `minCorner` and `maxCorner` give the
 footprint and bounds. Because `sampleHeight` uses the same triangulation as the
-eventual contacts, the indexed lookup stays consistent with a brute-force
-triangle scan (see the test).
+contacts, the indexed lookup stays consistent with a brute-force triangle scan
+(see the test).
+
+Terrain is attached to a **static** body as `Shape::terrain(field)`
+(`ShapeType::Heightfield`, a shared `Heightfield` authored in world space; the
+body transform is ignored and it carries no inertia), so it flows through the
+ordinary body/contact pipeline. The narrowphase is **sphere–heightfield** (the
+closest triangle under the sphere's footprint, with a vertical fallback for deep
+embedding) and **box–heightfield** (every box corner below the surface becomes a
+contact, keeping the four deepest — exactly a box's support face when it rests
+flat).
 
 ### Sleeping
 
@@ -389,9 +399,10 @@ sphere rolling to 5/7 of its speed), restitution (dropped-sphere rebound),
 sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
 5-box stack stable for 60 s, the block-on-ramp friction threshold, an elastic
 Newton's cradle, the heightfield (a brute-force triangle-scan cross-check of
-`sampleHeight`, flat/ramp normals and the footprint) and contact determinism
-across repeated runs and snapshot/restore. `test_vehicle.cpp` covers the
-placeholder's conventions and the
+`sampleHeight`, flat/ramp normals, the footprint, the AABB, a sphere and a box
+against flat terrain, a slope normal and a sphere falling onto terrain) and
+contact determinism across repeated runs and snapshot/restore. `test_vehicle.cpp`
+covers the placeholder's conventions and the
 `MagicFormulaTire` pure-slip curve (origin slope `BCD = K`, peak `μ·Fz`, oddness,
 load sensitivity, the friction-circle bound and the self-aligning moment from the
 pneumatic trail), the `.tir` coefficient parser and the one-sided vertical
@@ -399,7 +410,7 @@ spring-damper with its effective-radius curve.
 
 ## Results
 
-Full suite: **69 cases / 7455 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **74 cases / 7477 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -448,6 +459,9 @@ absolute error in metres/radians/J for physical magnitudes).
 | Vertical tyre | Fz at δ = 0.01 m | kz0·δ = 2000 N | 2000 N | 0 | exact | Linear region `kz1 = 0`; a negative deflection or a receding contact clamps to `Fz = 0` |
 | Heightfield sample | \|bilinear − brute-force triangle scan\| | 0 | < 1e-12 | < 1e-12 | < 1e-12 | `sampleHeight` indexes the same triangulation a full scan would find; exact at the lattice nodes |
 | Heightfield normal (flat / slope) | n | (0, 1, 0) / normalize(−a, 1, 0) | exact | 0 | exact | Analytic gradient of the active triangle |
+| Sphere on flat terrain | penetration / n | r − (y − surface) = 0.1 m / (0, 1, 0) | 0.1 m / (0, 1, 0) | 0 | exact | The sphere centre is 0.1 m below the touching height |
+| Box on flat terrain | contacts / penetration | 4 / 0.1 m | 4 / 0.1 m | 0 | exact | The four bottom corners form the support face |
+| Sphere settled on terrain | rest height | r = 0.5 m | 0.499976 m | 2.4e-5 m | < 0.05·r | Falls onto the heightfield and rests within the contact slop |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000

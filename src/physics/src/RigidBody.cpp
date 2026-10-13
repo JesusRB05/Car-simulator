@@ -105,6 +105,13 @@ Shape Shape::cylinder(Real radius, Real halfHeight) {
     return shape;
 }
 
+Shape Shape::terrain(std::shared_ptr<const Heightfield> field) {
+    Shape shape;
+    shape.type = ShapeType::Heightfield;
+    shape.heightfield = std::move(field);
+    return shape;
+}
+
 Vec3 shapeInertia(const Shape& shape, Real mass) {
     if (mass <= 0.0) {
         return Vec3(0.0);
@@ -126,6 +133,8 @@ Vec3 shapeInertia(const Shape& shape, Real mass) {
         const Real transverse = mass / 12.0 * (3.0 * r2 + h2);
         return Vec3(transverse, axis, transverse);
     }
+    case ShapeType::Heightfield:
+        return Vec3(0.0);
     }
     return Vec3(1.0);
 }

@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <vector>
 
+#include "physics/Heightfield.hpp"
 #include "physics/PhysicsWorld.hpp"
 
 namespace sim::physics {
@@ -439,6 +441,177 @@ int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoi
     return edgeContact(obbA, obbB, featureA, featureB, normal, out);
 }
 
+// Closest point of a triangle (a, b, c) to p (Ericson, Real-Time Collision
+// Detection).
+Vec3 closestPointOnTriangle(const Vec3& p, const Vec3& a, const Vec3& b, const Vec3& c) {
+    const Vec3 ab = b - a;
+    const Vec3 ac = c - a;
+    const Vec3 ap = p - a;
+    const Real d1 = glm::dot(ab, ap);
+    const Real d2 = glm::dot(ac, ap);
+    if (d1 <= 0.0 && d2 <= 0.0) {
+        return a;
+    }
+    const Vec3 bp = p - b;
+    const Real d3 = glm::dot(ab, bp);
+    const Real d4 = glm::dot(ac, bp);
+    if (d3 >= 0.0 && d4 <= d3) {
+        return b;
+    }
+    const Real vc = d1 * d4 - d3 * d2;
+    if (vc <= 0.0 && d1 >= 0.0 && d3 <= 0.0) {
+        return a + ab * (d1 / (d1 - d3));
+    }
+    const Vec3 cp = p - c;
+    const Real d5 = glm::dot(ab, cp);
+    const Real d6 = glm::dot(ac, cp);
+    if (d6 >= 0.0 && d5 <= d6) {
+        return c;
+    }
+    const Real vb = d5 * d2 - d1 * d6;
+    if (vb <= 0.0 && d2 >= 0.0 && d6 <= 0.0) {
+        return a + ac * (d2 / (d2 - d6));
+    }
+    const Real va = d3 * d6 - d5 * d4;
+    if (va <= 0.0 && (d4 - d3) >= 0.0 && (d5 - d6) >= 0.0) {
+        return b + (c - b) * ((d4 - d3) / ((d4 - d3) + (d5 - d6)));
+    }
+    const Real denom = 1.0 / (va + vb + vc);
+    return a + ab * (vb * denom) + ac * (vc * denom);
+}
+
+// The two triangles of a heightfield cell, in world space.
+void cellTriangles(const Heightfield& field, int ix, int iz, Vec3 tri[2][3]) {
+    const Real x0 = field.origin.x + static_cast<Real>(ix) * field.spacing;
+    const Real x1 = x0 + field.spacing;
+    const Real z0 = field.origin.z + static_cast<Real>(iz) * field.spacing;
+    const Real z1 = z0 + field.spacing;
+    const Vec3 p00(x0, field.heightAt(ix, iz), z0);
+    const Vec3 p10(x1, field.heightAt(ix + 1, iz), z0);
+    const Vec3 p01(x0, field.heightAt(ix, iz + 1), z1);
+    const Vec3 p11(x1, field.heightAt(ix + 1, iz + 1), z1);
+    tri[0][0] = p00;
+    tri[0][1] = p10;
+    tri[0][2] = p11;
+    tri[1][0] = p00;
+    tri[1][1] = p11;
+    tri[1][2] = p01;
+}
+
+int cellIndex(Real value, Real origin, Real spacing) {
+    return static_cast<int>(std::floor((value - origin) / spacing));
+}
+
+// Sphere (b) against terrain (a); the normal points from the terrain to the
+// sphere.
+int sphereHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+    const Heightfield* field = a.shape.heightfield.get();
+    if (field == nullptr || !field->valid()) {
+        return 0;
+    }
+    const Vec3 center = b.position;
+    const Real radius = b.shape.radius;
+    const int ix0 = std::max(0, cellIndex(center.x - radius, field->origin.x, field->spacing));
+    const int ix1 = std::min(field->width - 2, cellIndex(center.x + radius, field->origin.x, field->spacing));
+    const int iz0 = std::max(0, cellIndex(center.z - radius, field->origin.z, field->spacing));
+    const int iz1 = std::min(field->depth - 2, cellIndex(center.z + radius, field->origin.z, field->spacing));
+    if (ix1 < ix0 || iz1 < iz0) {
+        return 0;
+    }
+
+    Real bestPenetration = -1.0;
+    Vec3 bestNormal(0.0, 1.0, 0.0);
+    Vec3 bestPoint(center);
+    for (int iz = iz0; iz <= iz1; ++iz) {
+        for (int ix = ix0; ix <= ix1; ++ix) {
+            Vec3 tri[2][3];
+            cellTriangles(*field, ix, iz, tri);
+            for (int t = 0; t < 2; ++t) {
+                const Vec3 q = closestPointOnTriangle(center, tri[t][0], tri[t][1], tri[t][2]);
+                const Vec3 delta = center - q;
+                const Real distance = glm::length(delta);
+                if (distance < radius && radius - distance > bestPenetration) {
+                    bestPenetration = radius - distance;
+                    bestNormal = distance > 1e-12 ? delta / distance : Vec3(0.0, 1.0, 0.0);
+                    bestPoint = q;
+                }
+            }
+        }
+    }
+    // Deep embedding can hide the sphere centre under the surface; the vertical
+    // sample recovers it.
+    const Real surface = field->sampleHeight(center.x, center.z);
+    const Real vertical = (surface + radius) - center.y;
+    if (vertical > bestPenetration) {
+        bestPenetration = vertical;
+        bestNormal = field->sampleNormal(center.x, center.z);
+        bestPoint = Vec3(center.x, surface, center.z);
+    }
+    if (bestPenetration < 0.0) {
+        return 0;
+    }
+    out[0].normal = bestNormal;
+    out[0].penetration = bestPenetration;
+    out[0].position = bestPoint;
+    return 1;
+}
+
+// Box (b) against terrain (a). Each corner below the surface becomes a contact;
+// the normal points from the terrain to the box. The four deepest points are
+// kept (deterministic), which is exactly a box's support face when it rests
+// flat.
+int boxHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints) {
+    const Heightfield* field = a.shape.heightfield.get();
+    if (field == nullptr || !field->valid()) {
+        return 0;
+    }
+    const Vec3 he = b.shape.halfExtents;
+    struct Candidate {
+        Real penetration;
+        Vec3 normal;
+        Vec3 point;
+        int corner;
+    };
+    std::vector<Candidate> candidates;
+    int corner = 0;
+    for (int sx = -1; sx <= 1; sx += 2) {
+        for (int sy = -1; sy <= 1; sy += 2) {
+            for (int sz = -1; sz <= 1; sz += 2) {
+                const Vec3 world = b.localToWorldPoint(Vec3(sx * he.x, sy * he.y, sz * he.z));
+                const int index = corner++;
+                if (!field->contains(world.x, world.z)) {
+                    continue;
+                }
+                const Vec3 surfacePoint(world.x, field->sampleHeight(world.x, world.z), world.z);
+                const Vec3 normal = field->sampleNormal(world.x, world.z);
+                const Real penetration = glm::dot(surfacePoint - world, normal);
+                if (penetration > 0.0) {
+                    candidates.push_back(Candidate{penetration, normal, world, index});
+                }
+            }
+        }
+    }
+    if (candidates.empty()) {
+        return 0;
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& l, const Candidate& r) {
+        if (l.penetration != r.penetration) {
+            return l.penetration > r.penetration;
+        }
+        return l.corner < r.corner;
+    });
+    const int count = std::min<int>(maxPoints, static_cast<int>(candidates.size()));
+    // Emit in corner order so warm-start rows keep matching across frames.
+    std::sort(candidates.begin(), candidates.begin() + count,
+              [](const Candidate& l, const Candidate& r) { return l.corner < r.corner; });
+    for (int i = 0; i < count; ++i) {
+        out[i].normal = candidates[i].normal;
+        out[i].penetration = candidates[i].penetration;
+        out[i].position = candidates[i].point;
+    }
+    return count;
+}
+
 } // namespace
 
 Aabb computeAabb(const RigidBody& body) {
@@ -453,6 +626,14 @@ Aabb computeAabb(const RigidBody& body) {
         const Vec3 axial = glm::abs(body.localToWorldDirection(Vec3(0.0, 1.0, 0.0)));
         const Vec3 extent = body.shape.radius * (radialX + radialZ) + body.shape.halfHeight * axial;
         return Aabb{body.position - extent, body.position + extent};
+    }
+    case ShapeType::Heightfield: {
+        const Heightfield* field = body.shape.heightfield.get();
+        if (field == nullptr || !field->valid()) {
+            return Aabb{body.position, body.position};
+        }
+        // The field is authored in world space, so the body transform is ignored.
+        return Aabb{field->minCorner(), field->maxCorner()};
     }
     case ShapeType::Box:
     default: {
@@ -494,6 +675,26 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
     }
     if (typeA == ShapeType::Cylinder && typeB == ShapeType::Sphere) {
         const int count = sphereCylinder(b, a, out);
+        for (int i = 0; i < count; ++i) {
+            out[i].normal = -out[i].normal;
+        }
+        return count;
+    }
+    if (typeA == ShapeType::Heightfield && typeB == ShapeType::Sphere) {
+        return sphereHeightfield(a, b, out);
+    }
+    if (typeA == ShapeType::Sphere && typeB == ShapeType::Heightfield) {
+        const int count = sphereHeightfield(b, a, out);
+        for (int i = 0; i < count; ++i) {
+            out[i].normal = -out[i].normal;
+        }
+        return count;
+    }
+    if (typeA == ShapeType::Heightfield && typeB == ShapeType::Box) {
+        return boxHeightfield(a, b, out, maxPoints);
+    }
+    if (typeA == ShapeType::Box && typeB == ShapeType::Heightfield) {
+        const int count = boxHeightfield(b, a, out, maxPoints);
         for (int i = 0; i < count; ++i) {
             out[i].normal = -out[i].normal;
         }
