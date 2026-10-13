@@ -239,14 +239,14 @@ tipo, error absoluto en metros/radianes/J para las magnitudes físicas).
 | Caída libre | y final (1 s) | 4,90333 m | 4,89843 m | 1,00e-3 | < 2e-3 | Retardo dt/t = 1e-3 inherente al semi-implícito; el error medido define la cota |
 | Tiro parabólico | x (1 s) | 10,0 m | 10,0 m | 1,69e-14 | < 1e-12 | Movimiento horizontal no forzado: exacto salvo redondeo |
 | Tiro parabólico | y (1 s) | 5,09668 m | 5,09167 m | 9,62e-4 | < 2e-3 | Mismo retardo dt/t que la caída libre |
-| Oscilador masa-muelle | Periodo | 0,628319 s | 0,628316 s | 4,17e-6 | < 2e-5 | Desviación O((ω·dt)²)=1e-4 de Euler simpléctico; medido 4e-6, la cota señala cualquier k/m errónea |
-| Péndulo simple | Periodo | 2,00641 s | 2,00679 s | 3,43e-5 | < 1e-4 | Muelles blandos de 60 Hz + dt; el error medido está 3× por debajo |
-| Energía oscilador (60 s) | Deriva máxima | 0 | 0,00502513 (rel) | 5,03e-3 | < 8e-3 | Drift de energía del simpléctico a ω·dt ~ 0,1·; cota 1,6× sobre la medida |
-| Momento angular libre (10 s) | \|I·ω\| rel | 1,0 | 1,0 | 3,20e-15 | < 1e-12 | La regla del punto medio conserva los invariantes cuadráticos; el error es O(dt³) de redondeo (cota ajustada desde 1e-9) |
+| Oscilador masa-muelle | Periodo | 0,628319 s | 0,628318 s | 1,12e-6 | < 2e-5 | Desviación O((ω·dt)²) del integrador semi-implícito/simpléctico; medido 1,12e-6, margen ~18× |
+| Péndulo simple | Periodo | 2,00641 s | 2,00678 s | 3,24e-5 | < 1e-4 | Muelles blandos de 60 Hz + dt; el error medido está ~3× por debajo de la cota |
+| Energía oscilador (60 s) | Deriva máxima | 0 | 0,00503337 (rel) | 5,03e-3 | < 8e-3 | Deriva de energía del integrador a ω·dt ~ 0,1; cota ~1,6× sobre la medida |
+| Momento angular libre (10 s) | \|I·ω\| rel | 1,0 | 1,0 | 3,20e-15 | < 1e-12 | Conservación del invariante cuadrático; el error es O(dt³) de redondeo (cota ajustada desde 1e-9) |
 | Dzhánibekov | ω eje intermedio | inversión | −6,0 rad/s | — | < −0,5 | El signo cambia de +6 a −6: giro inverso inequívoco |
 | Dzhánibekov | Momento angular | cte | cte | 6,86e-12 | < 1e-10 | Trompo libre conserva L (cota ajustada desde 1e-8) |
-| Giroscopio 3000 rpm | Precesión (20 s) | 0,312155 rad | 0,313539 rad | 4,43e-3 | < 1e-2 | Precesión |Ω·d/(I₃·ω)|; cumplimiento de la rótula blanda + dt (~2,3× margen) |
-| Giroscopio 3000 rpm | Crecimiento de energía | 0 | 0 | 0 | < 1e-4 | Midpoint conserva la energía del volante; la cota es solo redondeo |
+| Giroscopio 3000 rpm | Precesión (20 s) | 0,312155 rad | 0,313539 rad | 4,43e-3 | < 1e-2 | Precesión \|Ω·d/(I₃·ω)\|; cumplimiento de la rótula blanda + dt (~2,3× margen) |
+| Giroscopio 3000 rpm | Crecimiento de energía | 0 | 0 | 0 | < 1e-4 | Integrador conserva la energía del volante; la cota es solo redondeo |
 | Cadena 20 eslabones (60 s) | Máx. error articulación | 0 | 0,00447127 m | 4,47e-3 m | < 7e-3 | Asiento ~2,8 mm por el propio peso + balanco; cota 1,6× sobre la medida |
 | Masas 1:1000 (60 s) | Máx. error articulación | 0 | 1,82e-12 m | 1,82e-12 m | < 1e-10 | m_eff ~ 1 kg: articulación bien condicionada (cota ajustada desde 1e-6) |
 | Articulación fija (5 s) | Posición / orientación | 0 | 5,75e-4 m / 1,96e-7 | 5,75e-4 / 1,96e-7 | < 5e-3 | Asiento estático ~7e-5 m + transitorio por la perturbación inicial |
