@@ -731,6 +731,21 @@ TEST_CASE("the double wishbone closure solves and reports camber and toe") {
     }
 }
 
+TEST_CASE("the steering-axis geometry follows the ball joints") {
+    DoubleWishboneCorner c = sampleCorner();
+    c.lowerBallJoint = {0.70, 0.20, 0.10};
+    c.upperBallJoint = {0.64, 0.50, 0.02};
+    c.wheelCentre = {0.80, 0.31, 0.0};
+    const DoubleWishbone suspension(c);
+
+    const CornerState s = suspension.pose(Vec3(0.0), Vec3(0.0));
+    CHECK(s.kingpinInclination == doctest::Approx(0.1973956).epsilon(1e-6));
+    CHECK(s.caster == doctest::Approx(-0.2606023).epsilon(1e-6));
+    CHECK(s.scrubRadius == doctest::Approx(-0.06).epsilon(1e-6));
+    CHECK(s.mechanicalTrail == doctest::Approx(-0.1533333).epsilon(1e-6));
+    CHECK(glm::length(s.steeringAxis - glm::normalize(c.upperBallJoint - c.lowerBallJoint)) < 1e-12);
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 

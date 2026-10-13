@@ -54,6 +54,15 @@ struct CornerState {
     Real camber = 0.0;               // rad; a rotation about the longitudinal axis
     Real toe = 0.0;                  // rad; a rotation about the vertical axis
     Real springLength = 0.0;         // m (0 if there is no spring)
+
+    // Steering-axis geometry (the line through the two ball joints), against the
+    // ground plane y = 0. All are derived from the current pose.
+    Vec3 steeringAxis{0.0, 1.0, 0.0}; // world, unit, from the lower ball joint up
+    Real kingpinInclination = 0.0;    // rad; inboard lean of the axis, front view
+    Real caster = 0.0;                // rad; rearward lean of the axis, side view
+    Real scrubRadius = 0.0;           // m; axis ground point minus wheel centre (x)
+    Real mechanicalTrail = 0.0;       // m; wheel centre minus axis ground point (z)
+
     bool converged = true;
 };
 

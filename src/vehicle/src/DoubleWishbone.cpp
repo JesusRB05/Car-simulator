@@ -101,6 +101,22 @@ CornerState DoubleWishbone::finalize(const Vec3& translation, const Mat3& rotati
     if (corner_.hasSpring) {
         state.springLength = glm::length(rotation * corner_.springLower + translation - corner_.springUpper);
     }
+
+    // Steering axis and the alignment quantities it fixes against the ground
+    // plane y = 0 (the world up-axis ground).
+    const Vec3 lowerWorld = rotation * corner_.lowerBallJoint + translation;
+    const Vec3 upperWorld = rotation * corner_.upperBallJoint + translation;
+    const Vec3 axisRaw = upperWorld - lowerWorld;
+    const Real axisLength = glm::length(axisRaw);
+    const Vec3 a = (axisLength > 1e-12) ? axisRaw / axisLength : Vec3(0.0, 1.0, 0.0);
+    state.steeringAxis = a;
+    state.kingpinInclination = std::atan2(-a.x, a.y);
+    state.caster = std::atan2(a.z, a.y);
+
+    const Real t = (std::abs(a.y) > 1e-12) ? -lowerWorld.y / a.y : 0.0;
+    const Vec3 groundPoint = lowerWorld + t * a;
+    state.scrubRadius = groundPoint.x - state.wheelCentre.x;
+    state.mechanicalTrail = state.wheelCentre.z - groundPoint.z;
     return state;
 }
 
