@@ -81,7 +81,9 @@ TEST_CASE("free fall matches the analytic solution")
     const Real velocityError = relativeError(body.linearVelocity.y, -9.80665);
     const Real positionErrorValue = relativeError(body.position.y, -0.5 * 9.80665);
     MESSAGE("fall velocity rel.error = " << velocityError << ", position rel.error = " << positionErrorValue);
-    CHECK(velocityError < 1e-9);
+    // Constant-gravity velocity is exact under semi-implicit Euler; 1e-12 leaves
+    // ~100x headroom over the measured 1.5e-14 for cross-platform round-off.
+    CHECK(velocityError < 1e-12);
     CHECK(positionErrorValue < 2e-3);
 }
 
@@ -97,12 +99,13 @@ TEST_CASE("projectile follows a parabola")
         world.step(kDt);
     }
 
-    // Horizontal motion has no force so it is exact (measured ~1e-14); vertical
-    // carries the same dt/t = 1e-3 semi-implicit lag as the free-fall case.
+    // Horizontal motion has no force so it is exact (measured ~1.7e-14; 1e-12
+    // leaves ~100x headroom for cross-platform round-off); vertical carries the
+    // same dt/t = 1e-3 semi-implicit lag as the free-fall case.
     const Real xError = relativeError(body.position.x, 10.0);
     const Real yError = relativeError(body.position.y, 10.0 - 0.5 * 9.80665);
     MESSAGE("projectile x rel.error = " << xError << ", y rel.error = " << yError);
-    CHECK(xError < 1e-9);
+    CHECK(xError < 1e-12);
     CHECK(yError < 2e-3);
 }
 
@@ -243,8 +246,9 @@ TEST_CASE("angular momentum of a torque-free top is conserved")
     const Real error = relativeError(final, initial);
     MESSAGE("angular momentum rel.error over 10 s = " << error);
     // The implicit midpoint rule preserves |I*omega| exactly, so the only error
-    // is O(dt^3) round-off (measured 3e-15); 1e-9 still catches a broken torque.
-    CHECK(error < 1e-9);
+    // is O(dt^3) round-off (measured 3.2e-15); 1e-12 guards a broken torque with
+    // ~100x headroom while still failing loudly on any discretization error.
+    CHECK(error < 1e-12);
 }
 
 TEST_CASE("Dzhanibekov flip: an asymmetric body tumbling about its intermediate axis reverses")
@@ -273,8 +277,9 @@ TEST_CASE("Dzhanibekov flip: an asymmetric body tumbling about its intermediate 
     // The intermediate-axis component must cross zero and reverse (flip);
     // measured -6.0 out of an initial +6.0, so the sign flip is unambiguous.
     CHECK(minIntermediate < -0.5);
-    // ...while the free body still conserves its angular momentum (measured 7e-12).
-    CHECK(maxMomentumError < 1e-8);
+    // ...while the free body still conserves its angular momentum (measured
+    // 6.9e-12); 1e-10 keeps ~15x headroom and flags a broken gyroscopic term.
+    CHECK(maxMomentumError < 1e-10);
 }
 
 TEST_CASE("fast gyroscope keeps its energy and precesses at the analytic rate")
@@ -415,9 +420,101 @@ TEST_CASE("a 1:1000 mass-ratio joint stays stable over 60 s")
     MESSAGE("1:1000 mass-ratio max joint error over 60 s = " << maxError << " m");
     // The effective mass of a 1:1000 pair is dominated by the light body
     // (m_eff ~ 1 kg), so the soft 60 Hz joint stays well-conditioned; the
-    // measured error is 1.8e-12 m, so 1e-6 m bounds it tightly.
+    // measured error is 1.8e-12 m, so 1e-10 m bounds it ~55x while still
+    // flagging any conditioning regression well before it becomes visible.
     CHECK(finite);
-    CHECK(maxError < 1e-6);
+    CHECK(maxError < 1e-10);
+}
+
+TEST_CASE("fixed constraint keeps a welded pair rigid under disturbance")
+{
+    PhysicsWorld world;
+    world.gravity = Vec3(0.0, -9.80665, 0.0);
+
+    RigidBody& base = makeStatic(world, Vec3(0.0));
+    RigidBody& arm = makeDynamic(world, 2.0, Vec3(0.4), Vec3(0.0));
+    arm.linearVelocity = Vec3(0.5, 0.5, 0.0);
+    arm.angularVelocity = Vec3(1.0, -1.0, 0.5);
+
+    FixedConstraint& weld = world.createConstraint<FixedConstraint>(base, arm);
+    weld.localAnchorA = Vec3(0.0);
+    weld.localAnchorB = Vec3(0.0);
+    weld.captureReference();
+
+    const Quat reference = arm.orientation;
+    const Vec3 referencePosition = arm.position;
+    Real maxPointError = 0.0;
+    Real maxOrientationError = 0.0;
+    for (int i = 0; i < 5000; ++i)
+    {
+        world.step(kDt);
+        maxPointError =
+            std::max(maxPointError, glm::length(arm.position - referencePosition));
+        maxOrientationError = std::max(
+            maxOrientationError, 1.0 - std::abs(glm::dot(arm.orientation, reference))
+                                      / (glm::length(arm.orientation) * glm::length(reference)));
+    }
+    MESSAGE("fixed joint max position error over 5 s = " << maxPointError
+            << " m, max orientation error = " << maxOrientationError);
+    // Six soft rows must hold a 2 kg arm 1 m from the base against gravity
+    // (static sag ~7e-5 m) even after an initial linear+angular disturbance
+    // while it still falls in free space (its own motion is unconstrained).
+    CHECK(maxPointError < 5e-3);
+    CHECK(maxOrientationError < 5e-3);
+}
+
+TEST_CASE("linear damping decays velocity at the analytic exponential rate")
+{
+    PhysicsWorld world;
+    world.gravity = Vec3(0.0);
+
+    RigidBody& body = makeDynamic(world, 1.0, Vec3(1.0), Vec3(0.0));
+    body.linearVelocity = Vec3(10.0, 0.0, 0.0);
+    body.linearDamping = 1.0;
+
+    for (int i = 0; i < 1000; ++i)
+    {
+        world.step(kDt);
+    }
+    const Real time = world.time();
+    const Real analytic = 10.0 * std::exp(-1.0 * time);
+    const Real error = relativeError(body.linearVelocity.x, analytic);
+    MESSAGE("damped velocity measured = " << body.linearVelocity.x << " m/s, analytic = " << analytic
+                                          << " m/s over " << time << " s, rel.error = " << error);
+    // Damping is applied as 1/(1 + d*dt) per step, whose continuous limit is
+    // exp(-d*t); at d = 1 the discretization error is ~3e-4, so 1e-2 bounds it
+    // while flagging a mis-scaled or missing decay term.
+    CHECK(error < 1e-2);
+}
+
+TEST_CASE("revolute motor drives the hinge to its target angular speed")
+{
+    PhysicsWorld world;
+    world.gravity = Vec3(0.0, -9.80665, 0.0);
+
+    RigidBody& base = makeStatic(world, Vec3(0.0));
+    RigidBody& arm = makeDynamic(world, 1.0, Vec3(0.5, 1.0, 0.5), Vec3(1.0, 0.0, 0.0));
+
+    RevoluteConstraint& hinge = world.createConstraint<RevoluteConstraint>(base, arm);
+    hinge.localAnchorA = Vec3(0.0);
+    hinge.localAnchorB = Vec3(0.0);
+    hinge.localAxisA = Vec3(0.0, 1.0, 0.0);
+    hinge.motorEnabled = true;
+    hinge.motorSpeed = 3.0;       // rad/s target
+    hinge.maxMotorTorque = 100.0; // N*m
+    hinge.captureReference();
+
+    Real speed = 0.0;
+    for (int i = 0; i < 3000; ++i)
+    {
+        world.step(kDt);
+        const Vec3 axis = rotateVector(base.orientation, hinge.localAxisA);
+        speed = glm::dot(arm.angularVelocity, axis);
+    }
+    MESSAGE("revolute motor speed after 3 s = " << speed << " rad/s (target " << hinge.motorSpeed << ")");
+    // With gravity aligned with the hinge axis there is no opposing torque, so
+    // the motor must reach and hold the target speed; gravity only bends the arm.
+    CHECK(std::abs(speed - 3.0) < 0.05 * 3.0);
 }
 
 namespace {
