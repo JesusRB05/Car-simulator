@@ -32,9 +32,11 @@
 #include "vehicle/Steering.hpp"
 #include "vehicle/TireBristle.hpp"
 #include "vehicle/TireVertical.hpp"
+#include "vehicle/VehicleModel.hpp"
 #include "vehicle/WheelSpin.hpp"
 
 using namespace sim::vehicle;
+namespace physics = sim::physics;
 
 namespace {
 
@@ -1458,4 +1460,123 @@ TEST_CASE("a .tir file parses into the pure-slip coefficients") {
     state.normalLoad = c.nominalLoad;
     state.slipRatio = 0.1;
     CHECK(tire.computeForces(state).longitudinal > 0.0);
+}
+
+TEST_CASE("VehicleModel settles at rest on flat ground with the wheels loaded") {
+    physics::PhysicsWorld world;
+    FlatGroundQuery ground(0.0, 1.0);
+    const VehicleSetup setup = makeDefaultVehicleSetup();
+    VehicleModel& car = VehicleModel::spawn(world, setup, ground);
+
+    for (int i = 0; i < 2000; ++i) {
+        car.step(world.fixedStep);
+    }
+
+    CHECK(std::abs(car.forwardSpeed()) < 0.2);
+    CHECK(std::abs(car.angularVelocity().y) < 0.1);
+    CHECK(car.position().y > 0.35);
+    CHECK(car.position().y < 0.6);
+
+    Real totalLoad = 0.0;
+    for (const VehicleCorner& corner : car.corners()) {
+        CHECK(corner.contact);
+        CHECK(corner.load > 0.0);
+        totalLoad += corner.load;
+    }
+    CHECK(totalLoad == doctest::Approx(setup.mass * 9.80665).epsilon(0.05));
+}
+
+TEST_CASE("VehicleModel accelerates straight forward under throttle") {
+    physics::PhysicsWorld world;
+    FlatGroundQuery ground(0.0, 1.0);
+    VehicleModel& car = VehicleModel::spawn(world, makeDefaultVehicleSetup(), ground);
+
+    VehicleInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+    const Real startZ = car.position().z;
+    for (int i = 0; i < 4000; ++i) {
+        car.step(world.fixedStep);
+    }
+
+    CHECK(car.forwardSpeed() > 5.0);
+    CHECK(car.position().z < startZ - 5.0); // forward is -Z
+    CHECK(std::abs(car.heading()) < 0.05);
+}
+
+TEST_CASE("VehicleModel steering left turns the heading positive") {
+    physics::PhysicsWorld world;
+    FlatGroundQuery ground(0.0, 1.0);
+    VehicleModel& car = VehicleModel::spawn(world, makeDefaultVehicleSetup(), ground);
+
+    VehicleInput input;
+    input.throttle = 0.6;
+    car.setInput(input);
+    for (int i = 0; i < 2000; ++i) {
+        car.step(world.fixedStep);
+    }
+    const Real approachHeading = car.heading();
+
+    input.steer = 1.0; // positive = left
+    car.setInput(input);
+    for (int i = 0; i < 1500; ++i) {
+        car.step(world.fixedStep);
+    }
+
+    CHECK(car.heading() > approachHeading + 0.1);
+    CHECK(car.forwardSpeed() > 0.0);
+}
+
+TEST_CASE("VehicleModel braking slows the car down") {
+    physics::PhysicsWorld world;
+    FlatGroundQuery ground(0.0, 1.0);
+    VehicleModel& car = VehicleModel::spawn(world, makeDefaultVehicleSetup(), ground);
+
+    VehicleInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+    for (int i = 0; i < 3000; ++i) {
+        car.step(world.fixedStep);
+    }
+    const Real cruising = car.forwardSpeed();
+    CHECK(cruising > 5.0);
+
+    input.throttle = 0.0;
+    input.brake = 1.0;
+    car.setInput(input);
+    for (int i = 0; i < 1500; ++i) {
+        car.step(world.fixedStep);
+    }
+
+    CHECK(car.forwardSpeed() < cruising - 2.0);
+}
+
+TEST_CASE("VehicleModel is deterministic for the same input script") {
+    VehicleSetup setup = makeDefaultVehicleSetup();
+
+    const auto run = [&setup](Real& outSpeed, Vec3& outPosition) {
+        physics::PhysicsWorld world;
+        FlatGroundQuery ground(0.0, 1.0);
+        VehicleModel& car = VehicleModel::spawn(world, setup, ground);
+        VehicleInput input;
+        for (int i = 0; i < 3000; ++i) {
+            input.throttle = (i < 1500) ? 1.0 : 0.0;
+            input.steer = (i > 1000) ? 0.5 : 0.0;
+            car.setInput(input);
+            car.step(world.fixedStep);
+        }
+        outSpeed = car.forwardSpeed();
+        outPosition = car.position();
+    };
+
+    Real speedA = 0.0;
+    Real speedB = 0.0;
+    Vec3 positionA{0.0};
+    Vec3 positionB{0.0};
+    run(speedA, positionA);
+    run(speedB, positionB);
+    CHECK(speedA == speedB);
+    CHECK(positionA.x == positionB.x);
+    CHECK(positionA.y == positionB.y);
+    CHECK(positionA.z == positionB.z);
 }

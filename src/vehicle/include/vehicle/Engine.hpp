@@ -87,6 +87,11 @@ public:
     Real effectiveThrottle() const { return effectiveThrottle_; }
     bool fuelCut() const { return fuelCut_; }
 
+    // Forces the crankshaft speed, used by a driveline that couples the engine
+    // rigidly to the wheels through a locked clutch. The idle-controller state is
+    // left untouched; a subsequent slipping step resumes from the new speed.
+    void setAngularVelocity(Real angularVelocity) { angularVelocity_ = angularVelocity; }
+
 private:
     Real angularVelocity_ = 0.0;
     Real effectiveThrottle_ = 0.0;
