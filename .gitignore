@@ -50,8 +50,16 @@ tools/mesa/
 Thumbs.db
 .DS_Store
 
-# Local captures and logs (keep only the reviewed contact sheet)
+# Local captures and logs (keep only the reviewed contact sheet).
+# screenshots/golden_candidates/ and tests/golden/ stay tracked.
 /*.png
-/*.log
+*.log
 screenshots/*.png
 !screenshots/contact_sheet.png
+
+# Per-user runtime state written by apps/sim next to content/ (repo root)
+/config.toml
+/userdata/
+
+# Local agent / assistant folders (worktrees, settings)
+.claude/
