@@ -3,6 +3,7 @@
 #include <doctest/doctest.h>
 
 #include <cmath>
+#include <sstream>
 
 // Every interface header is included so that it is compile-checked here.
 #include "vehicle/IAerodynamics.hpp"
@@ -164,4 +165,37 @@ TEST_CASE("MagicFormulaTire matches the pure-slip Magic Formula curve") {
     }
 
     CHECK(tire.unloadedRadius() == doctest::Approx(c.radius));
+}
+
+TEST_CASE("a .tir file parses into the pure-slip coefficients") {
+    std::istringstream tir("! TNO MF-Tyre\n"
+                           "[MODEL]\n"
+                           "FNOMIN = 4000\n"
+                           "UNLOADED_RADIUS = 0.31\n"
+                           "[COEFFICIENTS]\n"
+                           "PCX1 = 1.8   $ longitudinal shape\n"
+                           "PDX1 = 1.5\n"
+                           "PKX1 = 26\n"
+                           "PKY1 = 14\n"
+                           "PKY2 = 2.2\n"
+                           "SOME_OTHER_COEFFICIENT = 99\n"
+                           "[VERTICAL]\n"
+                           "VERTICAL_STIFFNESS = 200000\n");
+
+    const MagicFormulaCoefficients c = parseMagicFormulaCoefficients(tir);
+    CHECK(c.nominalLoad == doctest::Approx(4000.0));
+    CHECK(c.radius == doctest::Approx(0.31));
+    CHECK(c.pCx1 == doctest::Approx(1.8));
+    CHECK(c.pDx1 == doctest::Approx(1.5));
+    CHECK(c.pKx1 == doctest::Approx(26.0));
+    CHECK(c.pKy1 == doctest::Approx(14.0));
+    CHECK(c.pKy2 == doctest::Approx(2.2));
+    CHECK(c.pDx2 == doctest::Approx(MagicFormulaCoefficients{}.pDx2)); // untouched default
+
+    // A parse followed by a model evaluation works end to end.
+    MagicFormulaTire tire(c);
+    TireState state;
+    state.normalLoad = c.nominalLoad;
+    state.slipRatio = 0.1;
+    CHECK(tire.computeForces(state).longitudinal > 0.0);
 }

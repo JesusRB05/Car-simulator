@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <sstream>
 
 namespace sim::vehicle {
 namespace {
@@ -16,6 +18,64 @@ Real magic(Real b, Real c, Real d, Real e, Real x) {
 }
 
 } // namespace
+
+MagicFormulaCoefficients parseMagicFormulaCoefficients(std::istream& input) {
+    MagicFormulaCoefficients c;
+    std::string line;
+    while (std::getline(input, line)) {
+        const std::size_t comment = line.find_first_of("!$");
+        if (comment != std::string::npos) {
+            line.erase(comment);
+        }
+        std::istringstream fields(line);
+        std::string key;
+        std::string equals;
+        Real value = 0.0;
+        if (!(fields >> key >> equals >> value) || equals != "=") {
+            continue; // blank line, section header or something we do not read
+        }
+        if (key == "FNOMIN") {
+            c.nominalLoad = value;
+        } else if (key == "UNLOADED_RADIUS") {
+            c.radius = value;
+        } else if (key == "PCX1") {
+            c.pCx1 = value;
+        } else if (key == "PDX1") {
+            c.pDx1 = value;
+        } else if (key == "PDX2") {
+            c.pDx2 = value;
+        } else if (key == "PEX1") {
+            c.pEx1 = value;
+        } else if (key == "PKX1") {
+            c.pKx1 = value;
+        } else if (key == "PKX2") {
+            c.pKx2 = value;
+        } else if (key == "PKX3") {
+            c.pKx3 = value;
+        } else if (key == "PCY1") {
+            c.pCy1 = value;
+        } else if (key == "PDY1") {
+            c.pDy1 = value;
+        } else if (key == "PDY2") {
+            c.pDy2 = value;
+        } else if (key == "PEY1") {
+            c.pEy1 = value;
+        } else if (key == "PKY1") {
+            c.pKy1 = value;
+        } else if (key == "PKY2") {
+            c.pKy2 = value;
+        }
+    }
+    return c;
+}
+
+MagicFormulaCoefficients loadMagicFormulaCoefficients(const std::string& path) {
+    std::ifstream file(path);
+    if (!file) {
+        return MagicFormulaCoefficients{};
+    }
+    return parseMagicFormulaCoefficients(file);
+}
 
 TireForces MagicFormulaTire::computeForces(const TireState& state) const {
     const MagicFormulaCoefficients& c = coefficients_;

@@ -303,9 +303,11 @@ all with `dfz = (Fz − Fz0)/Fz0` load dependence so the peak grip falls with lo
 (load sensitivity). `Fx` opposes the slip ratio (driving is positive) and `Fy`
 opposes the slip angle. A friction-circle clamp keeps
 `√(Fx² + Fy²) ≤ μ_peak Fz` for combined slip. The coefficients live in a plain
-`MagicFormulaCoefficients` struct in the same layout as a `.tir` subset; the full
-`.tir` loader, the moments (`Mz`, `Mx`, `My`) and transient relaxation arrive with
-P2.2/P2.3/P2.4.
+`MagicFormulaCoefficients` struct in the same layout as a `.tir` subset.
+`parseMagicFormulaCoefficients`/`loadMagicFormulaCoefficients` read that subset
+from a TNO `.tir` stream or file (sections, `!`/`$` comments, `KEY = value`), so
+real datasets can be dropped in; the moments (`Mz`, `Mx`, `My`) and transient
+relaxation still arrive with P2.3/P2.4.
 
 ### `PlaceholderVehicle` (TEMPORARY)
 
@@ -364,11 +366,12 @@ sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
 Newton's cradle and contact determinism across repeated runs and
 snapshot/restore. `test_vehicle.cpp` covers the placeholder's conventions and the
 `MagicFormulaTire` pure-slip curve (origin slope `BCD = K`, peak `μ·Fz`, oddness,
-load sensitivity and the friction-circle bound).
+load sensitivity and the friction-circle bound) and the `.tir` coefficient
+parser.
 
 ## Results
 
-Full suite: **64 cases / 7257 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **65 cases / 7266 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).

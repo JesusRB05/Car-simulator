@@ -2,6 +2,9 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
+#include <istream>
+#include <string>
+
 #include "physics/PhysicsTypes.hpp"
 #include "vehicle/ITireModel.hpp"
 
@@ -53,5 +56,16 @@ public:
 private:
     MagicFormulaCoefficients coefficients_{};
 };
+
+// Parses the pure-slip subset of a TNO `.tir` file: section headers in square
+// brackets, `KEY = value` lines and `!`/`$` comments. Unknown keys and sections
+// are ignored, so a full `.tir` file parses without complaint; keys that are
+// absent keep their default. The value's first whitespace-delimited token is
+// used, which matches the `.tir` layout (`PCX1 = 1.6  $ comment`).
+MagicFormulaCoefficients parseMagicFormulaCoefficients(std::istream& input);
+
+// Loads coefficients from a `.tir` file. Returns the defaults if it cannot be
+// opened.
+MagicFormulaCoefficients loadMagicFormulaCoefficients(const std::string& path);
 
 } // namespace sim::vehicle
