@@ -2,6 +2,8 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #include "render/Mesh.hpp"
 
+#include <cmath>
+
 namespace sim::render {
 namespace {
 
@@ -51,6 +53,107 @@ std::shared_ptr<Mesh> Mesh::makeCube(rhi::Device& device)
         indices.push_back(base + 0);
         indices.push_back(base + 2);
         indices.push_back(base + 3);
+    }
+
+    return std::make_shared<Mesh>(device, vertices, indices);
+}
+
+std::shared_ptr<Mesh> Mesh::makeSphere(rhi::Device& device)
+{
+    // Unit UV sphere (radius 1, centred at the origin). Positions equal their
+    // normals on a unit sphere, so the Lambert shading is smooth.
+    const int slices = 24;
+    const int stacks = 14;
+    std::vector<Vertex> vertices;
+    std::vector<std::uint32_t> indices;
+    for (int stack = 0; stack <= stacks; ++stack)
+    {
+        const float phi = static_cast<float>(stack) * 3.14159265358979f / static_cast<float>(stacks);
+        const float sinPhi = std::sin(phi);
+        for (int slice = 0; slice <= slices; ++slice)
+        {
+            const float theta = static_cast<float>(slice) * 6.28318530717959f / static_cast<float>(slices);
+            Vertex vertex;
+            vertex.position = {sinPhi * std::cos(theta), std::cos(phi), sinPhi * std::sin(theta)};
+            vertex.normal = vertex.position;
+            vertex.uv = {static_cast<float>(slice) / static_cast<float>(slices), static_cast<float>(stack) / static_cast<float>(stacks)};
+            vertices.push_back(vertex);
+        }
+    }
+    for (int stack = 0; stack < stacks; ++stack)
+    {
+        for (int slice = 0; slice < slices; ++slice)
+        {
+            const std::uint32_t a = static_cast<std::uint32_t>(stack) * (slices + 1) + static_cast<std::uint32_t>(slice);
+            const std::uint32_t b = a + 1;
+            const std::uint32_t c = a + static_cast<std::uint32_t>(slices) + 2;
+            const std::uint32_t d = a + static_cast<std::uint32_t>(slices) + 1;
+            indices.push_back(a);
+            indices.push_back(b);
+            indices.push_back(c);
+            indices.push_back(a);
+            indices.push_back(c);
+            indices.push_back(d);
+        }
+    }
+    return std::make_shared<Mesh>(device, vertices, indices);
+}
+
+std::shared_ptr<Mesh> Mesh::makeCylinder(rhi::Device& device)
+{
+    // Unit cylinder: radius 1, half-height 1, axis +Y. Side normals are radial;
+    // both caps point up/down so the Lambert shading reads the disc correctly.
+    const int slices = 24;
+    std::vector<Vertex> vertices;
+    std::vector<std::uint32_t> indices;
+
+    const auto ring = [&](float y, float normalY) {
+        for (int slice = 0; slice <= slices; ++slice)
+        {
+            const float theta = static_cast<float>(slice) * 6.28318530717959f / static_cast<float>(slices);
+            Vertex vertex;
+            vertex.position = {std::cos(theta), y, std::sin(theta)};
+            vertex.normal = {std::cos(theta), normalY, std::sin(theta)};
+            vertex.uv = {static_cast<float>(slice) / static_cast<float>(slices), y * 0.5f + 0.5f};
+            vertices.push_back(vertex);
+        }
+    };
+    ring(1.0f, 1.0f);
+    ring(-1.0f, -1.0f);
+    const std::uint32_t sideOffset = static_cast<std::uint32_t>(vertices.size());
+    ring(1.0f, 0.0f);
+    ring(-1.0f, 0.0f);
+
+    for (int slice = 0; slice < slices; ++slice)
+    {
+        const std::uint32_t a = sideOffset + static_cast<std::uint32_t>(slice);
+        const std::uint32_t b = a + 1;
+        const std::uint32_t c = sideOffset + static_cast<std::uint32_t>(slices) + 1 + static_cast<std::uint32_t>(slice) + 1;
+        const std::uint32_t d = sideOffset + static_cast<std::uint32_t>(slices) + 1 + static_cast<std::uint32_t>(slice);
+        indices.push_back(a);
+        indices.push_back(b);
+        indices.push_back(c);
+        indices.push_back(a);
+        indices.push_back(c);
+        indices.push_back(d);
+    }
+
+    // Top and bottom fans (reusing the side rings for the caps).
+    const std::uint32_t topCenter = static_cast<std::uint32_t>(vertices.size());
+    vertices.push_back({{0.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.5f, 0.5f}});
+    for (int slice = 0; slice < slices; ++slice)
+    {
+        indices.push_back(topCenter);
+        indices.push_back(sideOffset + static_cast<std::uint32_t>(slice) + 1);
+        indices.push_back(sideOffset + static_cast<std::uint32_t>(slice));
+    }
+    const std::uint32_t bottomCenter = static_cast<std::uint32_t>(vertices.size());
+    vertices.push_back({{0.0f, -1.0f, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.5f, 0.5f}});
+    for (int slice = 0; slice < slices; ++slice)
+    {
+        indices.push_back(bottomCenter);
+        indices.push_back(sideOffset + static_cast<std::uint32_t>(slices) + 1 + static_cast<std::uint32_t>(slice));
+        indices.push_back(sideOffset + static_cast<std::uint32_t>(slices) + 1 + static_cast<std::uint32_t>(slice) + 1);
     }
 
     return std::make_shared<Mesh>(device, vertices, indices);

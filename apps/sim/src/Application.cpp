@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "ImGuiLayer.hpp"
+#include "PhysicsScenes.hpp"
 #include "Scenes.hpp"
 #include "core/Log.hpp"
 #include "core/Version.hpp"
@@ -199,6 +200,8 @@ bool Application::initialise()
     }
 
     cubeMesh_ = render::Mesh::makeCube(*device_);
+    sphereMesh_ = render::Mesh::makeSphere(*device_);
+    cylinderMesh_ = render::Mesh::makeCylinder(*device_);
     groundMesh_ = render::Mesh::makeGroundPlane(*device_, 200.0f);
     scene_.setDirectionalLight({-0.4f, -1.0f, -0.35f}, {1.0f, 0.98f, 0.95f});
 
@@ -232,6 +235,8 @@ void Application::shutdown()
     gpuTimer_.reset();
     groundMesh_.reset();
     cubeMesh_.reset();
+    cylinderMesh_.reset();
+    sphereMesh_.reset();
     swapchain_.reset();
     device_.reset();
 
@@ -439,13 +444,56 @@ void Application::gatherSnapshots(SimSnapshot& interpolated)
     }
 }
 
+void Application::stepScenePhysics(double delta)
+{
+    if (sceneSelection_ <= 0 || sceneWorld_ == nullptr)
+    {
+        return;
+    }
+    const double dt = sceneWorld_->fixedStep;
+    sceneWorldRemainder_ += delta;
+    int steps = 0;
+    while (sceneWorldRemainder_ >= dt && steps < 64)
+    {
+        sceneWorld_->step(dt);
+        sceneWorldRemainder_ -= dt;
+        ++steps;
+    }
+    if (steps >= 64)
+    {
+        sceneWorldRemainder_ = 0.0;
+    }
+}
+
 void Application::updateScene(const SimSnapshot& interpolated)
 {
+    const float aspect = swapchain_->extent().height > 0
+                             ? static_cast<float>(swapchain_->extent().width) / static_cast<float>(swapchain_->extent().height)
+                             : 16.0f / 9.0f;
+
     if (sceneSelection_ > 0)
     {
         const std::vector<std::string> names = sceneNames();
         const int index = std::clamp(sceneSelection_ - 1, 0, static_cast<int>(names.size()) - 1);
-        buildScene(names[static_cast<std::size_t>(index)], scene_, cubeMesh_, groundMesh_);
+        const std::string name = names[static_cast<std::size_t>(index)];
+
+        if (isPhysicsScene(name))
+        {
+            if (sceneWorld_ == nullptr || sceneWorldName_ != name)
+            {
+                sceneWorld_ = std::make_unique<physics::PhysicsWorld>();
+                buildPhysicsWorld(name, *sceneWorld_);
+                sceneWorldRemainder_ = 0.0;
+                sceneWorldName_ = name;
+            }
+            buildSceneFromWorld(*sceneWorld_, scene_, cubeMesh_, sphereMesh_, cylinderMesh_, groundMesh_);
+            physicsSceneCamera(name, scene_, aspect);
+            return;
+        }
+
+        sceneWorld_.reset();
+        sceneWorldName_.clear();
+        buildScene(name, scene_, cubeMesh_, groundMesh_);
         return;
     }
 
@@ -476,9 +524,6 @@ void Application::updateScene(const SimSnapshot& interpolated)
         scene_.add(cubeMesh_, wheel, glm::vec4(0.08f, 0.08f, 0.09f, 1.0f));
     }
 
-    const float aspect = swapchain_->extent().height > 0
-                             ? static_cast<float>(swapchain_->extent().width) / static_cast<float>(swapchain_->extent().height)
-                             : 16.0f / 9.0f;
     scene_.camera().setPerspective(60.0f, aspect, 0.1f, 1000.0f);
 
     const glm::vec3 focus = position + glm::vec3(0.0f, 0.8f, 0.0f);
@@ -739,6 +784,7 @@ int Application::run()
 
         SimSnapshot interpolated;
         gatherSnapshots(interpolated);
+        stepScenePhysics(delta);
         updateScene(interpolated);
 
         energyKinetic_.push_back(static_cast<float>(current_.kineticEnergy));

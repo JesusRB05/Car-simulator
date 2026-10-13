@@ -16,13 +16,16 @@
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
+#include "PhysicsScenes.hpp"
 #include "Scenes.hpp"
 #include "core/Log.hpp"
 #include "core/Version.hpp"
+#include "physics/PhysicsWorld.hpp"
 #include "render/DebugDraw.hpp"
 #include "render/Mesh.hpp"
 #include "render/Renderer.hpp"
@@ -100,10 +103,13 @@ void createTargets(rhi::Device& device, Offscreen& target, rhi::Extent2D extent)
 }
 
 // Renders `frames` frames into the offscreen target and returns the last frame's
-// RGBA pixels (top-left origin, matching the PNG writer).
+// RGBA pixels (top-left origin, matching the PNG writer). When `debug` is given
+// the grid/axes overlay is drawn; `decorate` (used with physics scenes) appends
+// scene-specific lines on top of that overlay.
 std::vector<std::uint8_t> renderFrames(rhi::Device& device, render::Renderer& renderer, Offscreen& target, render::Scene& scene,
                                        std::uint32_t frames, int resizeFrame, bool logResize,
-                                       render::DebugDraw* debug = nullptr)
+                                       render::DebugDraw* debug = nullptr,
+                                       const std::function<void(render::DebugDraw&)>& decorate = {})
 {
     rhi::CommandList commandList(device);
     for (std::uint32_t frame = 0; frame < frames; ++frame)
@@ -144,6 +150,10 @@ std::vector<std::uint8_t> renderFrames(rhi::Device& device, render::Renderer& re
             debug->clear();
             debug->addGrid(20.0f, 1.0f, {0.55f, 0.58f, 0.62f, 1.0f}, {0.75f, 0.30f, 0.20f, 1.0f});
             debug->addAxes({0.0f, 0.01f, 0.0f}, 3.0f);
+            if (decorate)
+            {
+                decorate(*debug);
+            }
             debug->render(commandList, scene.camera(), overlay);
         }
 
@@ -387,8 +397,10 @@ void drawText(std::vector<std::uint8_t>& image, int width, int height, int origi
     }
 }
 
-int runContactSheet(rhi::Device& device, render::Renderer& renderer, const std::shared_ptr<render::Mesh>& cube,
-                    const std::shared_ptr<render::Mesh>& ground, const std::filesystem::path& output)
+int runContactSheet(rhi::Device& device, vfs::VirtualFileSystem& vfs, render::Renderer& renderer,
+                    const std::shared_ptr<render::Mesh>& cube, const std::shared_ptr<render::Mesh>& sphere,
+                    const std::shared_ptr<render::Mesh>& cylinder, const std::shared_ptr<render::Mesh>& ground,
+                    const std::filesystem::path& output)
 {
     const std::vector<std::string> names = sceneNames();
     const int tileW = 480;
@@ -404,11 +416,40 @@ int runContactSheet(rhi::Device& device, render::Renderer& renderer, const std::
     createTargets(device, target, {static_cast<std::uint32_t>(tileW), static_cast<std::uint32_t>(tileH)});
     renderer.ensureTargets(target.extent, kColorFormat);
 
+    std::unique_ptr<render::DebugDraw> debug;
+    debug = std::make_unique<render::DebugDraw>(device, vfs);
+    debug->ensureTargets(kColorFormat, target.extent);
+
     render::Scene scene;
     for (std::size_t n = 0; n < names.size(); ++n)
     {
-        buildScene(names[n], scene, cube, ground);
-        const std::vector<std::uint8_t> pixels = renderFrames(device, renderer, target, scene, 1, -1, false);
+        std::unique_ptr<physics::PhysicsWorld> world;
+        const bool physicsScene = isPhysicsScene(names[n]);
+        if (physicsScene)
+        {
+            world = std::make_unique<physics::PhysicsWorld>();
+            const double settle = buildPhysicsWorld(names[n], *world);
+            const int steps = static_cast<int>(settle / world->fixedStep + 0.5);
+            for (int step = 0; step < steps; ++step)
+            {
+                world->step(world->fixedStep);
+            }
+            buildSceneFromWorld(*world, scene, cube, sphere, cylinder, ground);
+            physicsSceneCamera(names[n], scene, static_cast<float>(tileW) / static_cast<float>(tileH));
+        }
+        else
+        {
+            buildScene(names[n], scene, cube, ground);
+        }
+
+        const std::vector<std::uint8_t> pixels = [&]() {
+            if (physicsScene)
+            {
+                const auto decorate = [&](render::DebugDraw& draw) { drawPhysicsSceneDebug(names[n], *world, draw); };
+                return renderFrames(device, renderer, target, scene, 1, -1, false, debug.get(), decorate);
+            }
+            return renderFrames(device, renderer, target, scene, 1, -1, false);
+        }();
 
         const int cell = static_cast<int>(n);
         const int col = cell % columns;
@@ -472,13 +513,15 @@ int runHeadless(const HeadlessOptions& options)
     render::Renderer renderer(*device, vfs, 1);
 
     auto cube = render::Mesh::makeCube(*device);
+    auto sphere = render::Mesh::makeSphere(*device);
+    auto cylinder = render::Mesh::makeCylinder(*device);
     auto ground = render::Mesh::makeGroundPlane(*device, 200.0f);
 
     int result = 0;
 
     if (!options.contactSheet.empty())
     {
-        result = runContactSheet(*device, renderer, cube, ground, options.contactSheet);
+        result = runContactSheet(*device, vfs, renderer, cube, sphere, cylinder, ground, options.contactSheet);
     }
     else
     {
@@ -494,10 +537,32 @@ int runHeadless(const HeadlessOptions& options)
         }
 
         render::Scene scene;
-        buildScene(options.scene, scene, cube, ground);
+        std::unique_ptr<physics::PhysicsWorld> world;
+        const bool physicsScene = isPhysicsScene(options.scene);
+        if (physicsScene)
+        {
+            world = std::make_unique<physics::PhysicsWorld>();
+            const double settle = buildPhysicsWorld(options.scene, *world);
+            const int steps = static_cast<int>(settle / world->fixedStep + 0.5);
+            for (int step = 0; step < steps; ++step)
+            {
+                world->step(world->fixedStep);
+            }
+            buildSceneFromWorld(*world, scene, cube, sphere, cylinder, ground);
+            const float aspect = static_cast<float>(options.width) / static_cast<float>(std::max(options.height, 1u));
+            physicsSceneCamera(options.scene, scene, aspect);
+        }
+        else
+        {
+            buildScene(options.scene, scene, cube, ground);
+        }
 
+        // Physics scenes always draw the overlay (grid + axes + scene-specific
+        // lines: analytic trajectories, joints, springs, body axes), so their
+        // golden references pin both the physics state and the line overlay.
+        const bool useDebug = options.debugDraw || physicsScene;
         std::unique_ptr<render::DebugDraw> debug;
-        if (options.debugDraw)
+        if (useDebug)
         {
             debug = std::make_unique<render::DebugDraw>(*device, vfs);
             debug->ensureTargets(kColorFormat, target.extent);
@@ -508,8 +573,14 @@ int runHeadless(const HeadlessOptions& options)
         }
 
         const std::uint32_t frames = options.frames == 0 ? 1 : options.frames;
+        const auto decorate = [&](render::DebugDraw& draw) {
+            if (physicsScene)
+            {
+                drawPhysicsSceneDebug(options.scene, *world, draw);
+            }
+        };
         const std::vector<std::uint8_t> pixels =
-            renderFrames(*device, renderer, target, scene, frames, options.resizeFrame, true, debug.get());
+            renderFrames(*device, renderer, target, scene, frames, options.resizeFrame, true, debug.get(), decorate);
 
         if (!options.screenshot.empty())
         {

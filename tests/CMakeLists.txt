@@ -50,7 +50,11 @@ if(SIM_ENABLE_GPU_TESTS)
     set(SIM_GOLDEN_DRIVER "lavapipe" CACHE STRING "Vulkan driver whose golden references are used")
     set(_golden "${CMAKE_SOURCE_DIR}/tests/golden/${SIM_GOLDEN_DRIVER}")
     set(_candidates "${CMAKE_SOURCE_DIR}/screenshots/golden_candidates")
-    set(_scenes default grid pyramid ramp orbit tower checker rows)
+    # Static render-test scenes (fixed cameras, no physics) and physics scenes
+    # (deterministically stepped 1.5 s before capture, overlay included).
+    set(_render_scenes default grid pyramid ramp orbit tower checker rows)
+    set(_physics_scenes drop oscillator pendulum double_pendulum chain dzhanibekov gyro masses)
+    set(_scenes ${_render_scenes} ${_physics_scenes})
     set(_golden_tests "")
     foreach(_scene IN LISTS _scenes)
         set(_test "sim_golden_${_scene}")

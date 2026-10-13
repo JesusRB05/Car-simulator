@@ -176,6 +176,13 @@ sim --headless --frames N [--scene NAME] [--screenshot ruta.png]
 - **`--debug-draw`**: superpone la rejilla de suelo y los ejes del mundo mediante
   el *debug draw* instanciado (`render::DebugDraw`); su referencia es
   `tests/golden/<driver>/grid_debug.png`.
+- **Escenas de física** (`drop`, `oscillator`, `pendulum`, `double_pendulum`,
+  `chain`, `dzhanibekov`, `gyro`, `masses`): construyen un `PhysicsWorld` real y
+  lo integran **1,5 s con el paso fijo determinista** antes de capturar, con la
+  cámara predefinida por escena. Van siempre con el overlay activo (grid + ejes +
+  línea específica: trayectoria analítica, ródulas/resortes o ejes de cuerpo), de
+  modo que la referencia afianza el estado físico y su visualización. No llevan
+  sondas semánticas (las geometrías se mueven).
 - **Orientación de pantalla**: toda la conversión de `+Y` mundo a pantalla vive
   en un único sitio, el viewport de altura negativa de
   `CommandList::setViewport` (ver `docs/CONVENTIONS.md`); las sondas
@@ -187,7 +194,8 @@ sim --headless --frames N [--scene NAME] [--screenshot ruta.png]
 
 Los tests `gpu` (etiqueta `ctest -L gpu`) comparan cada escena con referencias en
 `tests/golden/<driver>/` (ver `docs/CONSTRUCCION.md`) y una hoja de contacto
-`screenshots/contact_sheet.png` (commiteada a mano) reúne todas las escenas.
+`screenshots/contact_sheet.png` (commiteada a mano) reúne todas las escenas, con
+las de física capturadas tras su velocidad de asentamiento de 1,5 s.
 
 ## Debug draw instanciado
 

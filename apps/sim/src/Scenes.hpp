@@ -27,6 +27,10 @@ struct SceneProbe
 // The names of every built-in demo scene, in display order.
 std::vector<std::string> sceneNames();
 
+// Applies the shared demo key light (direction + colour) to the given scene.
+// Both the static render-test scenes and the physics scenes use it.
+void setDefaultLight(sim::render::Scene& scene);
+
 // Rebuilds `scene` (using the shared `cube` and `ground` meshes) as the demo
 // scene named `name`. Unknown names fall back to "default" and return false.
 bool buildScene(const std::string& name, sim::render::Scene& scene, const std::shared_ptr<sim::render::Mesh>& cube,

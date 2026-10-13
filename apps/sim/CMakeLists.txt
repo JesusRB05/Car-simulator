@@ -5,6 +5,7 @@ add_executable(sim
     src/Application.cpp
     src/ImGuiLayer.cpp
     src/HeadlessRunner.cpp
+    src/PhysicsScenes.cpp
     src/Scenes.cpp)
 
 find_package(Stb REQUIRED)

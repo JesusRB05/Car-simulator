@@ -36,6 +36,8 @@ public:
     std::uint32_t indexCount() const { return indexCount_; }
 
     static std::shared_ptr<Mesh> makeCube(rhi::Device& device);
+    static std::shared_ptr<Mesh> makeSphere(rhi::Device& device);
+    static std::shared_ptr<Mesh> makeCylinder(rhi::Device& device);
     static std::shared_ptr<Mesh> makeGroundPlane(rhi::Device& device, float halfSize);
 
 private:

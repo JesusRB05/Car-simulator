@@ -7,6 +7,7 @@
 #include <array>
 #include <cmath>
 
+#include "PhysicsScenes.hpp"
 #include "render/Mesh.hpp"
 #include "render/Scene.hpp"
 
@@ -66,14 +67,26 @@ glm::vec4 hueColor(float t)
 
 std::vector<std::string> sceneNames()
 {
-    return {"default", "grid", "pyramid", "ramp", "orbit", "tower", "checker", "rows"};
+    static const std::vector<std::string> renderTests{"default", "grid", "pyramid", "ramp",
+                                                      "orbit",   "tower", "checker", "rows"};
+    static const std::vector<std::string> physicsScenes = physicsSceneNames();
+    std::vector<std::string> names;
+    names.reserve(renderTests.size() + physicsScenes.size());
+    names.insert(names.end(), renderTests.begin(), renderTests.end());
+    names.insert(names.end(), physicsScenes.begin(), physicsScenes.end());
+    return names;
+}
+
+void setDefaultLight(render::Scene& scene)
+{
+    scene.setDirectionalLight(kLightDirection, kLightColor);
 }
 
 bool buildScene(const std::string& name, render::Scene& scene, const std::shared_ptr<render::Mesh>& cube,
                 const std::shared_ptr<render::Mesh>& ground)
 {
     scene.clear();
-    scene.setDirectionalLight(kLightDirection, kLightColor);
+    setDefaultLight(scene);
     scene.add(ground, glm::mat4(1.0f), kGround);
 
     if (name == "grid")
@@ -225,6 +238,12 @@ std::vector<SceneProbe> sceneProbes(const std::string& name)
 {
     // Every probe sits at the centre of the box the camera now looks at, so it
     // projects to the screen centre and lands on that box regardless of aspect.
+    // Physics scenes move, so they carry no probes: their deterministically
+    // stepped golden images (plus the CPU physics tests) pin their state.
+    if (isPhysicsScene(name))
+    {
+        return {};
+    }
     if (name == "grid")
     {
         return {{glm::vec3(6.0f, 0.70f, 3.6f), glm::vec4(0.20f, 0.45f, 0.85f, 1.0f)}};

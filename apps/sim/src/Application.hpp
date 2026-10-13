@@ -115,6 +115,7 @@ private:
 
     void pumpInput();
     void gatherSnapshots(SimSnapshot& interpolated);
+    void stepScenePhysics(double delta);
     void updateScene(const SimSnapshot& interpolated);
     void updateDemoCamera(const glm::vec3& target);
     void handleCameraKeys();
@@ -156,6 +157,8 @@ private:
     std::unique_ptr<rhi::GpuTimer> gpuTimer_;
 
     std::shared_ptr<render::Mesh> cubeMesh_;
+    std::shared_ptr<render::Mesh> sphereMesh_;
+    std::shared_ptr<render::Mesh> cylinderMesh_;
     std::shared_ptr<render::Mesh> groundMesh_;
     std::array<glm::vec3, 4> wheelOffsets_{};
     render::Scene scene_;
@@ -171,8 +174,15 @@ private:
     glm::vec3 freePosition_{0.0f, 3.0f, 8.0f};
 
     // Demo scene selector (phase D). 0 is the interactive driving scene; 1..N
-    // are entries of sceneNames() rendered statically for inspection.
+    // are entries of sceneNames() rendered for inspection (static render-test
+    // scenes, or live physics scenes stepped on the main thread).
     int sceneSelection_ = 0;
+
+    // Physics demo scenes run in their own world on the main thread, separate
+    // from the vehicle world on the physics thread.
+    std::unique_ptr<physics::PhysicsWorld> sceneWorld_;
+    std::string sceneWorldName_;
+    double sceneWorldRemainder_ = 0.0;
 
     // Instanced debug overlay (ground grid + world axes), toggled in the UI.
     bool debugDrawEnabled_ = false;
