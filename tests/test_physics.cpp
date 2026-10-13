@@ -396,34 +396,176 @@ TEST_CASE("20-link chain keeps its joints bounded over 60 s")
     CHECK(maxError < 7e-3);
 }
 
-TEST_CASE("a 1:1000 mass-ratio joint stays stable over 60 s")
+TEST_CASE("rigid 20-link chain keeps every joint within 0.1 mm over 60 s")
 {
     PhysicsWorld world;
     world.gravity = Vec3(0.0, -9.80665, 0.0);
 
-    RigidBody& heavy = makeDynamic(world, 1000.0, Vec3(10.0), Vec3(0.0));
-    RigidBody& light = makeDynamic(world, 1.0, Vec3(0.1), Vec3(0.0, -1.0, 0.0));
+    // Same chain as the soft test, but every ball joint is rigid and the last
+    // link gets a lateral kick so the whole chain whips around instead of
+    // hanging still.
+    constexpr int kLinks = 20;
+    constexpr Real kHalf = 0.25;
+    const Vec3 localTop(0.0, kHalf, 0.0);
+    const Vec3 localBottom(0.0, -kHalf, 0.0);
 
-    DistanceConstraint& joint = world.createConstraint<DistanceConstraint>(heavy, light);
-    joint.localAnchorA = Vec3(0.0);
-    joint.localAnchorB = Vec3(0.0);
-    joint.distance = 1.0;
+    RigidBody& anchor = makeStatic(world, Vec3(0.0));
+
+    std::vector<RigidBody*> links;
+    for (int i = 0; i < kLinks; ++i)
+    {
+        links.push_back(&makeDynamic(world, 1.0, Vec3(0.01), Vec3(0.0, -(i + 0.5) * 2.0 * kHalf, 0.0)));
+    }
+    links.back()->linearVelocity = Vec3(2.0, 0.0, 1.0);
+
+    SphericalConstraint& top = world.createConstraint<SphericalConstraint>(anchor, *links[0]);
+    top.localAnchorB = localTop;
+    top.soft = SoftParams::makeRigid();
+    for (int i = 0; i < kLinks - 1; ++i)
+    {
+        SphericalConstraint& joint = world.createConstraint<SphericalConstraint>(*links[i], *links[i + 1]);
+        joint.localAnchorA = localBottom;
+        joint.localAnchorB = localTop;
+        joint.soft = SoftParams::makeRigid();
+    }
 
     Real maxError = 0.0;
     bool finite = true;
     for (int step = 0; step < 60000; ++step)
     {
         world.step(kDt);
-        finite = finite && heavy.isFiniteState() && light.isFiniteState();
-        maxError = std::max(maxError, std::abs(pointError(heavy, Vec3(0.0), light, Vec3(0.0)) - joint.distance));
+        for (RigidBody* link : links)
+        {
+            finite = finite && link->isFiniteState();
+        }
+        maxError = std::max(maxError, pointError(anchor, Vec3(0.0), *links[0], localTop));
+        for (int i = 0; i < kLinks - 1; ++i)
+        {
+            maxError = std::max(maxError, pointError(*links[i], localBottom, *links[i + 1], localTop));
+        }
     }
-    MESSAGE("1:1000 mass-ratio max joint error over 60 s = " << maxError << " m");
-    // The effective mass of a 1:1000 pair is dominated by the light body
-    // (m_eff ~ 1 kg), so the soft 60 Hz joint stays well-conditioned; the
-    // measured error is 1.8e-12 m, so 1e-10 m bounds it ~55x while still
-    // flagging any conditioning regression well before it becomes visible.
+    MESSAGE("rigid 20-link chain max joint error over 60 s = " << maxError << " m");
+    // Rigid rows are solved exactly at velocity level (island block solve) and
+    // the residual drift is projected away after every step, so the error stays
+    // at round-off level: measured 3.3e-12 m. The requirement is 0.1 mm; 1e-6 m
+    // still leaves >10^5 headroom for cross-platform round-off while catching a
+    // missing projection pass, which lets the chain drift by ~mm.
     CHECK(finite);
-    CHECK(maxError < 1e-10);
+    CHECK(maxError < 1e-6);
+}
+
+namespace {
+
+struct MassRatioResult
+{
+    Real maxJointError = 0.0;
+    Real maxEnergyDrift = 0.0;  // max |E - E0| / (E0 - E_rest)
+    Real maxEnergyGain = 0.0;   // max (E - E0) / (E0 - E_rest), i.e. injected energy
+    bool finite = true;
+};
+
+// Static anchor -> body 1 -> body 2, two rigid ball joints, 0.5 m half-links.
+// The pendulum starts tilted 0.3 rad and turning about the vertical at
+// 1 rad/s (a velocity consistent with the joints, so the step-0 energy is the
+// true reference), then runs for 60 s. The energy drift is measured relative
+// to the swing energy E0 - E_rest.
+MassRatioResult runMassRatioPendulum(Real upperMass, Real lowerMass)
+{
+    PhysicsWorld world;
+    const Real g = 9.80665;
+    world.gravity = Vec3(0.0, -g, 0.0);
+
+    const Real half = 0.5;
+    const Vec3 localTop(0.0, half, 0.0);
+    const Vec3 localBottom(0.0, -half, 0.0);
+    const Quat tilt = quaternionFromAxisAngle(Vec3(0.0, 0.0, 1.0), 0.3);
+    const Vec3 spin(0.0, 1.0, 0.0);
+
+    RigidBody& anchor = makeStatic(world, Vec3(0.0));
+    const auto rodInertia = [half](Real mass) {
+        const Real transverse = mass * (2.0 * half) * (2.0 * half) / 12.0;
+        return Vec3(transverse, 0.01 * mass, transverse);
+    };
+    RigidBody& upper = makeDynamic(world, upperMass, rodInertia(upperMass), rotateVector(tilt, Vec3(0.0, -half, 0.0)));
+    RigidBody& lower = makeDynamic(world, lowerMass, rodInertia(lowerMass), rotateVector(tilt, Vec3(0.0, -3.0 * half, 0.0)));
+    for (RigidBody* body : {&upper, &lower})
+    {
+        body->orientation = tilt;
+        body->angularVelocity = spin;
+        body->linearVelocity = glm::cross(spin, body->position);
+        body->updateCache();
+    }
+
+    SphericalConstraint& first = world.createConstraint<SphericalConstraint>(anchor, upper);
+    first.localAnchorB = localTop;
+    first.soft = SoftParams::makeRigid();
+    SphericalConstraint& second = world.createConstraint<SphericalConstraint>(upper, lower);
+    second.localAnchorA = localBottom;
+    second.localAnchorB = localTop;
+    second.soft = SoftParams::makeRigid();
+
+    const auto energy = [&]() {
+        return upper.kineticEnergy() + lower.kineticEnergy() + g * (upper.mass * upper.position.y + lower.mass * lower.position.y);
+    };
+    const Real restEnergy = g * (upper.mass * -half + lower.mass * -3.0 * half);
+    const Real initialEnergy = energy();
+    const Real swingEnergy = initialEnergy - restEnergy;
+
+    MassRatioResult result;
+    for (int step = 0; step < 60000; ++step)
+    {
+        world.step(kDt);
+        result.finite = result.finite && upper.isFiniteState() && lower.isFiniteState();
+        result.maxJointError = std::max(result.maxJointError, pointError(anchor, Vec3(0.0), upper, localTop));
+        result.maxJointError = std::max(result.maxJointError, pointError(upper, localBottom, lower, localTop));
+        const Real drift = (energy() - initialEnergy) / swingEnergy;
+        result.maxEnergyDrift = std::max(result.maxEnergyDrift, std::abs(drift));
+        result.maxEnergyGain = std::max(result.maxEnergyGain, drift);
+    }
+    return result;
+}
+
+} // namespace
+
+TEST_CASE("1:1000 mass ratio: a 1 kg link holding a 1000 kg body stays rigid over 60 s")
+{
+    // The hard ordering: the light body sits between the static anchor and the
+    // heavy one. Plain sequential impulses converge at a rate set by the 1:1000
+    // ratio (8 PGS iterations leave a 3.0 mm error, 100 iterations 0.22 mm);
+    // the island block solve is exact, and the soft 60 Hz joints would stretch
+    // by 0.17 m here because their stiffness is scaled by the 1 kg row mass.
+    const MassRatioResult result = runMassRatioPendulum(1.0, 1000.0);
+    MESSAGE("anchor -> 1 kg -> 1000 kg: max joint error = "
+            << result.maxJointError << " m, max energy drift = " << result.maxEnergyDrift
+            << ", max energy gain = " << result.maxEnergyGain);
+    // Joint error measured 4.2e-12 m (round-off); 1e-6 m keeps >10^5 headroom
+    // and is far below the 0.1 mm requirement.
+    // Energy: velocity projection with semi-implicit Euler dissipates O(dt), so
+    // the swing energy decays steadily (measured -1.3 % at 60 s, max |drift|
+    // 1.46 %); 3 % flags any faster leak. Energy may never be injected: the
+    // measured transient gain is 6.5e-4 of the swing energy, bounded by 2e-3.
+    CHECK(result.finite);
+    CHECK(result.maxJointError < 1e-6);
+    CHECK(result.maxEnergyDrift < 3e-2);
+    CHECK(result.maxEnergyGain < 2e-3);
+}
+
+TEST_CASE("1:1000 mass ratio reference: a 1000 kg link holding a 1 kg body")
+{
+    // The easy ordering (heavy body next to the anchor), kept as a reference:
+    // even plain PGS holds it to ~1e-13 m.
+    const MassRatioResult result = runMassRatioPendulum(1000.0, 1.0);
+    MESSAGE("anchor -> 1000 kg -> 1 kg: max joint error = "
+            << result.maxJointError << " m, max energy drift = " << result.maxEnergyDrift
+            << ", max energy gain = " << result.maxEnergyGain);
+    // Joint error measured 2.5e-12 m; same 1e-6 m bound as above. The light
+    // tip whips faster, so the O(dt) projection damping is larger: measured
+    // -4.4 % at 60 s (max |drift| 4.67 %), bounded by 8 %; the transient gain
+    // is 1.3e-3, bounded by 3e-3.
+    CHECK(result.finite);
+    CHECK(result.maxJointError < 1e-6);
+    CHECK(result.maxEnergyDrift < 8e-2);
+    CHECK(result.maxEnergyGain < 3e-3);
 }
 
 TEST_CASE("fixed constraint keeps a welded pair rigid under disturbance")
@@ -461,6 +603,45 @@ TEST_CASE("fixed constraint keeps a welded pair rigid under disturbance")
     // while it still falls in free space (its own motion is unconstrained).
     CHECK(maxPointError < 5e-3);
     CHECK(maxOrientationError < 5e-3);
+}
+
+TEST_CASE("rigid fixed constraint holds a cantilevered arm within 0.1 mm")
+{
+    PhysicsWorld world;
+    world.gravity = Vec3(0.0, -9.80665, 0.0);
+
+    // The weld sits 1 m from the arm's centre of mass, so gravity loads both
+    // the linear and the angular rows, and the arm starts with the same
+    // linear + angular disturbance as the soft weld test.
+    RigidBody& base = makeStatic(world, Vec3(0.0));
+    RigidBody& arm = makeDynamic(world, 2.0, Vec3(0.4), Vec3(1.0, 0.0, 0.0));
+    arm.linearVelocity = Vec3(0.5, 0.5, 0.0);
+    arm.angularVelocity = Vec3(1.0, -1.0, 0.5);
+
+    FixedConstraint& weld = world.createConstraint<FixedConstraint>(base, arm);
+    weld.localAnchorA = Vec3(0.0);
+    weld.localAnchorB = Vec3(-1.0, 0.0, 0.0);
+    weld.soft = SoftParams::makeRigid();
+    weld.captureReference();
+
+    const Quat reference = arm.orientation;
+    Real maxPointError = 0.0;
+    Real maxAngleError = 0.0;
+    for (int i = 0; i < 5000; ++i)
+    {
+        world.step(kDt);
+        maxPointError = std::max(maxPointError, pointError(base, weld.localAnchorA, arm, weld.localAnchorB));
+        const Quat delta = quaternionMultiply(arm.orientation, quaternionInverse(reference));
+        maxAngleError = std::max(maxAngleError, glm::length(quaternionRotationVector(delta)));
+    }
+    MESSAGE("rigid weld max anchor error over 5 s = " << maxPointError << " m, max angle error = " << maxAngleError
+                                                     << " rad");
+    // The exact block solve removes the disturbance velocity in the first step,
+    // before any position is integrated, and the projection keeps the pose on
+    // the manifold: measured 4.7e-19 m / 4.6e-19 rad. The requirement is
+    // 0.1 mm; 1e-6 keeps the same round-off headroom as the rigid chain.
+    CHECK(maxPointError < 1e-6);
+    CHECK(maxAngleError < 1e-6);
 }
 
 TEST_CASE("linear damping decays velocity at the analytic exponential rate")
@@ -644,3 +825,4 @@ TEST_CASE("math helpers behave as documented")
     invalid.setInertiaTensor(Mat3(1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 5.0));
     CHECK_FALSE(invalid.validateInertia());
 }
+
