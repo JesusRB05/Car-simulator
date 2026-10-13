@@ -112,6 +112,13 @@ Shape Shape::terrain(std::shared_ptr<const Heightfield> field) {
     return shape;
 }
 
+Shape Shape::convex(std::vector<Vec3> vertices) {
+    Shape shape;
+    shape.type = ShapeType::Convex;
+    shape.vertices = std::move(vertices);
+    return shape;
+}
+
 Vec3 shapeInertia(const Shape& shape, Real mass) {
     if (mass <= 0.0) {
         return Vec3(0.0);
@@ -135,6 +142,21 @@ Vec3 shapeInertia(const Shape& shape, Real mass) {
     }
     case ShapeType::Heightfield:
         return Vec3(0.0);
+    case ShapeType::Convex: {
+        // Approximate a hull by the box matching its local bounding box.
+        if (shape.vertices.empty()) {
+            return Vec3(0.0);
+        }
+        Vec3 min = shape.vertices.front();
+        Vec3 max = shape.vertices.front();
+        for (const Vec3& v : shape.vertices) {
+            min = glm::min(min, v);
+            max = glm::max(max, v);
+        }
+        const Vec3 d = max - min;
+        return Vec3(mass / 12.0 * (d.y * d.y + d.z * d.z), mass / 12.0 * (d.x * d.x + d.z * d.z),
+                    mass / 12.0 * (d.x * d.x + d.y * d.y));
+    }
     }
     return Vec3(1.0);
 }

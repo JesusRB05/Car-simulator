@@ -41,9 +41,10 @@ Pure, stateless header, double precision. It includes:
 forces; static bodies have zero inverse mass and inverse inertia.
 
 Shapes (`ShapeType`): `Box` (`halfExtents`), `Sphere` (`radius`), `Cylinder`
-(`radius`, `halfHeight` about the local +Y axis) and `Heightfield` (a shared
-`Heightfield`, for static terrain; see below). `shapeInertia()` returns the
-principal moments of a uniform solid (zero for terrain).
+(`radius`, `halfHeight` about the local +Y axis), `Convex` (a `vertices` hull in
+the body frame) and `Heightfield` (a shared `Heightfield`, for static terrain;
+see below). `shapeInertia()` returns the principal moments of a uniform solid
+(zero for terrain, the bounding box for a hull).
 
 `RigidBody` stores:
 
@@ -223,8 +224,9 @@ constraints and force elements. It exposes `createBody()`,
 Shape-vs-shape detection is the "detection half" of Phase 1: a deterministic
 brute-force broadphase (AABB overlap, pairs ordered by `(bodyA, bodyB)`) feeds
 analytic narrowphase routines for **sphere–sphere, sphere–box, box–box (SAT with
-face clipping and edge–edge) and sphere–cylinder**, plus the `Heightfield`
-surface (P1.3). Each `ContactManifold` carries
+face clipping and edge–edge) and sphere–cylinder**, the generic **GJK/EPA**
+convex path for `Convex` hulls (P1.2) and the `Heightfield` surface (P1.3). Each
+`ContactManifold` carries
 up to `kMaxContactPoints = 4` points; `normal` points from A to B and
 `penetration` is the non-negative overlap depth.
 
@@ -247,6 +249,20 @@ Material comes from the bodies: `friction` combines as `sqrt(frictionA·friction
 and `restitution` as `max(restitutionA, restitutionB)`. Accumulated normal and
 tangential impulses are cached per body pair (`ContactImpulseCache`) and both
 warm started and captured in the snapshot.
+
+### Convex shapes (`physics/Convex.hpp`, P1.2)
+
+`supportWorld(body, direction)` returns the extreme world-space point of any
+supported convex shape (`Box`, `Sphere`, `Cylinder`, `Convex`) along a direction.
+On top of that, **GJK** answers the separation test (`convexOverlap`) and an
+**EPA** expansion (`convexContact`) returns a single-point contact with the
+penetration `depth`, the normal (`A → B`), and witness points `pointA`/`pointB`
+on each body. The simplex keeps its newest vertex first; the seed direction is
+nudged off-axis so a symmetric configuration (two spheres on a coordinate axis)
+cannot hand EPA a degenerate collinear simplex. `collide()` routes any pair that
+involves a `Convex` hull through this path, which is the general fallback for
+future primitives; the analytic routines above stay for the primitives they
+cover (multi-point manifolds).
 
 ### Terrain (`physics/Heightfield.hpp`)
 
@@ -400,9 +416,11 @@ sleeping (a stack that sleeps, stays frozen and is woken by a projectile), a
 5-box stack stable for 60 s, the block-on-ramp friction threshold, an elastic
 Newton's cradle, the heightfield (a brute-force triangle-scan cross-check of
 `sampleHeight`, flat/ramp normals, the footprint, the AABB, a sphere and a box
-against flat terrain, a slope normal and a sphere falling onto terrain) and
-contact determinism across repeated runs and snapshot/restore. `test_vehicle.cpp`
-covers the placeholder's conventions and the
+against flat terrain, a slope normal and a sphere falling onto terrain), the
+convex support function, GJK separation, EPA depths/normals for spheres, boxes
+and cylinders, a hull behaving like its box and contact determinism across
+repeated runs and snapshot/restore. `test_vehicle.cpp` covers the placeholder's
+conventions and the
 `MagicFormulaTire` pure-slip curve (origin slope `BCD = K`, peak `μ·Fz`, oddness,
 load sensitivity, the friction-circle bound and the self-aligning moment from the
 pneumatic trail), the `.tir` coefficient parser and the one-sided vertical
@@ -410,7 +428,7 @@ spring-damper with its effective-radius curve.
 
 ## Results
 
-Full suite: **74 cases / 7477 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **78 cases / 7507 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -462,6 +480,10 @@ absolute error in metres/radians/J for physical magnitudes).
 | Sphere on flat terrain | penetration / n | r − (y − surface) = 0.1 m / (0, 1, 0) | 0.1 m / (0, 1, 0) | 0 | exact | The sphere centre is 0.1 m below the touching height |
 | Box on flat terrain | contacts / penetration | 4 / 0.1 m | 4 / 0.1 m | 0 | exact | The four bottom corners form the support face |
 | Sphere settled on terrain | rest height | r = 0.5 m | 0.499976 m | 2.4e-5 m | < 0.05·r | Falls onto the heightfield and rests within the contact slop |
+| GJK/EPA, two spheres | depth / n | r₁+r₂ − d = 0.2 m / (1, 0, 0) | 0.2 m / (1, 0, 0) | < 1e-3 | < 1e-3 | The Minkowski difference of two spheres is a sphere; the closest boundary point gives the depth |
+| GJK/EPA, two boxes | depth / normal | 0.4 m / (1, 0, 0) | 0.4 m / (1, 0, 0) | < 1e-6 | < 1e-6 | Face-face Minkowski box: EPA converges to the shallowest face; `pointA − pointB = depth·n` |
+| GJK/EPA, two cylinders | depth / normal | 0.4 m / (1, 0, 0) | 0.4 m / (1, 0, 0) | < 1e-3 | < 1e-3 | Cylinder–cylinder is otherwise unsupported; the generic path fills the gap |
+| GJK overlap / hull | boolean / depth | true / 0.4 m | true / 0.4 m | 0 | < 1e-6 | A hull of a box's eight corners reproduces the analytic box |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000

@@ -90,7 +90,7 @@ manoeuvres and the numbered work packages are in the
 | Area | State |
 |---|---|
 | Rigid-body core | Done: fixed step, deterministic, soft and rigid joints with an exact island block solve, 1:1000 mass-ratio tests, energy and angular-momentum tests |
-| Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, AABB broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, sleep-capable and deterministic. Still missing: convex hulls, triangle-mesh/heightfield terrain and speculative contacts/sub-stepping. The raycast-wheel car still uses an analytic ground |
+| Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, a generic GJK/EPA convex path, a heightfield terrain surface, AABB broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, sleep-capable and deterministic. Still missing: triangle-mesh soup, a BVH broadphase and speculative contacts/sub-stepping. The raycast-wheel car still uses an analytic ground |
 | Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a pure-slip Magic Formula `MagicFormulaTire` (P2.2 core) plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
 | App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit |
@@ -132,9 +132,14 @@ The base the vehicle needs: chassis, walls and props collide (tyres use a dedica
 ground interface, not rigid contacts). Work packages P1.1-P1.6 in the
 [technical plan](PHYSICS_PLAN.md#3-contacts-and-ground-interface-phase-1).
 - Broadphase (BVH/sweep-and-prune) and narrowphase for sphere, box, cylinder, convex
-  hull (SAT or GJK/EPA), triangle mesh and heightfield for terrain.
+  hull (SAT or GJK/EPA), triangle mesh and heightfield for terrain. Done: sphere,
+  box, cylinder (analytic, multi-point), convex hull via GJK/EPA (generic, single
+  point) and a heightfield terrain surface (sphere/box contacts). Still brute-force
+  broadphase and no triangle-mesh soup.
 - Contact manifolds with persistent ids, friction (Coulomb cone), restitution,
-  warm starting, speculative contacts or sub-stepping against tunnelling.
+  warm starting, speculative contacts or sub-stepping against tunnelling. Done:
+  friction, restitution and warm starting; still missing speculative
+  contacts/sub-stepping.
 - Contacts integrated with the island solver (exact solve for bilateral rows,
   iterative for contacts, as documented in [PHYSICS](PHYSICS.md)); sleeping.
 - Deterministic contact ordering (stable ids, no pointer-dependent order).
@@ -142,7 +147,8 @@ ground interface, not rigid contacts). Work packages P1.1-P1.6 in the
   block-on-ramp matches `tan(theta) = mu` threshold; Newton's cradle conserves
   momentum; two runs and snapshot/restore stay bit-identical. Done: box stack
   (and sleeping), sphere bounce/restitution, friction (sliding sphere at 5/7),
-  the block-on-ramp threshold and the Newton's cradle.
+  the block-on-ramp threshold, the Newton's cradle, the heightfield queries/
+  contacts and the GJK/EPA convex path.
 - **Exit:** the chassis no longer falls through the ground; the render-test scenes
   can be run as physics scenes.
 

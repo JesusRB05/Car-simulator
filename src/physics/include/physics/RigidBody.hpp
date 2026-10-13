@@ -4,6 +4,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "physics/Math.hpp"
 #include "physics/PhysicsTypes.hpp"
@@ -24,6 +25,7 @@ enum class ShapeType {
     Sphere,
     Cylinder,
     Heightfield,
+    Convex,
 };
 
 // A primitive used for automatic inertia computation and, later, collisions and
@@ -37,11 +39,13 @@ struct Shape {
     Real radius = 0.5;                              // Sphere, Cylinder
     Real halfHeight = 0.5;                          // Cylinder (local +Y axis)
     std::shared_ptr<const Heightfield> heightfield; // Heightfield
+    std::vector<Vec3> vertices;                     // Convex hull (local frame)
 
     static Shape box(const Vec3& halfExtents);
     static Shape sphere(Real radius);
     static Shape cylinder(Real radius, Real halfHeight);
     static Shape terrain(std::shared_ptr<const Heightfield> field);
+    static Shape convex(std::vector<Vec3> vertices);
 };
 
 // Computes the principal inertia moments of a uniform solid shape of the given

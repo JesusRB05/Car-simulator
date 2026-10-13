@@ -6,6 +6,7 @@
 #include <cmath>
 #include <vector>
 
+#include "physics/Convex.hpp"
 #include "physics/Heightfield.hpp"
 #include "physics/PhysicsWorld.hpp"
 
@@ -653,6 +654,19 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
     }
     const ShapeType typeA = a.shape.type;
     const ShapeType typeB = b.shape.type;
+
+    // Convex hulls (and any future shape without an analytic routine) go through
+    // the generic GJK/EPA path, which returns a single contact point.
+    if (typeA == ShapeType::Convex || typeB == ShapeType::Convex) {
+        const ConvexContact contact = convexContact(a, b);
+        if (!contact.intersecting) {
+            return 0;
+        }
+        out[0].normal = contact.normal;
+        out[0].penetration = contact.depth;
+        out[0].position = 0.5 * (contact.pointA + contact.pointB);
+        return 1;
+    }
 
     if (typeA == ShapeType::Sphere && typeB == ShapeType::Sphere) {
         return sphereSphere(a, b, out);

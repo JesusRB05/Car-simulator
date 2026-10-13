@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "physics/Collision.hpp"
+#include "physics/Convex.hpp"
 #include "physics/Heightfield.hpp"
 #include "physics/Math.hpp"
 #include "physics/PhysicsWorld.hpp"
@@ -862,6 +863,108 @@ TEST_CASE("a sphere falls onto terrain and comes to rest") {
     MESSAGE("sphere resting y = " << sphere.position.y << " (contact slop at r = 0.5)");
     CHECK(sphere.position.y == doctest::Approx(0.5).epsilon(0.05));
     CHECK(std::abs(sphere.linearVelocity.y) < 0.05);
+}
+
+TEST_CASE("supportWorld returns the extreme point of each shape") {
+    const RigidBody box = makeBox(Vec3(1.0, 2.0, 3.0), Vec3(1.0, 0.0, 0.0));
+    CHECK(supportWorld(box, Vec3(1.0, 1.0, 1.0)) == Vec3(2.0, 2.0, 3.0));
+    CHECK(supportWorld(box, Vec3(-1.0, -1.0, -1.0)) == Vec3(0.0, -2.0, -3.0));
+
+    const RigidBody sphere = makeSphere(0.5, Vec3(0.0, 0.0, 0.0));
+    CHECK(supportWorld(sphere, Vec3(0.0, 5.0, 0.0)) == Vec3(0.0, 0.5, 0.0));
+
+    const RigidBody cylinder = makeCylinder(0.5, 1.0, Vec3(0.0));
+    const Vec3 top = supportWorld(cylinder, Vec3(0.0, 1.0, 0.0));
+    CHECK(top.y == doctest::Approx(1.0));
+
+    const RigidBody hull = [&] {
+        RigidBody body;
+        body.shape = Shape::convex({{1.0, 0.0, 0.0}, {-1.0, 0.0, 0.0}, {0.0, 1.0, 0.0}, {0.0, 0.0, 1.0}});
+        body.updateCache();
+        return body;
+    }();
+    CHECK(supportWorld(hull, Vec3(0.0, 0.0, 2.0)) == Vec3(0.0, 0.0, 1.0));
+    CHECK(supportWorld(hull, Vec3(-3.0, 0.0, 0.0)) == Vec3(-1.0, 0.0, 0.0));
+}
+
+TEST_CASE("GJK separates and joins convex shapes") {
+    const RigidBody a = makeSphere(0.5, Vec3(0.0));
+    const RigidBody near = makeSphere(0.5, Vec3(0.8, 0.0, 0.0));
+    const RigidBody far = makeSphere(0.5, Vec3(2.0, 0.0, 0.0));
+    CHECK(convexOverlap(a, near));
+    CHECK_FALSE(convexOverlap(a, far));
+
+    const RigidBody boxA = makeBox(Vec3(0.5), Vec3(0.0));
+    const RigidBody boxNear = makeBox(Vec3(0.5), Vec3(0.6, 0.0, 0.0));
+    const RigidBody boxFar = makeBox(Vec3(0.5), Vec3(2.0, 0.0, 0.0));
+    CHECK(convexOverlap(boxA, boxNear));
+    CHECK_FALSE(convexOverlap(boxA, boxFar));
+
+    const RigidBody cylinderA = makeCylinder(0.5, 0.5, Vec3(0.0));
+    const RigidBody cylinderNear = makeCylinder(0.5, 0.5, Vec3(0.6, 0.0, 0.0));
+    CHECK(convexOverlap(cylinderA, cylinderNear));
+    CHECK_FALSE(convexOverlap(cylinderA, makeCylinder(0.5, 0.5, Vec3(1.5, 0.0, 0.0))));
+}
+
+TEST_CASE("EPA reports the penetration depth and normal of convex shapes") {
+    const RigidBody sphereA = makeSphere(0.5, Vec3(0.0));
+    const RigidBody sphereB = makeSphere(0.5, Vec3(0.8, 0.0, 0.0));
+    {
+        const ConvexContact contact = convexContact(sphereA, sphereB);
+        REQUIRE(contact.intersecting);
+        CHECK(contact.depth == doctest::Approx(0.2).epsilon(1e-3));
+        CHECK(contact.normal.x == doctest::Approx(1.0).epsilon(1e-3));
+    }
+    const RigidBody boxA = makeBox(Vec3(0.5), Vec3(0.0));
+    const RigidBody boxB = makeBox(Vec3(0.5), Vec3(0.6, 0.0, 0.0));
+    {
+        const ConvexContact contact = convexContact(boxA, boxB);
+        REQUIRE(contact.intersecting);
+        CHECK(contact.depth == doctest::Approx(0.4).epsilon(1e-6));
+        CHECK(contact.normal.x == doctest::Approx(1.0).epsilon(1e-6));
+        // Witness points straddle the overlap: pointA - pointB = depth * normal.
+        CHECK((contact.pointA - contact.pointB).x == doctest::Approx(contact.depth).epsilon(1e-6));
+    }
+    const RigidBody cylinderA = makeCylinder(0.5, 0.5, Vec3(0.0));
+    const RigidBody cylinderB = makeCylinder(0.5, 0.5, Vec3(0.6, 0.0, 0.0));
+    {
+        const ConvexContact contact = convexContact(cylinderA, cylinderB);
+        REQUIRE(contact.intersecting);
+        CHECK(contact.depth == doctest::Approx(0.4).epsilon(1e-3));
+        CHECK(contact.normal.x == doctest::Approx(1.0).epsilon(1e-3));
+    }
+    CHECK_FALSE(convexContact(sphereA, makeSphere(0.5, Vec3(2.0, 0.0, 0.0))).intersecting);
+}
+
+TEST_CASE("a convex hull behaves like the analytic box") {
+    const RigidBody hull = [&] {
+        RigidBody body;
+        body.shape = Shape::convex({{0.5, 0.5, 0.5},
+                                    {-0.5, 0.5, 0.5},
+                                    {0.5, -0.5, 0.5},
+                                    {-0.5, -0.5, 0.5},
+                                    {0.5, 0.5, -0.5},
+                                    {-0.5, 0.5, -0.5},
+                                    {0.5, -0.5, -0.5},
+                                    {-0.5, -0.5, -0.5}});
+        body.updateCache();
+        return body;
+    }();
+    const RigidBody box = makeBox(Vec3(0.5), Vec3(0.6, 0.0, 0.0));
+    const ConvexContact contact = convexContact(hull, box);
+    REQUIRE(contact.intersecting);
+    CHECK(contact.depth == doctest::Approx(0.4).epsilon(1e-6));
+    CHECK(contact.normal.x == doctest::Approx(1.0).epsilon(1e-6));
+
+    // collide() routes hull pairs through the same generic path.
+    ContactPoint points[kMaxContactPoints];
+    const int count = collide(hull, box, points, kMaxContactPoints);
+    REQUIRE(count == 1);
+    CHECK(points[0].penetration == doctest::Approx(0.4).epsilon(1e-6));
+    CHECK(points[0].normal.x == doctest::Approx(1.0).epsilon(1e-6));
+
+    // A separated hull produces no contact.
+    CHECK(collide(hull, makeBox(Vec3(0.5), Vec3(3.0, 0.0, 0.0)), points, kMaxContactPoints) == 0);
 }
 
 TEST_CASE("heightfield footprint and bounds follow the grid") {
