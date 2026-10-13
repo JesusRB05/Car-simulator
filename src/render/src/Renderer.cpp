@@ -97,10 +97,7 @@ void Renderer::updateFrameUniforms(std::uint32_t slot, const Camera& camera, con
 
     FrameUniforms uniforms{};
     const glm::mat4 viewProjection = camera.viewProjection();
-    for (int row = 0; row < 4; ++row)
-    {
-        uniforms.viewProjRows[row] = matrixRow(viewProjection, row);
-    }
+    writeMatrix(viewProjection, &uniforms.viewProjection);
     uniforms.cameraPosition = glm::vec4(camera.position(), 1.0f);
     uniforms.lightDirection = lightDirection;
     uniforms.lightColor = lightColor;
@@ -139,10 +136,7 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene, co
         }
 
         ObjectPushConstants push{};
-        for (int row = 0; row < 4; ++row)
-        {
-            push.modelRows[row] = matrixRow(drawable.transform, row);
-        }
+        writeMatrix(drawable.transform, &push.model);
         push.baseColor = drawable.baseColor;
 
         commandList.pushConstants(pipeline_->layout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,

@@ -76,22 +76,24 @@ Si la swapchain queda desactualizada (`out of date`/`suboptimal`), `begin()` o
 
 - Una sola pasada con **renderizado dinámico** (`vkCmdBeginRendering`;
   **sin** `VkRenderPass`/`VkFramebuffer`).
-- Profundidad `D32Sfloat`, limpiada cada frame.
-- `TriangleList`, culling de caras traseras, `depthCompare = LessEqual`.
-- Un UBO por frame (binding 0) con `viewProj`, posición de cámara, dirección y
+- Profundidad `D32Sfloat` en **reversed-Z** (`depthCompare = GreaterEqual`, clear a
+  `0.0f`), limpiada cada frame.
+- `TriangleList`, culling de caras traseras.
+- Un UBO por frame (binding 0) con `viewProjection`, posición de cámara, dirección y
   color de la luz.
 - Por objeto, **push constants** con la matriz de modelo y el color base.
 
 ### Formato de `FrameUniforms` / `ObjectPushConstants`
 
-Las matrices **no** se pasan como `mat4`. Se pasan como **4 filas `float4`** y
-se multiplican en el shader con productos escalares (`dot`). Así el layout de
-CPU (glm) y el de GPU (Slang) son inequívocos, y no importa el valor por
-defecto de "column-major" de cada API.
+Convención única de matrices: **GLM column-major en CPU y `column_major` en
+Slang**, multiplicando con `mul(M, v)` (vector columna). `glm::mat4` se copia a
+la GPU **verbatim** con `writeMatrix()` (`render/Uniforms.hpp`); no hay
+transposiciones en ningún sitio. El layout es std140: cada miembro alineado a 16
+bytes, y una matriz ocupa 4 columnas de 16 bytes contiguas.
 
 ```
-FrameUniforms:        viewProjRows[4], cameraPosition, lightDirection, lightColor
-ObjectPushConstants:  modelRows[4],    baseColor
+FrameUniforms:        viewProjection (mat4), cameraPosition, lightDirection, lightColor
+ObjectPushConstants:  model (mat4),           baseColor
 ```
 
 ## Shaders (Slang)

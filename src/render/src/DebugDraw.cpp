@@ -120,15 +120,11 @@ void DebugDraw::render(rhi::CommandList& commandList, const Camera& camera, cons
     }
 
     const std::uint32_t count = static_cast<std::uint32_t>(instances_.size());
-    const glm::mat4 viewProj = camera.viewProjection();
     struct
     {
-        alignas(16) glm::vec4 rows[4];
+        alignas(16) glm::mat4 viewProjection;
     } frame{};
-    for (int row = 0; row < 4; ++row)
-    {
-        frame.rows[row] = matrixRow(viewProj, row);
-    }
+    writeMatrix(camera.viewProjection(), &frame.viewProjection);
     uniformBuffer_->upload(&frame, sizeof(frame));
     instanceBuffer_->upload(instances_.data(), sizeof(Instance) * count);
 

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 The Car Simulator contributors
 
+// Column-major matrices (mul(M, v), column vectors) matching the GLM layout on
+// the CPU side; the uniform struct is uploaded verbatim. See docs/CONVENTIONS.md.
+
 struct FrameUniforms
 {
-    float4 viewProj0;
-    float4 viewProj1;
-    float4 viewProj2;
-    float4 viewProj3;
+    column_major float4x4 viewProjection;
     float4 cameraPosition;
     float4 lightDirection;
     float4 lightColor;
@@ -14,20 +14,12 @@ struct FrameUniforms
 
 struct PushConstants
 {
-    float4 model0;
-    float4 model1;
-    float4 model2;
-    float4 model3;
+    column_major float4x4 model;
     float4 baseColor;
 };
 
 ConstantBuffer<FrameUniforms> frame : register(b0);
 [[vk::push_constant]] ConstantBuffer<PushConstants> push;
-
-float4 mulRows(float4 r0, float4 r1, float4 r2, float4 r3, float4 v)
-{
-    return float4(dot(r0, v), dot(r1, v), dot(r2, v), dot(r3, v));
-}
 
 struct VSOutput
 {
@@ -40,9 +32,9 @@ struct VSOutput
 VSOutput vertexMain(float3 position : POSITION, float3 normal : NORMAL, float2 uv : TEXCOORD0)
 {
     VSOutput output;
-    float4 world = mulRows(push.model0, push.model1, push.model2, push.model3, float4(position, 1.0));
-    output.position = mulRows(frame.viewProj0, frame.viewProj1, frame.viewProj2, frame.viewProj3, world);
-    output.worldNormal = float3(dot(push.model0.xyz, normal), dot(push.model1.xyz, normal), dot(push.model2.xyz, normal));
+    float4 world = mul(push.model, float4(position, 1.0));
+    output.position = mul(frame.viewProjection, world);
+    output.worldNormal = mul(push.model, float4(normal, 0.0)).xyz;
     output.uv = uv;
     return output;
 }
