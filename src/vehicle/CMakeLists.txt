@@ -15,6 +15,9 @@ add_library(sim_vehicle STATIC
     # Nonlinear vertical spring-damper and effective radius (Phase 2, P2.1).
     include/vehicle/TireVertical.hpp
     src/TireVertical.cpp
+    # Bristle (LuGre) friction for standstill and very low speed (Phase 2, P2.4).
+    include/vehicle/TireBristle.hpp
+    src/TireBristle.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

@@ -15,6 +15,7 @@
 #include "vehicle/IVehicleModel.hpp"
 #include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/PlaceholderVehicle.hpp"
+#include "vehicle/TireBristle.hpp"
 #include "vehicle/TireVertical.hpp"
 
 using namespace sim::vehicle;
@@ -388,6 +389,65 @@ TEST_CASE("the tyre relaxation filters the slip over a rolled distance") {
         const TireState out = slow.update(c, crawl, dt);
         CHECK(out.slipAngle == doctest::Approx(slow.slipAngle));
         CHECK(out.normalLoad == doctest::Approx(c.nominalLoad));
+    }
+}
+
+TEST_CASE("the bristle model holds at standstill and saturates on slip") {
+    const TireBristleCoefficients c;
+    const Real fz = 4000.0;
+    const Real fs = c.staticFriction * fz;
+    const Real fc = c.kineticFriction * fz;
+    const Real dt = 1.0 / 1000.0;
+
+    SUBCASE("a lifted tyre has no bristle state") {
+        TireBristleState st;
+        st.longitudinal = 0.01;
+        const TireBristleResult r = updateTireBristle(c, 0.0, 0.05, 0.0, dt, st);
+        CHECK(r.longitudinal == doctest::Approx(0.0));
+        CHECK(r.lateral == doctest::Approx(0.0));
+        CHECK(st.longitudinal == doctest::Approx(0.0));
+    }
+
+    SUBCASE("the sliding force opposes the slip and sits between kinetic and static") {
+        TireBristleState st;
+        TireBristleResult r;
+        for (int i = 0; i < 5000; ++i) {
+            r = updateTireBristle(c, fz, 0.05, 0.0, dt, st);
+        }
+        CHECK(r.longitudinal < 0.0);
+        CHECK(std::abs(r.longitudinal) > fc);
+        CHECK(std::abs(r.longitudinal) <= fs);
+    }
+
+    SUBCASE("a deflected bristle keeps a holding force at zero slip (stiction)") {
+        TireBristleState st;
+        TireBristleResult r;
+        for (int i = 0; i < 500; ++i) {
+            r = updateTireBristle(c, fz, 0.02, 0.0, dt, st);
+        }
+        const Real held = r.longitudinal;
+        CHECK(held < 0.0);
+
+        // The patch is now still, but the stored deflection keeps resisting; this
+        // is what holds a parked car in place.
+        const TireBristleResult still = updateTireBristle(c, fz, 0.0, 0.0, dt, st);
+        CHECK(still.longitudinal < 0.0);
+        CHECK(std::abs(still.longitudinal) > 0.9 * std::abs(held));
+    }
+
+    SUBCASE("the blend weight falls from one at rest to zero at blendSpeed") {
+        TireBristleState st;
+        CHECK(updateTireBristle(c, fz, 0.0, 0.0, dt, st).blend == doctest::Approx(1.0));
+        CHECK(updateTireBristle(c, fz, c.blendSpeed, 0.0, dt, st).blend == doctest::Approx(0.0));
+
+        Real previous = 1.1;
+        for (int i = 0; i <= 10; ++i) {
+            const Real speed = c.blendSpeed * static_cast<Real>(i) / 10.0;
+            TireBristleState sample;
+            const Real w = updateTireBristle(c, fz, speed, 0.0, dt, sample).blend;
+            CHECK(w <= previous + 1e-12);
+            previous = w;
+        }
     }
 }
 
