@@ -15,6 +15,7 @@
 #include "vehicle/IVehicleModel.hpp"
 #include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/PlaceholderVehicle.hpp"
+#include "vehicle/TireVertical.hpp"
 
 using namespace sim::vehicle;
 
@@ -195,6 +196,47 @@ TEST_CASE("MagicFormulaTire matches the pure-slip Magic Formula curve") {
     }
 
     CHECK(tire.unloadedRadius() == doctest::Approx(c.radius));
+}
+
+TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
+    TireVerticalCoefficients c;
+
+    // Airborne: no deflection, so no load and the full unloaded radius.
+    TireVerticalState airborne;
+    airborne.deflection = -0.01; // centre above the road
+    const TireVerticalResult up = evaluateTireVertical(c, airborne);
+    CHECK(up.normalLoad == doctest::Approx(0.0));
+    CHECK(up.effectiveRadius == doctest::Approx(c.unloadedRadius));
+    CHECK(up.contactHalfLength == doctest::Approx(0.0));
+
+    // Touching but receding: the one-sided spring must not pull.
+    TireVerticalState receding;
+    receding.deflection = 0.0;
+    receding.deflectionRate = -5.0;
+    CHECK(evaluateTireVertical(c, receding).normalLoad == doctest::Approx(0.0));
+
+    // Loaded: the load rises with deflection and the damping adds to it.
+    TireVerticalState soft;
+    soft.deflection = 0.01;
+    TireVerticalState hard;
+    hard.deflection = 0.02;
+    const TireVerticalResult softR = evaluateTireVertical(c, soft);
+    const TireVerticalResult hardR = evaluateTireVertical(c, hard);
+    CHECK(softR.normalLoad > 0.0);
+    CHECK(hardR.normalLoad > softR.normalLoad);
+    CHECK(softR.loadedRadius == doctest::Approx(c.unloadedRadius - 0.01));
+    CHECK(softR.contactHalfLength == doctest::Approx(std::sqrt(0.31 * 0.31 - 0.30 * 0.30)));
+
+    TireVerticalState compress = soft;
+    compress.deflectionRate = 1.0;
+    CHECK(evaluateTireVertical(c, compress).normalLoad > softR.normalLoad);
+
+    // Effective radius shrinks with load and grows with spin.
+    CHECK(softR.effectiveRadius < c.unloadedRadius);
+    TireVerticalState spinning = soft;
+    c.radiusOmega = 0.01;
+    spinning.spin = 30.0;
+    CHECK(evaluateTireVertical(c, spinning).effectiveRadius > softR.effectiveRadius);
 }
 
 TEST_CASE("a .tir file parses into the pure-slip coefficients") {

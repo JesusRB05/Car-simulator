@@ -12,6 +12,9 @@ add_library(sim_vehicle STATIC
     # Pure-slip Pacejka Magic Formula tyre model (Phase 2, P2.2 core).
     include/vehicle/MagicFormulaTire.hpp
     src/MagicFormulaTire.cpp
+    # Nonlinear vertical spring-damper and effective radius (Phase 2, P2.1).
+    include/vehicle/TireVertical.hpp
+    src/TireVertical.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

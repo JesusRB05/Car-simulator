@@ -174,7 +174,9 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   `ITireModel` with the pure-slip Magic Formula 6.x curve, load-dependent peaks
   and stiffness, a friction-circle bound, a self-aligning moment from the
   pneumatic trail and a `.tir` coefficient parser (P2.2 core; the remaining
-  moments and transient relaxation are still pending).
+  moments and transient relaxation are still pending). `TireVertical`
+  (`vehicle/TireVertical.hpp`) adds the one-sided vertical spring-damper and the
+  effective-radius curve (P2.1 core).
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,
