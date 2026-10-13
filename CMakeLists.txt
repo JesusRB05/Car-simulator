@@ -22,6 +22,23 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
 endif()
 
+# Ninja records header dependencies by matching cl's /showIncludes prefix byte
+# for byte. A localized MSVC prints a non-ASCII prefix (Spanish: "Nota:
+# inclusión del archivo:") in the current console code page, while CMake writes
+# it in the OEM code page. Any mismatch means no header dependency is recorded
+# and editing a header leaves stale objects with an old struct layout. The
+# console code page is not stable during a build: `cmake --build` and parallel
+# cl processes compiling with /utf-8 switch it, so roughly half of the objects
+# lose their dependencies. The Windows presets set VSLANG=1033, which makes the
+# prefix plain ASCII once the English language pack is installed.
+if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja" AND CMAKE_CL_SHOWINCLUDES_PREFIX MATCHES "[^ -~]")
+    message(WARNING
+        "cl prints a localized /showIncludes prefix ('${CMAKE_CL_SHOWINCLUDES_PREFIX}'), so Ninja "
+        "loses header dependencies and header edits can leave stale objects. Install the English "
+        "language pack for Visual Studio (Visual Studio Installer > Modify > Language packs) so that "
+        "VSLANG=1033 takes effect. Until then, rebuild from clean after editing a header.")
+endif()
+
 # All binaries land in a single directory so runtime assets (shaders, DLLs, content) are easy to find.
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")

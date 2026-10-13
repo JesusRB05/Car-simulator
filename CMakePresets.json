@@ -21,6 +21,9 @@
       "hidden": true,
       "inherits": "base",
       "generator": "Ninja",
+      "environment": {
+        "VSLANG": "1033"
+      },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows"
       }
