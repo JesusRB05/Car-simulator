@@ -5,9 +5,11 @@ elements and joints) and `src/vehicle` (the vehicle). It works in **SI units**
 and **double precision** for world positions, with a fixed step and no
 third-party dependencies ([`DECISIONS.md`](DECISIONS.md)).
 
-> At this stage the engine **does not solve collisions or contacts**: it focuses
-> on rigid-body dynamics, springs and joints. Collisions, tyres and the full
-> vehicle model come later.
+> The engine solves rigid-body dynamics, springs and joints, and now
+> **collisions and contacts** as well: shape-vs-shape detection plus one-sided
+> normal rows with a Coulomb friction cone and restitution, integrated with the
+> island solver (Phase 1 in [`ROADMAP.md`](ROADMAP.md)). Terrain shapes, tyres
+> and the full vehicle model come later.
 
 ## Base types (`physics/PhysicsTypes.hpp`)
 
@@ -202,16 +204,46 @@ constraints and force elements. It exposes `createBody()`,
 1. updateCache() and clear accumulators
 2. apply force elements
 3. integrateVelocities(dt)          // gravity + implicit gyroscopic
-4. prepare(dt) of each constraint
-5. warmStart() of each constraint
-6. velocity solve per island          // exact block solve, or velocityIterations × PGS
-7. integratePositions(dt)           // positions and orientations
-8. projectPositions()               // rigid rows only: Newton projection onto C = 0
+4. prepare(dt) of each joint
+5. buildContacts(dt)                 // detectCollisions() + warm-start seeding
+6. warmStart() of every joint and contact
+7. velocity solve per island          // exact block solve, or velocityIterations × PGS
+8. integratePositions(dt)           // positions and orientations
+9. projectPositions()               // rigid rows only: Newton projection onto C = 0
 ```
 
 `advance(elapsed)` consumes real time in `fixedStep` substeps. By default
 `gravity = (0, -9.80665, 0)`, `velocityIterations = 8`, `fixedStep = 1/1000`,
 `directSolverMaxRows = 128`, `positionIterations = 4`.
+
+### Collisions and contacts (`physics/Collision.hpp`)
+
+Shape-vs-shape detection is the "detection half" of Phase 1: a deterministic
+brute-force broadphase (AABB overlap, pairs ordered by `(bodyA, bodyB)`) feeds
+analytic narrowphase routines for **sphere–sphere, sphere–box, box–box (SAT with
+face clipping and edge–edge) and sphere–cylinder**. Each `ContactManifold` carries
+up to `kMaxContactPoints = 4` points; `normal` points from A to B and
+`penetration` is the non-negative overlap depth.
+
+A body only takes part when `RigidBody::collisionEnabled` is set (opt-in, so
+existing scenes and the joint determinism probe are unchanged). Each contact
+point becomes three transient rows in a `ContactConstraint`:
+
+- One **one-sided normal row** (`lower = 0`, `upper = +∞`): the shapes may not
+  approach. A Baumgarte term `-β·max(0, penetration − slop)/dt` removes
+  penetration at the velocity level (`β = contactBaumgarte`, `slop =
+  contactSlop`), without a position projection pass.
+- Two **friction rows** along a deterministic orthonormal tangent basis (Duff et
+  al.), clamped each iteration to the Coulomb cone
+  `[−μ·λn, +μ·λn]` where `λn` is the current accumulated normal impulse.
+- **Restitution** raises the normal row's velocity target by the inbound normal
+  speed, `target = −e·vn` for approaching contacts, ignored below
+  `kRestitutionVelocityThreshold` (1 cm/s) so resting stacks do not jitter.
+
+Material comes from the bodies: `friction` combines as `sqrt(frictionA·frictionB)`
+and `restitution` as `max(restitutionA, restitutionB)`. Accumulated normal and
+tangential impulses are cached per body pair (`ContactImpulseCache`) and both
+warm started and captured in the snapshot.
 
 ### Determinism and snapshots
 
@@ -220,7 +252,8 @@ constraints and force elements. It exposes `createBody()`,
 - `stateHash()` is a 64-bit FNV-1a over every `double` of the state (position,
   orientation, velocities) plus time.
 - `saveSnapshot()` / `restoreSnapshot()` store body state, each row's
-  accumulated impulses and time, for interactive reset and the determinism test.
+  joint rows' accumulated impulses, the contact warm-start cache and time, for
+  interactive reset and the determinism test.
 
 ## Vehicle (`vehicle/`)
 
@@ -278,7 +311,7 @@ Physics is the heart of the simulator's determinism:
 With this, the same input sequence produces exactly the same trajectory on any
 machine.
 
-## Tests (`tests/test_physics.cpp`)
+## Tests (`tests/test_physics.cpp`, `tests/test_collision.cpp`)
 
 Analytic suite covering: free fall and projectile motion (against the exact
 solution), mass-spring oscillator period (< 0.5 %), energy drift bounded over
@@ -289,11 +322,14 @@ double pendulum (anchor → 1 kg → 1000 kg and the reverse order, joint error 
 energy drift over 60 s), fixed joint under perturbation, linear damping decay at
 the analytic rate, revolute motor reaching its target speed, bit-for-bit
 determinism (20000 steps + snapshot/restore) and a benchmark of the 20-link
-chain.
+chain. `test_collision.cpp` covers the detection primitives (AABB, broadphase,
+SAT/clipping, cylinder), a resting box, the opt-in behaviour, friction (a sliding
+sphere rolling to 5/7 of its speed), restitution (dropped-sphere rebound) and
+contact determinism across repeated runs and snapshot/restore.
 
 ## Results
 
-Full suite: **31 cases / 114 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **59 cases / 7216 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -326,7 +362,11 @@ absolute error in metres/radians/J for physical magnitudes).
 | Revolute motor (3 s) | Angular velocity | 3.0 rad/s | 3.0 rad/s | 0 | < 5 % | No opposing torque (gravity aligned with the axis): the motor reaches and holds the speed |
 | Determinism (2×20000) | stateHash | equal | 8902566875956907469 | 0 | bit-for-bit | Same thread, fixed order, /fp:precise, no ffast-math |
 | Snapshot/restore | stateHash | equal | 8902566875956907469 | 0 | bit-for-bit | Stores state, accumulated impulses and time |
-| Contact determinism (2×20000, box + sphere on ground) | contact_hash | equal | 15533241362959901088 | 0 | bit-for-bit | `sim_determinism` also steps an all-`collisionEnabled` scene (box + sphere onto a ground box) and compares `contact_hash` between Windows and Linux |
+| Contact determinism (2×20000, box + sphere on ground) | contact_hash | equal | 1443709001998688999 | 0 | bit-for-bit | `sim_determinism` also steps an all-`collisionEnabled` scene (box + sphere onto a ground box) and compares `contact_hash` between Windows and Linux |
+| Sliding sphere, friction μ = 0.6 | Rolled speed | 5/7·v₀ = 1.42857 m/s | 1.42857 m/s | < 1e-5 | < 1e-2 | Starts sliding, rolls without slipping once the contact point stops: v → 5/7 v₀ for a solid sphere (I = 2/5 m r²); the discrete friction impulses land on the analytic value |
+| Sliding sphere, friction μ = 0 | Rolled speed | v₀ = 2.0 m/s | 2.0 m/s | 0 | < 2e-2 | No friction rows carry impulse, so the horizontal speed is preserved |
+| Dropped sphere, restitution e = 0.8 | Rebound apex (centre y) | 1.46 m | 1.5718 m | 0.112 | < 0.22 (15 %) | Rebound height = e²·drop; the ~8 % excess is the discrete contact detection giving a slightly faster approach than the ideal free-fall at the sampled step |
+| Dropped sphere, restitution e = 0 | Rebound apex (centre y) | ≤ 0.5 m | 0.546 m | — | < 0.6 | No restitution: the sphere settles at its resting height (plus contact slop), it does not bounce |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000
