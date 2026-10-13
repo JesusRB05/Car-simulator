@@ -15,7 +15,7 @@ headless runner never constructs any of it.
 |--------|-----------------------------------------------------------------------|
 | File   | Quit (`Ctrl+Q`).                                                      |
 | View   | Toggles every panel (Scene browser, Simulation, Debug draw, Telemetry, Camera, Vehicle, Mods, Input). |
-| Scenes | Driving, plus the *Physics* and *Render tests* submenus.             |
+| Scenes | Driving, plus the *Driving*, *Physics* and *Render tests* submenus.  |
 | Help   | Keyboard shortcuts (`F1`) and About (version from `core/Version.hpp`). |
 
 The right end of the bar shows the active scene, whether it is paused, and the
@@ -24,6 +24,7 @@ frame rate.
 ## Panels
 
 - **Scenes**: the scene registry (`sceneCatalog()` in `Scenes.hpp`) grouped in
+  *Driving* (the keyboard-drivable `drive` circuit, see `docs/DRIVE.md`),
   *Physics* (the `PhysicsWorld` demos of `PhysicsScenes.cpp`) and *Render tests*
   (the static scenes of `Scenes.cpp`, including the `orientation` harness).
   Hovering shows the description; clicking loads the scene. *Driving* returns to
@@ -70,6 +71,13 @@ and sizes use ImGui's normal persistence.
 | `W A S D`, arrows| Drive; fly with `Q`/`E` in the free camera                |
 | `F1`             | Keyboard shortcuts window                                 |
 | `Ctrl+Q`         | Quit                                                      |
+
+In the `drive` scene the keys differ (they take priority, and play/pause/step
+are disabled): `W`/Up throttle, `S`/Down brake and reverse, `A D`/Left Right
+steer, `Space` handbrake, `R` reset the car, `C` cycle chase / cockpit / orbit
+camera, `G` toggle the suspension and tyre force overlay. `Ctrl+Q` and `F1`
+still work. Its camera overrides the orbit camera until you leave the scene.
+Details in `docs/DRIVE.md`.
 
 Mouse input over a panel goes to ImGui, never to the camera. The orbit camera
 is right-handed with `+Y` up; yaw 0 and pitch 0 look down `-Z`.
