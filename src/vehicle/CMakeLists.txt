@@ -53,6 +53,9 @@ add_library(sim_vehicle STATIC
     # Differentials (Phase 2, P2.10).
     include/vehicle/Differential.hpp
     src/Differential.cpp
+    # Driveline torsional compliance (Phase 2, P2.10).
+    include/vehicle/DrivelineCompliance.hpp
+    src/DrivelineCompliance.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

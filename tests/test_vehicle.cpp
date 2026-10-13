@@ -13,6 +13,7 @@
 #include "vehicle/Clutch.hpp"
 #include "vehicle/Differential.hpp"
 #include "vehicle/DoubleWishbone.hpp"
+#include "vehicle/DrivelineCompliance.hpp"
 #include "vehicle/Engine.hpp"
 #include "vehicle/Gearbox.hpp"
 #include "vehicle/IAerodynamics.hpp"
@@ -1244,6 +1245,21 @@ TEST_CASE("the differentials split the torque by their laws") {
         CHECK(o.leftTorque == doctest::Approx(0.0));
         CHECK(o.rightTorque == doctest::Approx(100.0));
     }
+}
+
+TEST_CASE("the driveline compliance springs, damps and lashes") {
+    DrivelineCompliance shaft;
+    shaft.stiffness = 1000.0;
+    shaft.damping = 10.0;
+
+    // No lash: the whole twist springs up.
+    CHECK(computeDrivelineTorque(shaft, {0.1, 2.0}) == doctest::Approx(1000.0 * 0.1 + 10.0 * 2.0));
+
+    // With lash the shaft is free inside the band.
+    shaft.backlash = 0.2;
+    CHECK(computeDrivelineTorque(shaft, {0.05, 0.0}) == doctest::Approx(0.0));
+    CHECK(computeDrivelineTorque(shaft, {0.30, 0.0}) == doctest::Approx(1000.0 * 0.2));
+    CHECK(computeDrivelineTorque(shaft, {-0.30, 0.0}) == doctest::Approx(-1000.0 * 0.2));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
