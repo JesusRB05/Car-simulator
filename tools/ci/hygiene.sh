@@ -25,8 +25,10 @@ else
 fi
 
 echo "hygiene: personal paths in tracked files"
-# Absolute home directories for Windows, macOS and Linux users.
-personal=$(git grep -n -I -E 'C:\\Users\\|C:/Users/|/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/' -- . || true)
+# Absolute home directories for Windows, macOS and Linux users. This script is
+# excluded because it necessarily contains the pattern it looks for.
+personal=$(git grep -n -I -E 'C:\\Users\\|C:/Users/|/home/[A-Za-z0-9._-]+/|/Users/[A-Za-z0-9._-]+/' -- . \
+    ':(exclude)tools/ci/hygiene.sh' || true)
 if [[ -n "$personal" ]]; then
     while IFS= read -r line; do
         err "personal path found: $line"
