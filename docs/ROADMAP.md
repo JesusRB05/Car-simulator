@@ -206,10 +206,11 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   the constant-coefficient aero loads (P2.9). `Engine` (`vehicle/Engine.hpp`) opens
   the powertrain group (P2.10) with the bilinear torque map, the friction
   polynomial and the crankshaft dynamics (throttle lag, rev limiter, idle
-  controller), followed by the `Clutch` (friction and centrifugal), the `Gearbox`
-  ratios and torque converter, the `Differential` family (open, clutch-pack,
-  Torsen, viscous, spool) and the `DrivelineCompliance` torsional spring-damper
-  with lash (P2.10, P2.11). `Brake` (`vehicle/Brake.hpp`) closes the group with
+  controller, the turbocharger boost model), followed by the `Clutch` (friction
+  and centrifugal), the `Gearbox` ratios, torque converter and sequential shift
+  controller, the `Differential` family (open, clutch-pack, Torsen, viscous,
+  spool) and the `DrivelineCompliance` torsional spring-damper with lash (P2.10,
+  P2.11). `Brake` (`vehicle/Brake.hpp`) closes the group with
   the disc torque, the front/rear bias and the thermal model (P2.12). For karts,
   `FrameTorsion` (`vehicle/FrameTorsion.hpp`) is the chassis torsion between the two
   halves (Section 5.6).
