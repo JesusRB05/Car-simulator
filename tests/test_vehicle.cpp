@@ -339,6 +339,58 @@ TEST_CASE("the residual, overturning and rolling-resistance moments follow their
     }
 }
 
+TEST_CASE("the tyre relaxation filters the slip over a rolled distance") {
+    const MagicFormulaCoefficients c;
+    const Real speed = 20.0;
+    const Real dt = 1.0 / 1000.0;
+    const Real tauLateral = c.relaxationLengthLateral / speed;
+    const int stepsToTau = static_cast<int>(std::lround(tauLateral / dt));
+
+    TireState raw;
+    raw.normalLoad = c.nominalLoad;
+    raw.contactSpeed = speed;
+    raw.slipAngle = 0.1;
+    raw.slipRatio = 0.1;
+
+    SUBCASE("a step in the slip angle reaches 1 - 1/e at one time constant") {
+        TireRelaxation rel;
+        for (int i = 0; i < stepsToTau; ++i) {
+            rel.update(c, raw, dt);
+        }
+        CHECK(rel.slipAngle / raw.slipAngle == doctest::Approx(1.0 - std::exp(-1.0)).epsilon(1e-6));
+
+        for (int i = 0; i < 10 * stepsToTau; ++i) {
+            rel.update(c, raw, dt);
+        }
+        CHECK(rel.slipAngle == doctest::Approx(raw.slipAngle).epsilon(1e-3));
+    }
+
+    SUBCASE("a step in the slip ratio uses the longitudinal length") {
+        TireRelaxation rel;
+        const int steps = static_cast<int>(std::lround((c.relaxationLengthLongitudinal / speed) / dt));
+        for (int i = 0; i < steps; ++i) {
+            rel.update(c, raw, dt);
+        }
+        CHECK(rel.slipRatio / raw.slipRatio == doctest::Approx(1.0 - std::exp(-1.0)).epsilon(1e-6));
+    }
+
+    SUBCASE("a slower speed relaxes more slowly and the load is carried through") {
+        TireRelaxation fast;
+        TireRelaxation slow;
+        TireState crawl = raw;
+        crawl.contactSpeed = 1.0;
+        for (int i = 0; i < stepsToTau; ++i) {
+            fast.update(c, raw, dt);
+            slow.update(c, crawl, dt);
+        }
+        CHECK(fast.slipAngle > slow.slipAngle);
+
+        const TireState out = slow.update(c, crawl, dt);
+        CHECK(out.slipAngle == doctest::Approx(slow.slipAngle));
+        CHECK(out.normalLoad == doctest::Approx(c.nominalLoad));
+    }
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 

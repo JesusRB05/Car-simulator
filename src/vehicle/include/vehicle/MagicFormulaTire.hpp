@@ -134,4 +134,19 @@ MagicFormulaCoefficients parseMagicFormulaCoefficients(std::istream& input);
 // opened.
 MagicFormulaCoefficients loadMagicFormulaCoefficients(const std::string& path);
 
+// First-order transient relaxation of the slip quantities (Section 4.4). A real
+// tyre responds to a slip change over a rolled distance, not instantly, so the
+// steady-state Magic Formula is driven by filtered slips. The filter is
+// integrated exactly, which is stable for any dt and speed; at standstill the
+// state is frozen and the low-speed model (4.5) takes over. The state is owned
+// by the caller because ITireModel is a pure function of its inputs.
+struct TireRelaxation {
+    Real slipRatio = 0.0; // relaxed kappa'
+    Real slipAngle = 0.0; // relaxed alpha'
+
+    // Advances the relaxed slips towards the raw ones by dt and returns a
+    // TireState carrying the relaxed slips (every other field is copied).
+    TireState update(const MagicFormulaCoefficients& coefficients, const TireState& raw, Real dt);
+};
+
 } // namespace sim::vehicle

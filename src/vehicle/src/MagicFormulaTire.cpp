@@ -141,6 +141,27 @@ MagicFormulaCoefficients loadMagicFormulaCoefficients(const std::string& path) {
     return parseMagicFormulaCoefficients(file);
 }
 
+TireState TireRelaxation::update(const MagicFormulaCoefficients& coefficients, const TireState& raw, Real dt) {
+    // alpha'_{n+1} = alpha + (alpha'_n - alpha) exp(-|V| dt / sigma): the exact
+    // solution of the first-order step, stable for any dt and speed.
+    const Real speed = std::abs(raw.contactSpeed);
+    const auto relaxStep = [&](Real current, Real target, Real sigma) {
+        if (sigma <= 0.0 || dt <= 0.0) {
+            return target; // no filtering requested
+        }
+        const Real decay = std::exp(-speed * dt / sigma);
+        return target + (current - target) * decay;
+    };
+
+    slipRatio = relaxStep(slipRatio, raw.slipRatio, coefficients.relaxationLengthLongitudinal);
+    slipAngle = relaxStep(slipAngle, raw.slipAngle, coefficients.relaxationLengthLateral);
+
+    TireState relaxed = raw;
+    relaxed.slipRatio = slipRatio;
+    relaxed.slipAngle = slipAngle;
+    return relaxed;
+}
+
 TireForces MagicFormulaTire::computeForces(const TireState& state) const {
     const MagicFormulaCoefficients& c = coefficients_;
     TireForces forces;
