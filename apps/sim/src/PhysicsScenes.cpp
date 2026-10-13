@@ -247,8 +247,14 @@ void buildMassesScene(physics::PhysicsWorld& world)
         physics::RigidBody& lower = addDynamic(world, lowerMass > 10.0f ? "heavy" : "light", lowerMass, shapeFor(lowerMass),
                                                physics::Vec3(x, 4.5 - 2.0 * link, 0.0));
         lower.linearVelocity = physics::Vec3(1.0, 0.0, 0.0);
-        world.createConstraint<physics::DistanceConstraint>(anchor, upper).distance = link;
-        world.createConstraint<physics::DistanceConstraint>(upper, lower).distance = link;
+        // Rigid joints (exact island solve + position projection), as in the
+        // 1:1000 physics tests; the default soft 60 Hz joints stretch ~0.17 m here.
+        physics::DistanceConstraint& top = world.createConstraint<physics::DistanceConstraint>(anchor, upper);
+        top.distance = link;
+        top.soft = physics::SoftParams::makeRigid();
+        physics::DistanceConstraint& bottom = world.createConstraint<physics::DistanceConstraint>(upper, lower);
+        bottom.distance = link;
+        bottom.soft = physics::SoftParams::makeRigid();
     };
     column(-1.5, true);
     column(1.5, false);
