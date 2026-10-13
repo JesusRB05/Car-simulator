@@ -17,6 +17,7 @@
 #include "vehicle/PlaceholderVehicle.hpp"
 #include "vehicle/TireBristle.hpp"
 #include "vehicle/TireVertical.hpp"
+#include "vehicle/WheelSpin.hpp"
 
 using namespace sim::vehicle;
 
@@ -30,6 +31,22 @@ void run(IVehicleModel& model, const VehicleInput& input, int steps) {
         REQUIRE(model.step(kDt));
     }
 }
+
+// A purely linear longitudinal tyre, so the wheel run-up has an exact analytic
+// solution to compare the implicit step against.
+class LinearTire : public ITireModel {
+public:
+    explicit LinearTire(Real stiffness) : stiffness_(stiffness) {}
+    TireForces computeForces(const TireState& state) const override {
+        TireForces forces;
+        forces.longitudinal = stiffness_ * state.slipRatio;
+        return forces;
+    }
+    Real unloadedRadius() const override { return 0.31; }
+
+private:
+    Real stiffness_ = 0.0;
+};
 
 } // namespace
 
@@ -449,6 +466,76 @@ TEST_CASE("the bristle model holds at standstill and saturates on slip") {
             previous = w;
         }
     }
+}
+
+TEST_CASE("the wheel run-up follows the analytic exponential") {
+    const Real dt = 1.0 / 1000.0;
+    const Real re = 0.31;
+    const Real vcx = 30.0;
+    const Real stiffness = 2000.0;
+    const Real inertia = 10.0;
+    const Real driveTorque = 300.0;
+    LinearTire tire(stiffness);
+
+    WheelSpinCoefficients c;
+    c.inertia = inertia;
+
+    WheelSpinInput input;
+    input.contactSpeed = vcx;
+    input.effectiveRadius = re;
+    input.driveTorque = driveTorque;
+
+    TireState context;
+    context.normalLoad = 4000.0;
+    context.contactSpeed = vcx;
+
+    WheelSpinState st;
+    st.spin = vcx / re; // starts at zero slip
+
+    const Real rate = re * re * stiffness / (vcx * inertia);
+    const Real omegaStar = vcx / re + driveTorque * vcx / (re * re * stiffness);
+
+    const int steps = 1000;
+    for (int i = 0; i < steps; ++i) {
+        stepWheelSpin(c, tire, context, input, dt, st);
+    }
+    const Real expected = omegaStar + (vcx / re - omegaStar) * std::exp(-rate * steps * dt);
+    CHECK(st.spin == doctest::Approx(expected).epsilon(0.01));
+    CHECK(st.spin > vcx / re); // the wheel sped up into positive slip
+}
+
+TEST_CASE("a braked wheel locks without oscillating") {
+    const Real dt = 1.0 / 1000.0;
+    MagicFormulaTire tire;
+
+    WheelSpinCoefficients c;
+    c.inertia = 1.2;
+
+    WheelSpinInput input;
+    input.contactSpeed = 20.0;
+    input.effectiveRadius = tire.unloadedRadius();
+    input.brakeTorque = 3000.0;
+
+    TireState context;
+    context.normalLoad = 4000.0;
+    context.contactSpeed = 20.0;
+
+    WheelSpinState st;
+    st.spin = 80.0;
+
+    Real previous = st.spin;
+    int reversals = 0;
+    for (int i = 0; i < 2000; ++i) {
+        stepWheelSpin(c, tire, context, input, dt, st);
+        CHECK(st.spin >= 0.0);
+        if (st.spin > previous + 1e-9) {
+            ++reversals;
+        }
+        previous = st.spin;
+    }
+    CHECK(reversals == 0);
+    CHECK(st.locked);
+    CHECK(st.spin == doctest::Approx(0.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
