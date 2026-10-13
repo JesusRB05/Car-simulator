@@ -265,18 +265,37 @@ public:
             row.lower = 0.0;
             row.upper = kInfinity;
 
-            // Restitution: drive the post-impact separating speed to -e * vn,
-            // where vn is the (negative) inbound normal velocity, but ignore it
-            // for slow contacts so resting stacks do not jitter.
-            if (restitution > 0.0) {
-                const Real approach = rowVelocity(row);
-                if (approach < -kRestitutionVelocityThreshold) {
+            if (point.penetration < 0.0) {
+                // Speculative contact: the shapes are still separated by
+                // `-penetration`. If the current approach would close that gap
+                // within this step the contact is really an impact, so resolve
+                // it as one (restitution included); otherwise just limit the
+                // approach so the gap cannot be overshot. This is what stops
+                // fast bodies from tunnelling through thin geometry.
+                const Real gap = -point.penetration;
+                const Real approach = dt > 0.0 ? rowVelocity(row) : 0.0;
+                if (restitution > 0.0 && approach < -gap / dt && approach < -kRestitutionVelocityThreshold) {
                     row.velocityTarget = -restitution * approach;
+                    row.bias = 0.0;
+                } else {
+                    row.velocityTarget = 0.0;
+                    row.bias = dt > 0.0 ? gap / dt : 0.0;
                 }
-            }
+            } else {
+                // Restitution: drive the post-impact separating speed to
+                // -e * vn, where vn is the (negative) inbound normal velocity,
+                // but ignore it for slow contacts so resting stacks do not
+                // jitter.
+                if (restitution > 0.0) {
+                    const Real approach = rowVelocity(row);
+                    if (approach < -kRestitutionVelocityThreshold) {
+                        row.velocityTarget = -restitution * approach;
+                    }
+                }
 
-            const Real penetration = std::max(0.0, point.penetration - slop);
-            row.bias = dt > 0.0 ? -baumgarte * penetration / dt : 0.0;
+                const Real penetration = std::max(0.0, point.penetration - slop);
+                row.bias = dt > 0.0 ? -baumgarte * penetration / dt : 0.0;
+            }
 
             const Real mass = constraintMass(row);
             row.effectiveMass = mass > 0.0 ? 1.0 / mass : 0.0;
@@ -411,7 +430,8 @@ void PhysicsWorld::buildContacts(Real dt) {
     contacts_.clear();
     contactKeys_.clear();
 
-    const std::vector<ContactManifold> manifolds = detectCollisions(*this);
+    const std::vector<ContactManifold> manifolds =
+        detectCollisions(*this, 0.0, enableSpeculativeContacts ? speculativeMargin * dt : 0.0);
     wakeBodies(manifolds);
     contacts_.reserve(manifolds.size());
     contactKeys_.reserve(manifolds.size());

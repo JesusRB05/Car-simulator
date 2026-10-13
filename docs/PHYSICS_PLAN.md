@@ -156,7 +156,10 @@ $$
 with friction rows bounded by $\pm\mu\lambda_n$ (friction pyramid first, cone
 projection later). Position error is removed with the same projection used for
 rigid joints (no Baumgarte injection). Fast bodies use speculative margins
-($d \le v\,\Delta t$) to avoid tunnelling.
+($d \le v\,\Delta t$) to avoid tunnelling: each pair's narrowphase search margin
+grows by its relative speed (linear plus angular times the shape bounding radius)
+over a step, and the solver resolves a contact as an impact with restitution once
+the gap is about to close, otherwise it only limits the approach to the gap.
 
 Collision detection: broadphase by dynamic AABB tree; narrowphase by closed forms
 for sphere/capsule/box pairs, **SAT** for boxes and **GJK + EPA** for convex hulls;

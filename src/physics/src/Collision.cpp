@@ -49,11 +49,12 @@ Vec3 supportPoint(const Obb& obb, const Vec3& direction) {
     return point;
 }
 
-int sphereSphere(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+int sphereSphere(const RigidBody& a, const RigidBody& b, ContactPoint* out, Real margin) {
     const Vec3 delta = b.position - a.position;
     const Real distanceSquared = glm::dot(delta, delta);
     const Real sumRadii = a.shape.radius + b.shape.radius;
-    if (distanceSquared > sumRadii * sumRadii) {
+    const Real reach = sumRadii + margin;
+    if (distanceSquared > reach * reach) {
         return 0;
     }
     const Real distance = std::sqrt(distanceSquared);
@@ -67,7 +68,7 @@ int sphereSphere(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
 
 // Sphere (a) against box (b). The returned normal points from the sphere to the
 // box.
-int sphereBox(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+int sphereBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, Real margin) {
     const Vec3 halfExtents = b.shape.halfExtents;
     const Vec3 local = b.worldToLocalPoint(a.position);
     const Vec3 clamped = glm::clamp(local, -halfExtents, halfExtents);
@@ -79,7 +80,7 @@ int sphereBox(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
     Real penetration;
     if (distanceSquared > 1e-24) {
         const Real distance = std::sqrt(distanceSquared);
-        if (distance > a.shape.radius) {
+        if (distance > a.shape.radius + margin) {
             return 0;
         }
         normalLocal = delta / distance;
@@ -110,7 +111,7 @@ int sphereBox(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
     return 1;
 }
 
-int sphereCylinder(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+int sphereCylinder(const RigidBody& a, const RigidBody& b, ContactPoint* out, Real margin) {
     const Real radius = a.shape.radius;
     const Real cylinderRadius = b.shape.radius;
     const Real halfHeight = b.shape.halfHeight;
@@ -133,7 +134,7 @@ int sphereCylinder(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
     Vec3 normalLocal; // cylinder -> sphere
     Real penetration;
     if (distance > 1e-12) {
-        if (distance > radius) {
+        if (distance > radius + margin) {
             return 0;
         }
         normalLocal = delta / distance;
@@ -337,7 +338,7 @@ int edgeContact(const Obb& a, const Obb& b, int axisA, int axisB, const Vec3& no
     return 1;
 }
 
-int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints) {
+int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints, Real margin) {
     const Obb obbA = makeObb(a);
     const Obb obbB = makeObb(b);
     const Vec3 delta = obbB.center - obbA.center;
@@ -356,6 +357,28 @@ int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoi
     int featureA = 0;
     int featureB = 0;
 
+    // Separating axis closest to contact (the negative overlap nearest zero),
+    // used only when the boxes do not overlap, to build speculative contacts.
+    Real closestSeparation = -kInfinity;
+    int separationFeature = -1;
+    int separationA = 0;
+    int separationB = 0;
+
+    auto consider = [&](Real overlap, int tag, int axisA, int axisB) {
+        if (overlap < minimumOverlap - kOverlapTie) {
+            minimumOverlap = overlap;
+            feature = tag;
+            featureA = axisA;
+            featureB = axisB;
+        }
+        if (overlap <= 0.0 && overlap > closestSeparation + kOverlapTie) {
+            closestSeparation = overlap;
+            separationFeature = tag;
+            separationA = axisA;
+            separationB = axisB;
+        }
+    };
+
     // Faces of A.
     for (int i = 0; i < 3; ++i) {
         const Real projectedB = component(obbB.halfExtents, 0) * absolute[i][0] +
@@ -363,13 +386,7 @@ int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoi
                                 component(obbB.halfExtents, 2) * absolute[i][2];
         const Real distance = std::abs(glm::dot(delta, obbA.axis[i]));
         const Real overlap = component(obbA.halfExtents, i) + projectedB - distance;
-        if (overlap <= 0.0) {
-            return 0;
-        }
-        if (overlap < minimumOverlap - kOverlapTie) {
-            minimumOverlap = overlap;
-            feature = i;
-        }
+        consider(overlap, i, 0, 0);
     }
 
     // Faces of B.
@@ -379,13 +396,7 @@ int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoi
                                 component(obbA.halfExtents, 2) * absolute[2][j];
         const Real distance = std::abs(glm::dot(delta, obbB.axis[j]));
         const Real overlap = projectedA + component(obbB.halfExtents, j) - distance;
-        if (overlap <= 0.0) {
-            return 0;
-        }
-        if (overlap < minimumOverlap - kOverlapTie) {
-            minimumOverlap = overlap;
-            feature = 3 + j;
-        }
+        consider(overlap, 3 + j, 0, 0);
     }
 
     // Edge-edge axes.
@@ -405,42 +416,51 @@ int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoi
             }
             const Real distance = std::abs(glm::dot(delta, unit));
             const Real overlap = projectedA + projectedB - distance;
-            if (overlap <= 0.0) {
-                return 0;
-            }
-            if (overlap < minimumOverlap - kOverlapTie) {
-                minimumOverlap = overlap;
-                feature = 6 + i * 3 + j;
-                featureA = i;
-                featureB = j;
-            }
+            consider(overlap, 6 + i * 3 + j, i, j);
         }
     }
 
-    if (feature < 0) {
+    if (minimumOverlap > 0.0) {
+        if (feature < 3) {
+            const Vec3 normal = obbA.axis[feature] * (glm::dot(delta, obbA.axis[feature]) >= 0.0 ? 1.0 : -1.0);
+            return faceContacts(obbA, obbB, feature, normal, out, maxPoints);
+        }
+        if (feature < 6) {
+            // Reference is B: the face normal must point from B towards A (the
+            // incident box); flip the reported normals so the manifold still
+            // points from A to B.
+            const int face = feature - 3;
+            const Vec3 refNormal = obbB.axis[face] * (glm::dot(-delta, obbB.axis[face]) >= 0.0 ? 1.0 : -1.0);
+            const int count = faceContacts(obbB, obbA, face, refNormal, out, maxPoints);
+            for (int i = 0; i < count; ++i) {
+                out[i].normal = -out[i].normal;
+            }
+            return count;
+        }
+
+        const Vec3 axis = glm::normalize(glm::cross(obbA.axis[featureA], obbB.axis[featureB]));
+        const Vec3 normal = axis * (glm::dot(delta, axis) >= 0.0 ? 1.0 : -1.0);
+        return edgeContact(obbA, obbB, featureA, featureB, normal, out);
+    }
+
+    // Separated: only report a speculative contact (negative penetration) when
+    // the closest separating axis stays within the search margin.
+    if (separationFeature < 0 || closestSeparation >= 0.0 || closestSeparation < -margin) {
         return 0;
     }
-
-    if (feature < 3) {
-        Vec3 normal = obbA.axis[feature] * (glm::dot(delta, obbA.axis[feature]) >= 0.0 ? 1.0 : -1.0);
-        return faceContacts(obbA, obbB, feature, normal, out, maxPoints);
+    Vec3 axis;
+    if (separationFeature < 3) {
+        axis = obbA.axis[separationFeature];
+    } else if (separationFeature < 6) {
+        axis = obbB.axis[separationFeature - 3];
+    } else {
+        axis = glm::normalize(glm::cross(obbA.axis[separationA], obbB.axis[separationB]));
     }
-    if (feature < 6) {
-        // Reference is B: the face normal must point from B towards A (the
-        // incident box); flip the reported normals so the manifold still points
-        // from A to B.
-        const int face = feature - 3;
-        const Vec3 refNormal = obbB.axis[face] * (glm::dot(-delta, obbB.axis[face]) >= 0.0 ? 1.0 : -1.0);
-        const int count = faceContacts(obbB, obbA, face, refNormal, out, maxPoints);
-        for (int i = 0; i < count; ++i) {
-            out[i].normal = -out[i].normal;
-        }
-        return count;
-    }
-
-    const Vec3 axis = glm::normalize(glm::cross(obbA.axis[featureA], obbB.axis[featureB]));
     const Vec3 normal = axis * (glm::dot(delta, axis) >= 0.0 ? 1.0 : -1.0);
-    return edgeContact(obbA, obbB, featureA, featureB, normal, out);
+    out[0].normal = normal;
+    out[0].position = 0.5 * (supportPoint(obbA, normal) + supportPoint(obbB, -normal));
+    out[0].penetration = closestSeparation;
+    return 1;
 }
 
 // Closest point of a triangle (a, b, c) to p (Ericson, Real-Time Collision
@@ -506,7 +526,7 @@ int cellIndex(Real value, Real origin, Real spacing) {
 
 // Sphere (b) against terrain (a); the normal points from the terrain to the
 // sphere.
-int sphereHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+int sphereHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out, Real margin) {
     const Heightfield* field = a.shape.heightfield.get();
     if (field == nullptr || !field->valid()) {
         return 0;
@@ -521,7 +541,7 @@ int sphereHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out)
         return 0;
     }
 
-    Real bestPenetration = -1.0;
+    Real bestPenetration = -kInfinity;
     Vec3 bestNormal(0.0, 1.0, 0.0);
     Vec3 bestPoint(center);
     for (int iz = iz0; iz <= iz1; ++iz) {
@@ -532,7 +552,7 @@ int sphereHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out)
                 const Vec3 q = closestPointOnTriangle(center, tri[t][0], tri[t][1], tri[t][2]);
                 const Vec3 delta = center - q;
                 const Real distance = glm::length(delta);
-                if (distance < radius && radius - distance > bestPenetration) {
+                if (distance < radius + margin && radius - distance > bestPenetration) {
                     bestPenetration = radius - distance;
                     bestNormal = distance > 1e-12 ? delta / distance : Vec3(0.0, 1.0, 0.0);
                     bestPoint = q;
@@ -549,7 +569,7 @@ int sphereHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out)
         bestNormal = field->sampleNormal(center.x, center.z);
         bestPoint = Vec3(center.x, surface, center.z);
     }
-    if (bestPenetration < 0.0) {
+    if (bestPenetration < -margin) {
         return 0;
     }
     out[0].normal = bestNormal;
@@ -562,7 +582,7 @@ int sphereHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out)
 // the normal points from the terrain to the box. The four deepest points are
 // kept (deterministic), which is exactly a box's support face when it rests
 // flat.
-int boxHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints) {
+int boxHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints, Real margin) {
     const Heightfield* field = a.shape.heightfield.get();
     if (field == nullptr || !field->valid()) {
         return 0;
@@ -587,7 +607,7 @@ int boxHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out, in
                 const Vec3 surfacePoint(world.x, field->sampleHeight(world.x, world.z), world.z);
                 const Vec3 normal = field->sampleNormal(world.x, world.z);
                 const Real penetration = glm::dot(surfacePoint - world, normal);
-                if (penetration > 0.0) {
+                if (penetration > -margin) {
                     candidates.push_back(Candidate{penetration, normal, world, index});
                 }
             }
@@ -612,6 +632,30 @@ int boxHeightfield(const RigidBody& a, const RigidBody& b, ContactPoint* out, in
         out[i].position = candidates[i].point;
     }
     return count;
+}
+
+// Conservative radius of a shape about its centre, used to turn an angular
+// speed into the fastest linear speed of any of its points.
+Real boundingRadius(const RigidBody& body) {
+    const Shape& shape = body.shape;
+    switch (shape.type) {
+    case ShapeType::Sphere:
+        return shape.radius;
+    case ShapeType::Cylinder:
+        return std::sqrt(shape.radius * shape.radius + shape.halfHeight * shape.halfHeight);
+    case ShapeType::Box:
+        return glm::length(shape.halfExtents);
+    case ShapeType::Convex: {
+        Real radius = 0.0;
+        for (const Vec3& vertex : shape.vertices) {
+            radius = std::max(radius, glm::length(vertex));
+        }
+        return radius;
+    }
+    case ShapeType::Heightfield:
+        return 0.0;
+    }
+    return 0.0;
 }
 
 } // namespace
@@ -649,7 +693,7 @@ Aabb computeAabb(const RigidBody& body) {
     }
 }
 
-int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints) {
+int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints, Real margin) {
     if (maxPoints <= 0) {
         return 0;
     }
@@ -657,7 +701,8 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
     const ShapeType typeB = b.shape.type;
 
     // Convex hulls (and any future shape without an analytic routine) go through
-    // the generic GJK/EPA path, which returns a single contact point.
+    // the generic GJK/EPA path, which returns a single contact point. It reports
+    // real overlaps only, so `margin` is ignored for these pairs.
     if (typeA == ShapeType::Convex || typeB == ShapeType::Convex) {
         const ConvexContact contact = convexContact(a, b);
         if (!contact.intersecting) {
@@ -670,46 +715,46 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
     }
 
     if (typeA == ShapeType::Sphere && typeB == ShapeType::Sphere) {
-        return sphereSphere(a, b, out);
+        return sphereSphere(a, b, out, margin);
     }
     if (typeA == ShapeType::Sphere && typeB == ShapeType::Box) {
-        return sphereBox(a, b, out);
+        return sphereBox(a, b, out, margin);
     }
     if (typeA == ShapeType::Box && typeB == ShapeType::Sphere) {
-        const int count = sphereBox(b, a, out);
+        const int count = sphereBox(b, a, out, margin);
         for (int i = 0; i < count; ++i) {
             out[i].normal = -out[i].normal;
         }
         return count;
     }
     if (typeA == ShapeType::Box && typeB == ShapeType::Box) {
-        return boxBox(a, b, out, maxPoints);
+        return boxBox(a, b, out, maxPoints, margin);
     }
     if (typeA == ShapeType::Sphere && typeB == ShapeType::Cylinder) {
-        return sphereCylinder(a, b, out);
+        return sphereCylinder(a, b, out, margin);
     }
     if (typeA == ShapeType::Cylinder && typeB == ShapeType::Sphere) {
-        const int count = sphereCylinder(b, a, out);
+        const int count = sphereCylinder(b, a, out, margin);
         for (int i = 0; i < count; ++i) {
             out[i].normal = -out[i].normal;
         }
         return count;
     }
     if (typeA == ShapeType::Heightfield && typeB == ShapeType::Sphere) {
-        return sphereHeightfield(a, b, out);
+        return sphereHeightfield(a, b, out, margin);
     }
     if (typeA == ShapeType::Sphere && typeB == ShapeType::Heightfield) {
-        const int count = sphereHeightfield(b, a, out);
+        const int count = sphereHeightfield(b, a, out, margin);
         for (int i = 0; i < count; ++i) {
             out[i].normal = -out[i].normal;
         }
         return count;
     }
     if (typeA == ShapeType::Heightfield && typeB == ShapeType::Box) {
-        return boxHeightfield(a, b, out, maxPoints);
+        return boxHeightfield(a, b, out, maxPoints, margin);
     }
     if (typeA == ShapeType::Box && typeB == ShapeType::Heightfield) {
-        const int count = boxHeightfield(b, a, out, maxPoints);
+        const int count = boxHeightfield(b, a, out, maxPoints, margin);
         for (int i = 0; i < count; ++i) {
             out[i].normal = -out[i].normal;
         }
@@ -734,13 +779,23 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
     return 0;
 }
 
-std::vector<BodyPair> broadphase(const PhysicsWorld& world) {
+std::vector<BodyPair> broadphase(const PhysicsWorld& world, Real velocityMarginDt) {
     const std::size_t count = world.bodyCount();
     std::vector<Aabb> boxes(count);
     std::vector<std::size_t> collidable;
     for (std::size_t i = 0; i < count; ++i) {
-        boxes[i] = computeAabb(world.body(i));
-        if (world.body(i).collisionEnabled) {
+        const RigidBody& body = world.body(i);
+        boxes[i] = computeAabb(body);
+        if (velocityMarginDt > 0.0) {
+            const Real speed =
+                glm::length(body.linearVelocity) + glm::length(body.angularVelocity) * boundingRadius(body);
+            if (speed > 0.0) {
+                const Vec3 inflation(speed * velocityMarginDt);
+                boxes[i].min -= inflation;
+                boxes[i].max += inflation;
+            }
+        }
+        if (body.collisionEnabled) {
             collidable.push_back(i);
         }
     }
@@ -759,13 +814,23 @@ std::vector<BodyPair> broadphase(const PhysicsWorld& world) {
     return pairs;
 }
 
-std::vector<ContactManifold> detectCollisions(const PhysicsWorld& world) {
+std::vector<ContactManifold> detectCollisions(const PhysicsWorld& world, Real margin, Real velocityMarginDt) {
     std::vector<ContactManifold> manifolds;
-    for (const BodyPair& pair : broadphase(world)) {
+    for (const BodyPair& pair : broadphase(world, velocityMarginDt)) {
+        const RigidBody& bodyA = world.body(pair.bodyA);
+        const RigidBody& bodyB = world.body(pair.bodyB);
+        Real pairMargin = margin;
+        if (velocityMarginDt > 0.0) {
+            const Real speedA =
+                glm::length(bodyA.linearVelocity) + glm::length(bodyA.angularVelocity) * boundingRadius(bodyA);
+            const Real speedB =
+                glm::length(bodyB.linearVelocity) + glm::length(bodyB.angularVelocity) * boundingRadius(bodyB);
+            pairMargin += (speedA + speedB) * velocityMarginDt;
+        }
         ContactManifold manifold;
         manifold.bodyA = pair.bodyA;
         manifold.bodyB = pair.bodyB;
-        manifold.count = collide(world.body(pair.bodyA), world.body(pair.bodyB), manifold.points, kMaxContactPoints);
+        manifold.count = collide(bodyA, bodyB, manifold.points, kMaxContactPoints, pairMargin);
         if (manifold.count > 0) {
             manifolds.push_back(manifold);
         }

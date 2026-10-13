@@ -1067,3 +1067,138 @@ TEST_CASE("heightfield footprint and bounds follow the grid") {
     CHECK(field.minCorner() == Vec3(0.0, lowest, 0.0));
     CHECK(field.maxCorner() == Vec3(10.0, highest, 6.0));
 }
+
+TEST_CASE("speculative contacts report the open gap within the margin") {
+    ContactPoint points[kMaxContactPoints];
+
+    // Sphere-sphere: 0.9 m apart, so the gap is 0.9 for radii of 0.5.
+    const RigidBody sphereA = makeSphere(0.5, Vec3(0.0));
+    const RigidBody sphereB = makeSphere(0.5, Vec3(1.9, 0.0, 0.0));
+    CHECK(collide(sphereA, sphereB, points, kMaxContactPoints, 0.0) == 0);
+    REQUIRE(collide(sphereA, sphereB, points, kMaxContactPoints, 1.0) == 1);
+    CHECK(points[0].penetration == doctest::Approx(-0.9));
+    CHECK(points[0].normal == Vec3(1.0, 0.0, 0.0));
+    CHECK(collide(sphereA, sphereB, points, kMaxContactPoints, 0.5) == 0);
+
+    // Sphere-box: the gap is 0.2 (centre 1.2, half extent 0.5, radius 0.5).
+    const RigidBody box = makeBox(Vec3(0.5), Vec3(0.0));
+    const RigidBody sphere = makeSphere(0.5, Vec3(-1.2, 0.0, 0.0));
+    CHECK(collide(sphere, box, points, kMaxContactPoints, 0.1) == 0);
+    REQUIRE(collide(sphere, box, points, kMaxContactPoints, 0.3) == 1);
+    CHECK(points[0].penetration == doctest::Approx(-0.2));
+    CHECK(points[0].normal == Vec3(1.0, 0.0, 0.0));
+
+    // Box-box: a 1.0 m face gap along X becomes a single speculative contact.
+    const RigidBody boxB = makeBox(Vec3(0.5), Vec3(2.0, 0.0, 0.0));
+    CHECK(collide(box, boxB, points, kMaxContactPoints, 0.5) == 0);
+    REQUIRE(collide(box, boxB, points, kMaxContactPoints, 1.2) == 1);
+    CHECK(points[0].penetration == doctest::Approx(-1.0));
+    CHECK(points[0].normal == Vec3(1.0, 0.0, 0.0));
+
+    // A real overlap keeps the multi-point manifold and positive penetration.
+    const RigidBody boxOverlap = makeBox(Vec3(0.5), Vec3(0.8, 0.0, 0.0));
+    CHECK(collide(box, boxOverlap, points, kMaxContactPoints, 0.5) == 4);
+}
+
+TEST_CASE("speculative contacts reach boxes and spheres near a heightfield") {
+    const std::shared_ptr<const Heightfield> field = flatField(6, 1.0, 0.0);
+    RigidBody terrain;
+    terrain.shape = Shape::terrain(field);
+    terrain.setType(BodyType::Static);
+    terrain.updateCache();
+
+    ContactPoint points[kMaxContactPoints];
+
+    // A sphere whose surface is 0.1 above the ground (centre at 0.6).
+    const RigidBody sphere = makeSphere(0.5, Vec3(2.5, 0.6, 2.5));
+    CHECK(collide(terrain, sphere, points, kMaxContactPoints, 0.05) == 0);
+    REQUIRE(collide(terrain, sphere, points, kMaxContactPoints, 0.2) == 1);
+    CHECK(points[0].penetration == doctest::Approx(-0.1));
+    CHECK(points[0].normal == Vec3(0.0, 1.0, 0.0));
+
+    // A box whose bottom face is 0.2 above the ground (centre at 0.7).
+    const RigidBody box = makeBox(Vec3(0.5), Vec3(2.5, 0.7, 2.5));
+    CHECK(collide(terrain, box, points, kMaxContactPoints, 0.1) == 0);
+    REQUIRE(collide(terrain, box, points, kMaxContactPoints, 0.3) == 4);
+    CHECK(points[0].penetration == doctest::Approx(-0.2));
+}
+
+TEST_CASE("a fast sphere cannot tunnel through a thin static wall") {
+    const auto run = [](bool speculative) {
+        PhysicsWorld world;
+        world.gravity = Vec3(0.0);
+        world.enableSpeculativeContacts = speculative;
+        world.enableSleeping = false;
+
+        RigidBody& wall = world.createBody();
+        wall.shape = Shape::box(Vec3(0.05, 2.0, 2.0));
+        wall.setType(BodyType::Static);
+        wall.setMass(0.0);
+        wall.position = Vec3(0.0);
+        wall.collisionEnabled = true;
+        wall.updateCache();
+
+        RigidBody& sphere = world.createBody();
+        sphere.shape = Shape::sphere(0.1);
+        sphere.setMass(1.0);
+        sphere.setShapeInertia();
+        sphere.position = Vec3(-0.2, 0.0, 0.0);
+        sphere.linearVelocity = Vec3(400.0, 0.0, 0.0);
+        sphere.collisionEnabled = true;
+        sphere.updateCache();
+
+        for (int i = 0; i < 30; ++i) {
+            world.step(1.0 / 1000.0);
+        }
+        return sphere.position.x;
+    };
+
+    // 400 m/s over a 1 ms step is 0.4 m, far more than the 0.1 m wall, so
+    // without speculative contacts the sphere passes straight through.
+    CHECK(run(false) > 0.05);
+    // With speculative contacts it is stopped on the near side of the wall.
+    const Real stopped = run(true);
+    CHECK(stopped < 0.0);
+    CHECK(stopped > -0.2);
+}
+
+TEST_CASE("speculative contacts do not perturb a resting pair") {
+    auto field = std::make_shared<Heightfield>();
+    field->width = 6;
+    field->depth = 6;
+    field->spacing = 1.0;
+    field->heights.assign(36, 0.0);
+
+    PhysicsWorld world;
+    RigidBody& terrain = world.createBody();
+    terrain.shape = Shape::terrain(field);
+    terrain.setType(BodyType::Static);
+    terrain.setMass(0.0);
+    terrain.collisionEnabled = true;
+    terrain.updateCache();
+
+    RigidBody& box = world.createBody();
+    box.shape = Shape::box(Vec3(0.5));
+    box.setMass(1.0);
+    box.setShapeInertia();
+    box.position = Vec3(2.5, 0.5, 2.5);
+    box.collisionEnabled = true;
+    box.updateCache();
+
+    for (int i = 0; i < 500; ++i) {
+        world.step(1.0 / 1000.0);
+    }
+    REQUIRE(std::abs(box.linearVelocity.x) < 1e-6);
+    REQUIRE(std::abs(box.linearVelocity.y) < 1e-6);
+
+    // A pair at rest has ~zero relative speed, so the velocity margin adds
+    // nothing and the manifold set is identical to the plain detection.
+    const std::vector<ContactManifold> plain = detectCollisions(world);
+    const std::vector<ContactManifold> speculative = detectCollisions(world, 0.0, 1.0 / 1000.0);
+    REQUIRE(plain.size() == speculative.size());
+    for (std::size_t i = 0; i < plain.size(); ++i) {
+        CHECK(plain[i].bodyA == speculative[i].bodyA);
+        CHECK(plain[i].bodyB == speculative[i].bodyB);
+        CHECK(plain[i].count == speculative[i].count);
+    }
+}

@@ -85,6 +85,16 @@ public:
     Real contactBaumgarte = 0.2;
     Real contactSlop = 1e-3;
 
+    // Speculative contacts. When enabled, the narrowphase search margin of a
+    // pair grows with the bodies' relative speed (linear plus angular times the
+    // shape's bounding radius) so a fast body is tested against the geometry
+    // ahead of it and cannot tunnel through a thin wall in a single step. The
+    // margin is `speculativeMargin * relativeSpeed * dt`, so a resting scene
+    // (speed ~0) is unaffected; 0 disables the feature and only real overlaps
+    // are reported.
+    bool enableSpeculativeContacts = true;
+    Real speculativeMargin = 1.0;
+
     // Sleeping. A dynamic body whose linear speed stays below
     // `sleepLinearThreshold` and angular speed below `sleepAngularThreshold`
     // for `sleepTime` seconds is frozen (velocities zeroed, not integrated and
