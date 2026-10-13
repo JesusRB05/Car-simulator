@@ -13,6 +13,7 @@
 #include "vehicle/Clutch.hpp"
 #include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/Engine.hpp"
+#include "vehicle/Gearbox.hpp"
 #include "vehicle/IAerodynamics.hpp"
 #include "vehicle/IBrakeSystem.hpp"
 #include "vehicle/IDrivetrain.hpp"
@@ -1158,6 +1159,29 @@ TEST_CASE("the clutch slips at its capacity and locks below it") {
     // The centrifugal clutch engages only above its speed.
     CHECK(centrifugalClutchCapacity(0.001, 300.0, 100.0) == doctest::Approx(80.0));
     CHECK(centrifugalClutchCapacity(0.001, 50.0, 100.0) == doctest::Approx(0.0));
+}
+
+TEST_CASE("the gearbox scales torque and reflects inertia") {
+    Gearbox gearbox;
+    gearbox.forwardRatios = {3.0, 2.0, 1.0};
+    gearbox.reverseRatio = 3.5;
+    gearbox.efficiency = 0.9;
+
+    CHECK(gearbox.ratio(0) == doctest::Approx(0.0));
+    CHECK(gearbox.ratio(-1) == doctest::Approx(-3.5));
+    CHECK(gearbox.ratio(2) == doctest::Approx(2.0));
+    CHECK(gearbox.ratio(9) == doctest::Approx(0.0)); // out of range
+
+    CHECK(gearbox.outputTorque(1, 100.0) == doctest::Approx(3.0 * 0.9 * 100.0));
+    CHECK(gearbox.outputTorque(-1, 100.0) == doctest::Approx(-3.5 * 0.9 * 100.0));
+
+    CHECK(gearbox.reflectedInertia(2, 0.2, 0.05) == doctest::Approx(0.05 + 4.0 * 0.2));
+
+    TorqueConverter converter;
+    converter.capacityFactor = 0.5;
+    converter.torqueRatio = 2.0;
+    CHECK(converter.pumpTorque(100.0) == doctest::Approx(5000.0));
+    CHECK(converter.turbineTorque(5000.0) == doctest::Approx(10000.0));
 }
 
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {

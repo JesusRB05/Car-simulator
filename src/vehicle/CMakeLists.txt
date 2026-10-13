@@ -47,6 +47,9 @@ add_library(sim_vehicle STATIC
     # Friction and centrifugal clutches (Phase 2, P2.10).
     include/vehicle/Clutch.hpp
     src/Clutch.cpp
+    # Gearbox ratios and torque converter (Phase 2, P2.10).
+    include/vehicle/Gearbox.hpp
+    src/Gearbox.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)
