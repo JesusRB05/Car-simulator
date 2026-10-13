@@ -8,7 +8,7 @@ which equations they implement, in what order, and how each one is validated. It
 is the specification the physics work is measured against.
 
 > **Status: plan only. Nothing in this document is implemented yet** except what
-> [PHYSICS](FISICA.md) already describes (rigid bodies, joints, solver).
+> [PHYSICS](PHYSICS.md) already describes (rigid bodies, joints, solver).
 >
 > **About numbers.** Equations are standard vehicle-dynamics results (references
 > in the last section). Every *numeric* parameter quoted here is an order-of-magnitude

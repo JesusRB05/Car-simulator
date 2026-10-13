@@ -15,7 +15,7 @@ the details of each module live in their own documents ("Documentation" in
   `forward = (-sin h, 0, -cos h)` and `right = (cos h, 0, -sin h)`. Positive
   heading, yaw rate and steer turn **left** (counter-clockwise seen from `+Y`).
   The car's model matrix is just `translate(p) * rotate(h, +Y)`, no axis
-  conversion. See [`FISICA.md`](FISICA.md).
+  conversion. See [`PHYSICS.md`](PHYSICS.md).
 
 ## Matrix convention (rendering)
 
@@ -48,7 +48,7 @@ There is a single convention and it applies to all rendering code:
 
 - **Right-handed perspective projection with reversed depth** (reversed-Z):
   near → 1, far → 0. See `Camera::setPerspective` and
-  [`RENDERIZADO.md`](RENDERIZADO.md).
+  [`RENDERING.md`](RENDERING.md).
 - The pipeline compares with `GreaterEqual` and clears depth to `0.0f`.
 
 ## Physics
@@ -57,7 +57,7 @@ There is a single convention and it applies to all rendering code:
   by default) and a single thread running the step (determinism).
 - Compilation: `-ffast-math` is forbidden, FMA contraction is disabled, MSVC
   uses `/fp:precise`.
-- See [`FISICA.md`](FISICA.md) for the integrator, joints and test suite.
+- See [`PHYSICS.md`](PHYSICS.md) for the integrator, joints and test suite.
 
 ## Code
 

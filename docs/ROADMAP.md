@@ -90,7 +90,7 @@ manoeuvres and the numbered work packages are in the
 | Area | State |
 |---|---|
 | Rigid-body core | Done: fixed step, deterministic, soft and rigid joints with an exact island block solve, 1:1000 mass-ratio tests, energy and angular-momentum tests |
-| Collisions | **Not implemented.** Only a raycast-wheel car against an analytic ground |
+| Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, AABB broadphase, one-sided contact rows integrated with the island solver, warm started and deterministic; no friction, restitution, convex hulls, triangle-mesh/heightfield terrain or sleeping yet. The raycast-wheel car still uses an analytic ground |
 | Vehicle | Interfaces only (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics) plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
 | App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit |
@@ -136,7 +136,7 @@ ground interface, not rigid contacts). Work packages P1.1-P1.6 in the
 - Contact manifolds with persistent ids, friction (Coulomb cone), restitution,
   warm starting, speculative contacts or sub-stepping against tunnelling.
 - Contacts integrated with the island solver (exact solve for bilateral rows,
-  iterative for contacts, as documented in [FISICA](FISICA.md)); sleeping.
+  iterative for contacts, as documented in [PHYSICS](PHYSICS.md)); sleeping.
 - Deterministic contact ordering (stable ids, no pointer-dependent order).
 - **Tests:** box stack stays stable for 60 s; sphere bounce matches restitution;
   block-on-ramp matches `tan(theta) = mu` threshold; Newton's cradle conserves
