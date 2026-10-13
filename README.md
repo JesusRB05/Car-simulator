@@ -133,9 +133,11 @@ Modo de ejecución manual del renderer headless:
 ```
 
 El runner headless también soporta `--verify-golden`/`--update-golden`
-(con `--golden-dir`), `--semantic`, `--contact-sheet` y `--debug-draw`; los tests
-`gpu` incluyen una referencia por escena y otra del *debug draw*
-(`tests/golden/grid_debug.png`).
+(con `--golden-dir`), `--semantic`, `--contact-sheet` y `--debug-draw`. Los
+tests `gpu` incluyen una referencia por escena y otra del *debug draw*
+(`tests/golden/<driver>/grid_debug.png`); las referencias solo se activan tras
+aprobación, hasta entonces esas verificaciones se reportan como omitidas (ver
+`tests/golden/README.md`).
 
 ## Ejecución
 

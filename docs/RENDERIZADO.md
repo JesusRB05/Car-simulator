@@ -167,16 +167,27 @@ sim --headless --frames N [--scene NAME] [--screenshot ruta.png]
 - **`--validation`**: activa las capas y **devuelve código 2** si se emitió algún
   mensaje de validación; código 1 si falla la inicialización de Vulkan.
 - **`--verify-golden` / `--update-golden`**: compara o regenera la referencia de
-  `--golden-dir` (por defecto `tests/golden/`). `--semantic` añade la
-  comprobación de píxel proyectado de cada sonda de escena.
+  `--golden-dir`. `--semantic` añade la
+  comprobación de píxel proyectado de cada sonda de escena. La verificación
+  **se omite (código 77)** si la referencia no existe aún (no aprobada);
+  `update_golden` escribe las **candidatas** en `screenshots/golden_candidates/`,
+  que solo pasan a `tests/golden/<driver>/` tras aprobación humana. Ver
+  `tests/golden/README.md`.
 - **`--debug-draw`**: superpone la rejilla de suelo y los ejes del mundo mediante
   el *debug draw* instanciado (`render::DebugDraw`); su referencia es
-  `tests/golden/grid_debug.png`.
+  `tests/golden/<driver>/grid_debug.png`.
+- **Orientación de pantalla**: toda la conversión de `+Y` mundo a pantalla vive
+  en un único sitio, el viewport de altura negativa de
+  `CommandList::setViewport` (ver `docs/CONVENTIONS.md`); las sondas
+  `checkSemantics` comunican el resultado. La escena de prueba `orientation`
+  añade una comprobación de horizonte (`checkOrientationHorizon`) que siempre se
+  ejecuta, independiente de los dorados, para que un fallo de orientación no
+  pueda pasar desapercibido.
 - El *runner* está en `apps/sim/src/HeadlessRunner.{hpp,cpp}`.
 
 Los tests `gpu` (etiqueta `ctest -L gpu`) comparan cada escena con referencias en
-`tests/golden/` (ver `docs/CONSTRUCCION.md`) y una hoja de contacto
-`screenshots/contact_sheet.png` reúne todas las escenas.
+`tests/golden/<driver>/` (ver `docs/CONSTRUCCION.md`) y una hoja de contacto
+`screenshots/contact_sheet.png` (commiteada a mano) reúne todas las escenas.
 
 ## Debug draw instanciado
 

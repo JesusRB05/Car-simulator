@@ -46,9 +46,13 @@ cmake --build --preset windows-msvc-release --target sim_tests # suite
   `set VK_ICD_FILENAMES=C:\Programas\Car Simulator\tools\mesa\x64\lvp_icd.x86_64.json`
   y `tools\mesa\x64` en `PATH`; luego
   `ctest --test-dir build\windows-msvc-release -L gpu --output-on-failure`.
-- Dorados: se regeneran a mano con `cmake --build <build> --target update_golden`
-  tras cambios intencionados (nunca para maquillar una regresión). Comparación con
-  tolerancias realistas (máx. 1 % de píxeles distintos, PSNR ≥ 30 dB).
+- Dorados: las candidatas se regeneran a mano con
+  `cmake --build <build> --target update_golden` (escriben en
+  `screenshots/golden_candidates/`) tras cambios intencionados, nunca para
+  maquillar una regresión. Pasan a `tests/golden/<driver>/` solo tras aprobación
+  humana; mientras no existan, los tests GPU de verificación se reportan como
+  omitidos (`SKIP_RETURN_CODE 77`). Comparación con tolerancias realistas
+  (máx. 1 % de píxeles distintos, PSNR ≥ 30 dB).
 
 ## Git
 

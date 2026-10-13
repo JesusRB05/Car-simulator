@@ -313,6 +313,33 @@ bool checkSemantics(const render::Scene& scene, const std::vector<SceneProbe>& p
     return ok;
 }
 
+// Proves the frame is not vertically flipped by sampling the centre column: with
+// the horizontal camera of the "orientation" scene the top of the image must be
+// the clear (sky) colour and the bottom must be ground. Used on top of the
+// off-axis chromaticity probes of that scene.
+bool checkOrientationHorizon(const std::vector<std::uint8_t>& pixels, rhi::Extent2D extent)
+{
+    const auto sample = [&](float relativeRow) {
+        const int x = static_cast<int>(static_cast<float>(extent.width) * 0.5f + 0.5f);
+        const int y = static_cast<int>(relativeRow * static_cast<float>(extent.height));
+        const std::size_t i = (static_cast<std::size_t>(y) * extent.width + static_cast<std::size_t>(x)) * 4;
+        return glm::vec3(pixels[i] / 255.0f, pixels[i + 1] / 255.0f, pixels[i + 2] / 255.0f);
+    };
+
+    const glm::vec3 sky(glm::vec3(kClear[0], kClear[1], kClear[2]));
+    const glm::vec3 top = sample(0.08f);
+    const glm::vec3 bottom = sample(0.92f);
+    const glm::vec3 topDiff = glm::abs(top - sky);
+    const float bottomDiff = glm::length(bottom - sky);
+
+    std::printf("[headless] orientation horizon: top=(%.3f,%.3f,%.3f) vs sky, bottom=(%.3f,%.3f,%.3f) dist %.3f %s\n", top.r, top.g,
+                top.b, bottom.r, bottom.g, bottom.b, bottomDiff, topDiff.r < 0.05f && topDiff.g < 0.05f && topDiff.b < 0.05f
+                                                                       && bottomDiff > 0.15f
+                                                                       ? "ok"
+                                                                       : "FAIL");
+    return topDiff.r < 0.05f && topDiff.g < 0.05f && topDiff.b < 0.05f && bottomDiff > 0.15f;
+}
+
 // ---- Contact sheet ---------------------------------------------------------
 
 void fillRect(std::vector<std::uint8_t>& image, int width, int height, int x0, int y0, int x1, int y1, std::uint8_t r, std::uint8_t g,
@@ -503,6 +530,10 @@ int runHeadless(const HeadlessOptions& options)
             {
                 result = 4;
             }
+            else if (options.scene == "orientation" && !checkOrientationHorizon(pixels, target.extent))
+            {
+                result = 4;
+            }
         }
 
         if (options.verifyGolden || options.updateGolden)
@@ -525,6 +556,12 @@ int runHeadless(const HeadlessOptions& options)
             }
             else if (result == 0)
             {
+                if (!std::filesystem::exists(reference))
+                {
+                    std::printf("[headless] golden %s not present (not approved yet); verification skipped\n",
+                                reference.string().c_str());
+                    return 77; // ctest maps this exit code to SKIPPED
+                }
                 double diffPercent = 0.0;
                 double psnr = 0.0;
                 if (!compareGolden(reference, pixels, target.extent, options.maxDiffPercent, options.minPsnr, diffPercent, psnr))

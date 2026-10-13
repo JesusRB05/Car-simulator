@@ -194,11 +194,20 @@ void CommandList::bindIndexBuffer(const Buffer& buffer, bool use32Bit)
 
 void CommandList::setViewport(float x, float y, float width, float height)
 {
+    // The whole renderer (scene pass, debug draw and swapchain) goes through
+    // this one function, so the screen-space Y flip lives here and only here.
+    // Vulkan's NDC has +Y pointing down while the camera builds a right-handed
+    // projection with +Y world up, so a positive-height viewport would put the
+    // horizon at the bottom of the image. Emitting a negative height (Vulkan
+    // >= 1.1, previously VK_KHR_maintenance1) flips the Y axis so +Y world
+    // lands on row 0 of the framebuffer (the top of the image), which is what
+    // the CPU pixel mapping (HeadlessRunner::checkSemantics) mirrors. Callers
+    // keep passing a top-left origin and a positive height.
     VkViewport viewport{};
     viewport.x = x;
-    viewport.y = y;
+    viewport.y = y + height;
     viewport.width = width;
-    viewport.height = height;
+    viewport.height = -height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);

@@ -197,6 +197,24 @@ bool buildScene(const std::string& name, render::Scene& scene, const std::shared
         return true;
     }
 
+    // "orientation": test harness for the absolute screen orientation. A
+    // horizontal camera gazes down -Z while four coloured boxes are placed off
+    // the gaze axis: one clearly higher, one on each side of the reference.
+    // With the RHI viewport flip in place, +Y world must be the top of the
+    // image and +X world the right, so each box lands where its probe expects;
+    // a vertically flipped image fails the probes. The "sky top / ground
+    // bottom" horizon is checked separately by the headless runner
+    // (checkOrientationHorizon).
+    if (name == "orientation")
+    {
+        addBox(scene, cube, {0.0f, 0.9f, -8.0f}, {1.0f, 1.0f, 1.0f}, glm::vec4(0.85f, 0.35f, 0.30f, 1.0f)); // reference
+        addBox(scene, cube, {0.0f, 2.7f, -8.0f}, {1.0f, 1.0f, 1.0f}, glm::vec4(0.30f, 0.75f, 0.90f, 1.0f)); // high (above)
+        addBox(scene, cube, {-4.5f, 0.5f, -8.0f}, {1.0f, 1.0f, 1.0f}, glm::vec4(0.30f, 0.70f, 0.40f, 1.0f)); // left
+        addBox(scene, cube, {4.5f, 0.5f, -8.0f}, {1.0f, 1.0f, 1.0f}, glm::vec4(0.75f, 0.30f, 0.70f, 1.0f)); // right
+        setCamera(scene, {0.0f, 0.5f, 2.0f}, {0.0f, 0.5f, -8.0f});
+        return true;
+    }
+
     // "default" and any unknown name.
     addBox(scene, cube, {0.0f, 0.8f, 0.0f}, {1.9f, 1.6f, 4.2f}, glm::vec4(0.80f, 0.15f, 0.12f, 1.0f));
     setCamera(scene, {6.0f, 4.0f, 12.0f}, {0.0f, 0.8f, 0.0f});
@@ -234,6 +252,15 @@ std::vector<SceneProbe> sceneProbes(const std::string& name)
     if (name == "rows")
     {
         return {{glm::vec3(0.0f, 0.65f, 0.0f), glm::vec4(0.25f, 0.75f, 0.35f, 1.0f)}};
+    }
+    // The orientation harness: probes sit on off-axis boxes so a horizontally
+    // or vertically flipped image cannot be confused for an upright one.
+    if (name == "orientation")
+    {
+        return {{glm::vec3(0.0f, 0.9f, -8.0f), glm::vec4(0.85f, 0.35f, 0.30f, 1.0f)},
+                {glm::vec3(0.0f, 2.7f, -8.0f), glm::vec4(0.30f, 0.75f, 0.90f, 1.0f)},
+                {glm::vec3(-4.5f, 0.5f, -8.0f), glm::vec4(0.30f, 0.70f, 0.40f, 1.0f)},
+                {glm::vec3(4.5f, 0.5f, -8.0f), glm::vec4(0.75f, 0.30f, 0.70f, 1.0f)}};
     }
     return {{glm::vec3(0.0f, 0.8f, 0.0f), glm::vec4(0.80f, 0.15f, 0.12f, 1.0f)}};
 }

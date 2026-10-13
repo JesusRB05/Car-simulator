@@ -177,13 +177,13 @@ jobs:
       - name: Build
         run: cmake --build --preset linux-gcc-release
 
-      - name: Generate lavapipe goldens if missing
+      - name: Generate golden candidates if missing
         run: |
-          if [ ! -f tests/golden/lavapipe/grid.png ]; then
-            echo "lavapipe golden references are missing; generating them..."
+          if [ ! -f screenshots/golden_candidates/grid.png ]; then
+            echo "no approved golden references; generating candidates for human review..."
             cmake --build --preset linux-gcc-release --target update_golden
           else
-            echo "lavapipe golden references found; using them for verification"
+            echo "golden candidates found; keeping them for the run"
           fi
         shell: bash
 
@@ -198,10 +198,10 @@ jobs:
           path: build/linux-gcc-release/screenshots/*.png
           if-no-files-found: warn
 
-      - name: Upload lavapipe golden references
+      - name: Upload golden candidates
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: golden-lavapipe
-          path: tests/golden/lavapipe/*.png
+          name: golden-candidates
+          path: screenshots/golden_candidates/*.png
           if-no-files-found: warn

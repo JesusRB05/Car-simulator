@@ -30,10 +30,14 @@ Hay una sola convención y se aplica en todo el render:
 - Estructuras de uniformes: `FrameUniforms` y `ObjectPushConstants` en
   `render/Uniforms.hpp`. El layout GPU es std140; cada miembro empieza alineado
   a 16 bytes (matriz = 4 columnas de 16 bytes contiguas).
-- La transformación CPU→píxel que comprueban los tests (incluida la inversión de
-  `+Y` al pasar a coordenadas de pantalla) está en
-  `apps/sim/src/HeadlessRunner.cpp` (`checkSemantics`) y en
-  `tests/test_render_math.cpp`.
+- La orientación de pantalla se define **una sola vez** en el RHI:
+  `CommandList::setViewport` (viewport de altura negativa), de modo
+  que `+Y` del mundo cae en la **fila 0** (arriba) de la imagen y `+X` a la
+  derecha. La transformación CPU→píxel que comprueban los tests
+  (`apps/sim/src/HeadlessRunner.cpp`, `checkSemantics`, y
+  `tests/test_render_math.cpp`) espeja exactamente esa conversión; no hay ninguna
+  otra inversión ni compensación (ni en la proyección, ni en los shaders, ni en
+  la subida de matrices).
 
 ## Profundidad (reversed-Z)
 

@@ -54,8 +54,9 @@ TEST_CASE("a known world point projects to the expected pixel (column-major mul)
     //   ndcX = x / (d * tan(fovY/2) * aspect),   ndcY = y / (d * tan(fovY/2))
     // independent of any matrix convention, so it pins down the transform that
     // viewProjection() * p must reproduce. The pixel mapping mirrors the
-    // headless GPU semantic checks (HeadlessRunner::checkSemantics), including
-    // the screen-space +Y flip.
+    // headless GPU semantic checks (HeadlessRunner::checkSemantics) and matches
+    // the RHI viewport flip: +Y world is row 0 (top) and +X world grows the
+    // column, so this is the absolute screen orientation of the engine.
     Camera camera;
     camera.setPerspective(45.0f, aspect, 0.05f, 100.0f);
     camera.lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f});
@@ -80,6 +81,48 @@ TEST_CASE("a known world point projects to the expected pixel (column-major mul)
     MESSAGE("known world point (1, 0.5, -2) projects to pixel (" << px << ", " << py << ")");
     CHECK(px == expectedPx);
     CHECK(py == expectedPy);
+}
+
+TEST_CASE("screen orientation is absolute: +Y world renders above, +X world renders right")
+{
+    // Pins the engine's screen orientation without a GPU: with a horizontal
+    // camera, the RHI-flipped mapping must place a higher world point on a
+    // strictly smaller row (top of the image) and a point towards +X on a
+    // strictly larger column, and anything behind the camera must stay behind.
+    constexpr int kWidth = 640;
+    constexpr int kHeight = 360;
+    const float aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
+
+    Camera camera;
+    camera.setPerspective(60.0f, aspect, 0.1f, 100.0f);
+    camera.lookAt({0.0f, 0.6f, 0.0f}, {0.0f, 0.6f, -10.0f}); // horizontal gaze, +Y up
+
+    const auto rowCol = [&](float x, float y, float z) -> std::pair<int, int> {
+        const glm::vec4 clip = camera.viewProjection() * glm::vec4(x, y, z, 1.0f);
+        REQUIRE(clip.w > 0.0f);
+        const float ndcX = clip.x / clip.w;
+        const float ndcY = clip.y / clip.w;
+        const int px = static_cast<int>((ndcX * 0.5f + 0.5f) * static_cast<float>(kWidth));
+        const int py = static_cast<int>((1.0f - (ndcY * 0.5f + 0.5f)) * static_cast<float>(kHeight));
+        return {px, py};
+    };
+
+    // Vertical: same gaze axis, higher object must land above (smaller row).
+    const auto high = rowCol(0.0f, 3.0f, -8.0f);
+    const auto low = rowCol(0.0f, 0.4f, -8.0f);
+    CHECK(high.second < low.second);
+    CHECK(high.first == low.first); // same ray, same column
+
+    // Horizontal: objects at the same height/ray must order by +X.
+    const auto right = rowCol(2.5f, 0.6f, -8.0f);
+    const auto left = rowCol(-2.5f, 0.6f, -8.0f);
+    CHECK(right.first > left.first);
+    CHECK(right.second == left.second);
+
+    // World up really is the top half of the frame and world ahead is in front
+    // of the camera (never a negative clip.w).
+    CHECK(high.second < kHeight / 2);
+    CHECK(low.second > kHeight / 2);
 }
 
 } // namespace sim::render
