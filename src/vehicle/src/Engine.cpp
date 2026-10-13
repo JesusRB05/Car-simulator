@@ -73,6 +73,33 @@ Real EngineFriction::torqueAt(Real angularVelocity) const {
     return constant + linear * angularVelocity + quadratic * angularVelocity * angularVelocity;
 }
 
+Real Turbocharger::targetBoost(Real engineAngularVelocity, Real throttle) const {
+    Real speedFactor = engineAngularVelocity / boostReferenceSpeed;
+    if (speedFactor < 0.0) {
+        speedFactor = 0.0;
+    } else if (speedFactor > 1.0) {
+        speedFactor = 1.0;
+    }
+    const Real clampedThrottle = (throttle < 0.0) ? 0.0 : (throttle > 1.0 ? 1.0 : throttle);
+    Real target = ambientPressure + (maxBoostPressure - ambientPressure) * clampedThrottle * speedFactor;
+    if (antiLag && clampedThrottle <= antiLagThreshold && target < antiLagBoostPressure) {
+        target = antiLagBoostPressure;
+    }
+    return target;
+}
+
+Real Turbocharger::boostTorque(Real naturallyAspiratedTorque, Real boostPressure) const {
+    return naturallyAspiratedTorque * (1.0 + boostGain * (boostPressure / ambientPressure - 1.0));
+}
+
+Real stepTurboBoost(const Turbocharger& turbo, Real boostPressure, Real targetBoost, Real deltaSeconds) {
+    if (turbo.timeConstant <= 0.0) {
+        return targetBoost;
+    }
+    const Real decay = std::exp(-deltaSeconds / turbo.timeConstant);
+    return targetBoost + (boostPressure - targetBoost) * decay;
+}
+
 void Engine::reset() {
     angularVelocity_ = 0.0;
     effectiveThrottle_ = 0.0;

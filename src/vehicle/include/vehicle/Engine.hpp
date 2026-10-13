@@ -34,6 +34,27 @@ struct EngineFriction {
     Real torqueAt(Real angularVelocity) const;
 };
 
+// Turbocharger (PHYSICS_PLAN Section 7.1). The boost pressure follows a first-order
+// lag towards a target that grows with engine speed and throttle; the torque is the
+// naturally aspirated value scaled by the boost. Anti-lag keeps the target high at
+// closed throttle.
+struct Turbocharger {
+    Real timeConstant = 0.5;           // tau_t (s)
+    Real boostGain = 0.5;              // k_b
+    Real ambientPressure = 101325.0;   // p_amb (Pa)
+    Real maxBoostPressure = 2.0e5;     // p_b* at full throttle and speed (Pa)
+    Real boostReferenceSpeed = 300.0;  // rad/s for the speed factor
+    Real antiLagThreshold = 0.05;      // throttle below this counts as closed
+    Real antiLagBoostPressure = 1.5e5; // floor for p_b* when anti-lag is on
+    bool antiLag = false;
+
+    Real targetBoost(Real engineAngularVelocity, Real throttle) const;
+    Real boostTorque(Real naturallyAspiratedTorque, Real boostPressure) const;
+};
+
+// Advances the boost pressure one step (exact first order) and returns it (Pa).
+Real stepTurboBoost(const Turbocharger& turbo, Real boostPressure, Real targetBoost, Real deltaSeconds);
+
 // Engine dynamics (PHYSICS_PLAN Section 7.1): the crankshaft inertia integrated
 // from the map torque minus the friction and the load, with a first-order
 // throttle lag, a rev limiter by fuel cut with hysteresis and a PI idle

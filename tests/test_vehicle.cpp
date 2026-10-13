@@ -1303,6 +1303,30 @@ TEST_CASE("the kart frame twists between its halves") {
     CHECK(computeFrameTorsionMoment(torsion, 0.05, 0.0, -1.0, 0.0) == doctest::Approx(2000.0 * 0.05 - 100.0));
 }
 
+TEST_CASE("the turbo boost lags towards its target and scales the torque") {
+    Turbocharger turbo;
+    turbo.ambientPressure = 101325.0;
+    turbo.maxBoostPressure = 2.0e5;
+    turbo.boostReferenceSpeed = 300.0;
+    turbo.boostGain = 0.5;
+    turbo.antiLag = true;
+    turbo.antiLagThreshold = 0.05;
+    turbo.antiLagBoostPressure = 1.5e5;
+
+    CHECK(turbo.targetBoost(300.0, 1.0) == doctest::Approx(2.0e5));
+    CHECK(turbo.targetBoost(150.0, 1.0) == doctest::Approx(101325.0 + (2.0e5 - 101325.0) * 0.5));
+    CHECK(turbo.targetBoost(300.0, 0.0) == doctest::Approx(1.5e5)); // anti-lag floor
+
+    turbo.antiLag = false;
+    CHECK(turbo.targetBoost(300.0, 0.0) == doctest::Approx(101325.0));
+
+    // Twice ambient pressure adds half again to the torque.
+    CHECK(turbo.boostTorque(100.0, 2.0 * 101325.0) == doctest::Approx(150.0));
+
+    // The boost approaches the target quickly compared to the time constant.
+    CHECK(stepTurboBoost(turbo, 101325.0, 2.0e5, 5.0) == doctest::Approx(2.0e5).epsilon(1.0e-3));
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 
