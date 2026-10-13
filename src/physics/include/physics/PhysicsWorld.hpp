@@ -30,10 +30,21 @@ struct BodyState {
     Vec3 angularVelocity{0.0};
 };
 
+// Warm-start impulses of one contact pair, captured so a restore resumes the
+// contact solver exactly where it left off (joints use `impulses`).
+struct ContactImpulseState {
+    std::uint64_t key = 0;
+    int count = 0;
+    Real normal[kMaxContactPoints]{};
+    Real tangent1[kMaxContactPoints]{};
+    Real tangent2[kMaxContactPoints]{};
+};
+
 struct WorldSnapshot {
     double time = 0.0;
     std::vector<BodyState> bodies;
     std::vector<std::vector<Real>> impulses;
+    std::vector<ContactImpulseState> contacts;
 };
 
 // Owns bodies, joints and force elements and advances them with a deterministic
@@ -64,10 +75,11 @@ public:
     Real maxPositionCorrection = 0.2; // m or rad
 
     // Collision-response tuning. Only bodies whose RigidBody::collisionEnabled
-    // is set take part. Contacts are solved as one-sided normal rows; the
-    // Baumgarte term removes penetration at the velocity level and `contactSlop`
-    // is the resting penetration left uncorrected so the response does not
-    // jitter. Friction is not applied yet (see docs/ROADMAP.md, Phase 1).
+    // is set take part. Each contact point is solved as one one-sided normal row
+    // plus two Coulomb friction rows; the Baumgarte term removes penetration at
+    // the velocity level and `contactSlop` is the resting penetration left
+    // uncorrected so the response does not jitter. Friction and restitution come
+    // from the bodies' material (see RigidBody::friction / restitution).
     Real contactBaumgarte = 0.2;
     Real contactSlop = 1e-3;
 
@@ -124,10 +136,13 @@ private:
     void projectPositions(const std::vector<std::vector<Constraint*>>& islands, Real dt);
 
     // Accumulated impulses of one contact pair, kept across steps so the solver
-    // warm starts instead of rebuilding the stack from zero.
+    // warm starts instead of rebuilding the stack from zero. `normal` is the
+    // pushing impulse; `tangent1`/`tangent2` are the two friction directions.
     struct ContactImpulseCache {
         int count = 0;
         Real normal[kMaxContactPoints]{};
+        Real tangent1[kMaxContactPoints]{};
+        Real tangent2[kMaxContactPoints]{};
     };
 
     std::deque<RigidBody> bodies_;

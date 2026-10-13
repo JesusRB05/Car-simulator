@@ -85,8 +85,17 @@ void solveRow(ConstraintRow& row) {
         cdot += glm::dot(row.angularB, row.bodyB->angularVelocity);
     }
 
+    Real lower = row.lower;
+    Real upper = row.upper;
+    if (row.frictionNormal != nullptr) {
+        // Coulomb cone: the tangential impulse may not exceed mu * lambdaN.
+        const Real limit = row.friction * std::abs(*row.frictionNormal);
+        lower = -limit;
+        upper = limit;
+    }
+
     const Real delta = -row.effectiveMass * (cdot - row.velocityTarget + row.bias + row.softness * row.impulse);
-    const Real newImpulse = std::clamp(row.impulse + delta, row.lower, row.upper);
+    const Real newImpulse = std::clamp(row.impulse + delta, lower, upper);
     const Real applied = newImpulse - row.impulse;
     row.impulse = newImpulse;
     applyRowImpulse(row, applied);

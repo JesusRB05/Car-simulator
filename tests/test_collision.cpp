@@ -313,6 +313,89 @@ TEST_CASE("contact response is deterministic across repeated runs and snapshots"
     CHECK(restored.stateHash() == first.stateHash());
 }
 
+TEST_CASE("Coulomb friction rolls a sliding sphere to 5/7 of its speed") {
+    const auto finalSpeed = [](Real friction) {
+        PhysicsWorld world;
+        RigidBody& ground = world.createBody();
+        ground.shape = Shape::box(Vec3(10.0, 0.5, 10.0));
+        ground.setType(BodyType::Static);
+        ground.setMass(0.0);
+        ground.position = Vec3(0.0, -0.5, 0.0);
+        ground.friction = friction;
+        ground.collisionEnabled = true;
+        ground.updateCache();
+
+        RigidBody& sphere = world.createBody();
+        sphere.shape = Shape::sphere(0.5);
+        sphere.setMass(1.0);
+        sphere.setShapeInertia();
+        sphere.position = Vec3(0.0, 0.5, 0.0);
+        sphere.linearVelocity = Vec3(2.0, 0.0, 0.0);
+        sphere.friction = friction;
+        sphere.collisionEnabled = true;
+        sphere.updateCache();
+
+        for (int i = 0; i < 500; ++i) {
+            world.step(1.0 / 1000.0);
+        }
+        return world.body(1).linearVelocity.x;
+    };
+
+    const Real sliding = finalSpeed(0.0);
+    const Real rolling = finalSpeed(0.6);
+    MESSAGE("sphere sliding speed with friction = " << rolling << " (analytic 5/7 * 2 = " << 10.0 / 7.0
+                                                    << "), without friction = " << sliding);
+    // A solid sphere that starts sliding and rolls without slipping: v -> 5/7 v0.
+    CHECK(rolling == doctest::Approx(10.0 / 7.0).epsilon(0.08));
+    // With no friction it keeps sliding at its original speed.
+    CHECK(sliding == doctest::Approx(2.0).epsilon(0.02));
+}
+
+TEST_CASE("restitution makes a dropped sphere bounce") {
+    const auto apexAfterBounce = [](Real restitution) {
+        PhysicsWorld world;
+        RigidBody& ground = world.createBody();
+        ground.shape = Shape::box(Vec3(10.0, 0.5, 10.0));
+        ground.setType(BodyType::Static);
+        ground.setMass(0.0);
+        ground.position = Vec3(0.0, -0.5, 0.0);
+        ground.restitution = restitution;
+        ground.collisionEnabled = true;
+        ground.updateCache();
+
+        RigidBody& sphere = world.createBody();
+        sphere.shape = Shape::sphere(0.5);
+        sphere.setMass(1.0);
+        sphere.setShapeInertia();
+        sphere.position = Vec3(0.0, 2.0, 0.0);
+        sphere.collisionEnabled = true;
+        sphere.updateCache();
+
+        Real apex = 0.0;
+        bool touched = false;
+        for (int i = 0; i < 3000; ++i) {
+            world.step(1.0 / 1000.0);
+            if (!touched && world.body(1).position.y < 0.55) {
+                touched = true;
+            }
+            if (touched) {
+                apex = std::max(apex, world.body(1).position.y);
+            }
+        }
+        return apex;
+    };
+
+    const Real drop = 2.0 - 0.5; // centre travel from the start down to contact
+    const Real bouncing = apexAfterBounce(0.8);
+    const Real dead = apexAfterBounce(0.0);
+    MESSAGE("sphere apex after bounce: e=0.8 -> " << bouncing << " (analytic " << 0.5 + 0.64 * drop << "), e=0 -> "
+                                                  << dead);
+    // e = 0.8 rebounds to e^2 = 0.64 of the drop height above the contact point.
+    CHECK(bouncing == doctest::Approx(0.5 + 0.64 * drop).epsilon(0.15));
+    // e = 0 does not rebound above the resting height (plus the contact slop).
+    CHECK(dead < 0.6);
+}
+
 TEST_CASE("detectCollisions returns deterministic ordered manifolds") {
     PhysicsWorld world;
     RigidBody& ground = world.createBody();

@@ -78,6 +78,8 @@ public:
     // --- Material ---------------------------------------------------------
     Real linearDamping = 0.0; // per-second exponential decay rate
     Real angularDamping = 0.0;
+    Real friction = 0.6;    // Coulomb coefficient, combined as sqrt(frictionA * frictionB)
+    Real restitution = 0.0; // bounciness in [0, 1], combined as max(restitutionA, restitutionB)
 
     // --- Cached world-space values (refreshed by updateCache) -------------
     Mat3 rotationCache{1.0};

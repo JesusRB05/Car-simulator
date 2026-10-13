@@ -41,6 +41,14 @@ struct ConstraintRow {
     Real positionError = 0.0; // scalar position error C at prepare() time
     bool project = false;     // rigid row: corrected by the position projection pass
 
+    // Coulomb friction row: when `friction` is positive and `frictionNormal`
+    // points at the paired normal row's accumulated impulse, solveRow() clamps
+    // this row to [-friction * |*frictionNormal|, +friction * |*frictionNormal|]
+    // instead of [lower, upper]. `frictionNormal` must outlive the row and be
+    // stable (it points into the owning constraint's row array).
+    Real friction = 0.0;
+    const Real* frictionNormal = nullptr;
+
     bool isBilateral() const { return lower == -kInfinity && upper == kInfinity; }
 };
 

@@ -210,28 +210,48 @@ Real maxPositionError(const std::vector<ConstraintRow*>& rows) {
     return maxError;
 }
 
+// Below this approach speed (m/s) restitution is dropped, so a resting contact
+// does not keep bouncing on the solver's small residual velocity.
+constexpr Real kRestitutionVelocityThreshold = 1e-2;
+
+// Deterministic orthonormal basis {t1, t2} perpendicular to the unit vector `n`
+// (Duff et al., branchless double-precision variant). Used to build the two
+// friction directions of a contact so they are the same on every platform.
+void orthonormalBasis(const Vec3& n, Vec3& t1, Vec3& t2) {
+    const Real sign = std::copysign(1.0, n.z);
+    const Real a = -1.0 / (sign + n.z);
+    const Real b = n.x * n.y * a;
+    t1 = Vec3(1.0 + sign * n.x * n.x * a, sign * b, -sign * n.x);
+    t2 = Vec3(b, sign + n.y * n.y * a, -n.y);
+}
+
 // A transient constraint built from a contact manifold. Each contact point
-// becomes a single one-sided row: the relative velocity along the contact normal
-// may not become negative (the shapes may not approach). The impulse is clamped
-// to [0, +inf) so the response only pushes apart, and a Baumgarte term removes
-// penetration at the velocity level. The accumulated normal impulses are kept in
-// the world between steps for warm starting.
+// becomes three rows: one one-sided normal row (the shapes may not approach, the
+// impulse is clamped to [0, +inf) and a Baumgarte term removes penetration at
+// the velocity level) plus two bilateral friction rows clamped to the Coulomb
+// cone +/-mu*lambdaN. Restitution raises the normal row's velocity target by the
+// contact's inbound speed. The accumulated normal and tangential impulses are
+// kept in the world between steps for warm starting.
 class ContactConstraint : public Constraint {
 public:
+    static constexpr int kRowsPerPoint = 3;
+
     void prepare(Real) override {}
     const char* typeName() const override { return "contact"; }
 
     void configure(RigidBody* a, RigidBody* b, const ContactManifold& manifold, Real baumgarte, Real slop, Real dt) {
         bodyA = a;
         bodyB = b;
-        rows.assign(static_cast<std::size_t>(manifold.count), ConstraintRow{});
+        const Real friction = std::sqrt(std::max(0.0, a->friction) * std::max(0.0, b->friction));
+        const Real restitution = std::max(a->restitution, b->restitution);
+        rows.assign(static_cast<std::size_t>(manifold.count) * kRowsPerPoint, ConstraintRow{});
         for (int p = 0; p < manifold.count; ++p) {
             const ContactPoint& point = manifold.points[p];
             const Vec3 normal = point.normal;
             const Vec3 offsetA = point.position - a->position;
             const Vec3 offsetB = point.position - b->position;
 
-            ConstraintRow& row = rows[static_cast<std::size_t>(p)];
+            ConstraintRow& row = rows[static_cast<std::size_t>(p) * kRowsPerPoint];
             row.bodyA = a;
             row.bodyB = b;
             // Cdot = dot(normal, (vB + wB x rB) - (vA + wA x rA)).
@@ -245,25 +265,65 @@ public:
             row.lower = 0.0;
             row.upper = kInfinity;
 
+            // Restitution: drive the post-impact separating speed to -e * vn,
+            // where vn is the (negative) inbound normal velocity, but ignore it
+            // for slow contacts so resting stacks do not jitter.
+            if (restitution > 0.0) {
+                const Real approach = rowVelocity(row);
+                if (approach < -kRestitutionVelocityThreshold) {
+                    row.velocityTarget = -restitution * approach;
+                }
+            }
+
             const Real penetration = std::max(0.0, point.penetration - slop);
             row.bias = dt > 0.0 ? -baumgarte * penetration / dt : 0.0;
 
             const Real mass = constraintMass(row);
             row.effectiveMass = mass > 0.0 ? 1.0 / mass : 0.0;
+
+            Vec3 tangent1{0.0};
+            Vec3 tangent2{0.0};
+            orthonormalBasis(normal, tangent1, tangent2);
+            for (int t = 0; t < 2; ++t) {
+                const Vec3 tangent = t == 0 ? tangent1 : tangent2;
+                ConstraintRow& frictionRow = rows[static_cast<std::size_t>(p) * kRowsPerPoint + 1 + t];
+                frictionRow.bodyA = a;
+                frictionRow.bodyB = b;
+                frictionRow.linearA = -tangent;
+                frictionRow.angularA = -glm::cross(offsetA, tangent);
+                frictionRow.linearB = tangent;
+                frictionRow.angularB = glm::cross(offsetB, tangent);
+                frictionRow.velocityTarget = 0.0;
+                frictionRow.softness = 0.0;
+                frictionRow.project = false;
+                // Placeholder bounds keep the row out of the bilateral block;
+                // solveRow() replaces them with the Coulomb cone each iteration.
+                frictionRow.lower = -1.0;
+                frictionRow.upper = 1.0;
+                frictionRow.friction = friction;
+                frictionRow.frictionNormal = &row.impulse;
+                const Real frictionMass = constraintMass(frictionRow);
+                frictionRow.effectiveMass = frictionMass > 0.0 ? 1.0 / frictionMass : 0.0;
+            }
         }
     }
 
-    void setImpulses(const Real* normal, int count) {
-        const int limit = std::min(count, static_cast<int>(rows.size()));
+    void setImpulses(const Real* normal, const Real* tangent1, const Real* tangent2, int count) {
+        const int limit = std::min(count, static_cast<int>(rows.size()) / kRowsPerPoint);
         for (int p = 0; p < limit; ++p) {
-            rows[static_cast<std::size_t>(p)].impulse = normal[p];
+            ConstraintRow& row = rows[static_cast<std::size_t>(p) * kRowsPerPoint];
+            row.impulse = normal[p];
+            rows[static_cast<std::size_t>(p) * kRowsPerPoint + 1].impulse = tangent1[p];
+            rows[static_cast<std::size_t>(p) * kRowsPerPoint + 2].impulse = tangent2[p];
         }
     }
 
-    void getImpulses(Real* normal, int& count) const {
-        count = static_cast<int>(rows.size());
+    void getImpulses(Real* normal, Real* tangent1, Real* tangent2, int& count) const {
+        count = static_cast<int>(rows.size()) / kRowsPerPoint;
         for (int p = 0; p < count; ++p) {
-            normal[p] = rows[static_cast<std::size_t>(p)].impulse;
+            normal[p] = rows[static_cast<std::size_t>(p) * kRowsPerPoint].impulse;
+            tangent1[p] = rows[static_cast<std::size_t>(p) * kRowsPerPoint + 1].impulse;
+            tangent2[p] = rows[static_cast<std::size_t>(p) * kRowsPerPoint + 2].impulse;
         }
     }
 };
@@ -361,7 +421,8 @@ void PhysicsWorld::buildContacts(Real dt) {
             (static_cast<std::uint64_t>(manifold.bodyA) << 32) | static_cast<std::uint64_t>(manifold.bodyB);
         const auto found = contactCache_.find(key);
         if (found != contactCache_.end() && found->second.count == manifold.count) {
-            constraint->setImpulses(found->second.normal, manifold.count);
+            constraint->setImpulses(found->second.normal, found->second.tangent1, found->second.tangent2,
+                                    manifold.count);
         }
         contacts_.push_back(std::move(constraint));
         contactKeys_.push_back(key);
@@ -372,7 +433,8 @@ void PhysicsWorld::storeContactImpulses() {
     contactCache_.clear();
     for (std::size_t i = 0; i < contacts_.size(); ++i) {
         ContactImpulseCache cache;
-        static_cast<ContactConstraint*>(contacts_[i].get())->getImpulses(cache.normal, cache.count);
+        static_cast<ContactConstraint*>(contacts_[i].get())
+            ->getImpulses(cache.normal, cache.tangent1, cache.tangent2, cache.count);
         contactCache_.emplace(contactKeys_[i], cache);
     }
 }
@@ -588,6 +650,20 @@ WorldSnapshot PhysicsWorld::saveSnapshot() const {
         }
         snapshot.impulses.push_back(std::move(impulses));
     }
+    snapshot.contacts.reserve(contactCache_.size());
+    for (const auto& entry : contactCache_) {
+        ContactImpulseState state;
+        state.key = entry.first;
+        state.count = entry.second.count;
+        for (int i = 0; i < state.count; ++i) {
+            state.normal[i] = entry.second.normal[i];
+            state.tangent1[i] = entry.second.tangent1[i];
+            state.tangent2[i] = entry.second.tangent2[i];
+        }
+        snapshot.contacts.push_back(state);
+    }
+    std::sort(snapshot.contacts.begin(), snapshot.contacts.end(),
+              [](const ContactImpulseState& lhs, const ContactImpulseState& rhs) { return lhs.key < rhs.key; });
     return snapshot;
 }
 
@@ -610,6 +686,19 @@ void PhysicsWorld::restoreSnapshot(const WorldSnapshot& snapshot) {
             constraint.rows[j].impulse = impulses[j];
         }
     }
+    contactCache_.clear();
+    for (const ContactImpulseState& state : snapshot.contacts) {
+        ContactImpulseCache cache;
+        cache.count = state.count;
+        for (int i = 0; i < state.count; ++i) {
+            cache.normal[i] = state.normal[i];
+            cache.tangent1[i] = state.tangent1[i];
+            cache.tangent2[i] = state.tangent2[i];
+        }
+        contactCache_.emplace(state.key, cache);
+    }
+    contacts_.clear();
+    contactKeys_.clear();
     time_ = snapshot.time;
     accumulator_ = 0.0;
 }
