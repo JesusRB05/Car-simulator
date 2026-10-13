@@ -12,6 +12,7 @@ add_executable(sim_tests
     test_drive.cpp
     # The raycast-car drive scene lives in the app; its simulation half is
     # render-free and tested directly.
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/RaycastCar.cpp)
 

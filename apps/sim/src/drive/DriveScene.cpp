@@ -76,6 +76,29 @@ struct MeshBuilder {
     }
 };
 
+// Appends a transformed copy of `source` (e.g. the unit cube or cylinder) to a
+// builder, so many obstacles share one upload. The normal matrix handles the
+// non-uniform scaling the obstacle boxes use.
+void appendMesh(MeshBuilder& out, const render::MeshData& source, const glm::mat4& transform) {
+    const glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(transform)));
+    const auto base = static_cast<std::uint32_t>(out.vertices.size());
+    for (const render::Vertex& vertex : source.vertices) {
+        render::Vertex transformed = vertex;
+        transformed.position = glm::vec3(transform * glm::vec4(vertex.position, 1.0f));
+        transformed.normal = glm::normalize(normalMatrix * vertex.normal);
+        out.vertices.push_back(transformed);
+    }
+    for (const std::uint32_t index : source.indices) {
+        out.indices.push_back(base + index);
+    }
+}
+
+glm::vec4 unpackColor(std::uint32_t rgba) {
+    return glm::vec4(static_cast<float>(rgba & 0xFFu) / 255.0f, static_cast<float>((rgba >> 8) & 0xFFu) / 255.0f,
+                     static_cast<float>((rgba >> 16) & 0xFFu) / 255.0f,
+                     static_cast<float>((rgba >> 24) & 0xFFu) / 255.0f);
+}
+
 Vec3 onTerrain(const Vec3& p, double raise) {
     return Vec3(p.x, Track::terrainHeight(p.x, p.z) + raise, p.z);
 }
@@ -111,6 +134,7 @@ DriveScene::DriveScene(rhi::Device& device) {
     world_.fixedStep = 1.0 / 1000.0;
     car_ = &RaycastCar::spawn(world_, CarParams{}, track_);
     buildMeshes(device);
+    buildObstacles(device);
     reset();
 }
 
@@ -308,6 +332,48 @@ void DriveScene::buildMeshes(rhi::Device& device) {
     }
 }
 
+void DriveScene::buildObstacles(rhi::Device& device) {
+    obstacles_ = buildObstacleLayout(track_);
+    addObstaclesToWorld(world_, obstacles_);
+
+    const render::MeshData unitCube = render::cubeData();
+    const render::MeshData unitCylinder = render::cylinderData();
+
+    // Merge into one mesh per colour: a barrier wall around a 1.2 km circuit is
+    // hundreds of blocks, and one draw call per colour keeps it cheap.
+    std::vector<std::uint32_t> colors;
+    std::vector<MeshBuilder> builders;
+    const auto builderFor = [&](std::uint32_t rgba) -> MeshBuilder& {
+        for (std::size_t i = 0; i < colors.size(); ++i) {
+            if (colors[i] == rgba) {
+                return builders[i];
+            }
+        }
+        colors.push_back(rgba);
+        builders.emplace_back();
+        return builders.back();
+    };
+
+    for (const Obstacle& obstacle : obstacles_) {
+        const glm::mat4 frame = glm::translate(glm::mat4(1.0f), toVec3(obstacle.position)) *
+                                glm::mat4_cast(glm::quat(obstacle.orientation));
+        MeshBuilder& builder = builderFor(obstacle.rgba);
+        if (obstacle.shape == physics::ShapeType::Cylinder) {
+            const glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(static_cast<float>(obstacle.radius),
+                                                                          static_cast<float>(obstacle.halfHeight),
+                                                                          static_cast<float>(obstacle.radius)));
+            appendMesh(builder, unitCylinder, frame * scale);
+        } else {
+            appendMesh(builder, unitCube, frame * glm::scale(glm::mat4(1.0f), toVec3(2.0 * obstacle.halfExtents)));
+        }
+    }
+
+    obstacleBatches_.clear();
+    for (std::size_t i = 0; i < builders.size(); ++i) {
+        obstacleBatches_.push_back(ObstacleBatch{builders[i].build(device), unpackColor(colors[i])});
+    }
+}
+
 void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelta) {
     scene.clear();
     setDefaultLight(scene);
@@ -317,6 +383,11 @@ void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelt
     scene.add(kerbRed_, glm::mat4(1.0f), kKerbRed);
     scene.add(kerbWhite_, glm::mat4(1.0f), kKerbWhite);
     scene.add(startLine_, glm::mat4(1.0f), kLineWhite);
+
+    // Static collision scenery (barrier walls + the run-off test yard).
+    for (const ObstacleBatch& batch : obstacleBatches_) {
+        scene.add(batch.mesh, glm::mat4(1.0f), batch.color);
+    }
 
     // Start gantry posts, so the line reads from a distance.
     const TrackSample& start = track_.samples()[track_.startIndex()];

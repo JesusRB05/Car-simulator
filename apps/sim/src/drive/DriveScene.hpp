@@ -4,9 +4,11 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <glm/glm.hpp>
 
+#include "drive/Obstacles.hpp"
 #include "drive/RaycastCar.hpp"
 #include "drive/Track.hpp"
 #include "physics/PhysicsWorld.hpp"
@@ -86,13 +88,24 @@ public:
 
 private:
     void buildMeshes(rhi::Device& device);
+    void buildObstacles(rhi::Device& device);
     void updateLapTimer();
     void updateCamera(float aspect, double frameDelta, render::Scene& scene);
+
+    // A merged obstacle mesh plus the colour it is drawn with. The hundreds of
+    // static blocks collapse into one batch per colour, like the kerbs.
+    struct ObstacleBatch {
+        std::shared_ptr<render::Mesh> mesh;
+        glm::vec4 color{1.0f};
+    };
 
     Track track_;
     physics::PhysicsWorld world_;
     RaycastCar* car_ = nullptr;
     double remainder_ = 0.0;
+
+    std::vector<Obstacle> obstacles_;
+    std::vector<ObstacleBatch> obstacleBatches_;
 
     std::shared_ptr<render::Mesh> cube_;
     std::shared_ptr<render::Mesh> cylinder_;

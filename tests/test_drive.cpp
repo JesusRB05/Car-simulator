@@ -5,12 +5,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <vector>
 
+#include "drive/Obstacles.hpp"
 #include "drive/RaycastCar.hpp"
 #include "drive/Track.hpp"
 #include "physics/PhysicsWorld.hpp"
 
 using namespace sim::app::drive;
+using namespace sim::physics;
 using sim::physics::PhysicsWorld;
 
 namespace {
@@ -145,6 +148,57 @@ TEST_CASE("drive: full throttle in a straight line accelerates towards -Z") {
     stepFor(world, 6.0);
     CHECK(car.gear() == -1);
     CHECK(car.forwardSpeed() < 0.0); // reversing
+}
+
+TEST_CASE("drive: the car is stopped by a static barrier") {
+    PhysicsWorld world;
+    const FlatGround ground(0.0);
+    RaycastCar& car = RaycastCar::spawn(world, CarParams{}, ground);
+    car.reset(Vec3(0.0), 0.0); // facing -Z
+
+    // A wide barrier 30 m ahead, tall enough that the chassis box (0.14..0.84 m)
+    // overlaps it. Both bodies opt into collision.
+    RigidBody& barrier = world.createBody();
+    barrier.name = "barrier";
+    barrier.setType(BodyType::Static);
+    barrier.shape = Shape::box(Vec3(3.0, 0.5, 0.25));
+    barrier.position = Vec3(0.0, 0.5, -30.0);
+    barrier.collisionEnabled = true;
+    barrier.setMass(0.0);
+    barrier.updateCache();
+
+    DriverInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+    stepFor(world, 6.0);
+
+    REQUIRE(car.chassis().isFiniteState());
+    // The barrier's near face is at z = -29.75 and the nose is 2.15 m ahead of
+    // the CoM, so the CoM must stay well short of the barrier instead of
+    // tunnelling through it.
+    CHECK(car.chassis().position.z > -28.0);
+    CHECK(car.forwardSpeed() < 2.0);
+}
+
+TEST_CASE("drive: the obstacle layout lines the circuit and keeps the asphalt clear") {
+    const Track track;
+    const std::vector<Obstacle> obstacles = buildObstacleLayout(track);
+    REQUIRE(obstacles.size() > 40);
+
+    const double clear = track.halfWidth() + track.kerbWidth();
+    bool sawBarrier = false;
+    bool sawYard = false;
+    for (const Obstacle& obstacle : obstacles) {
+        const Track::Projection projection = track.project(obstacle.position.x, obstacle.position.z);
+        if (projection.found) {
+            // No obstacle sits on the asphalt + kerb band around the centreline.
+            CHECK(std::abs(projection.lateral) > clear);
+        }
+        sawBarrier = sawBarrier || obstacle.kind == "barrier";
+        sawYard = sawYard || obstacle.kind == "cone";
+    }
+    CHECK(sawBarrier);
+    CHECK(sawYard);
 }
 
 TEST_CASE("drive: two identical scripted runs produce the same state hash") {

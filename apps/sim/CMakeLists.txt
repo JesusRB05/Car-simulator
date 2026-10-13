@@ -10,6 +10,7 @@ add_executable(sim
     src/Scenes.cpp
     src/SimUi.cpp
     src/drive/DriveScene.cpp
+    src/drive/Obstacles.cpp
     src/drive/RaycastCar.cpp
     src/drive/Track.cpp)
 

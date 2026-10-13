@@ -82,6 +82,9 @@ RaycastCar& RaycastCar::spawn(physics::PhysicsWorld& world, const CarParams& par
     chassis.name = "car";
     chassis.setType(physics::BodyType::Dynamic);
     chassis.shape = physics::Shape::box(params.bodyHalfExtents);
+    // The chassis collides with static scenery (barriers, tyres, blocks) as a
+    // box; the four wheels remain raycasts against the ground.
+    chassis.collisionEnabled = true;
     chassis.setMass(params.mass);
     chassis.setInertiaPrincipal(params.inertia);
     chassis.updateCache();
