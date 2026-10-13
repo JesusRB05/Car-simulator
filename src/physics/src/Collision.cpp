@@ -1,0 +1,545 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 The Car Simulator contributors
+#include "physics/Collision.hpp"
+
+#include <algorithm>
+#include <cmath>
+
+#include "physics/PhysicsWorld.hpp"
+
+namespace sim::physics {
+namespace {
+
+// Overlaps within this band are treated as equal so that a redundant edge axis
+// (for example A.x cross B.z == -Y for axis-aligned boxes, which duplicates the
+// Y face axis) never wins the SAT race against the face it mirrors.
+constexpr Real kOverlapTie = 1e-9;
+
+// Orientable box in world space, used by the OBB narrowphase.
+struct Obb {
+    Vec3 center{0.0};
+    Vec3 axis[3]{Vec3(1.0, 0.0, 0.0), Vec3(0.0, 1.0, 0.0), Vec3(0.0, 0.0, 1.0)};
+    Vec3 halfExtents{0.5, 0.5, 0.5};
+};
+
+Obb makeObb(const RigidBody& body) {
+    Obb obb;
+    obb.center = body.position;
+    obb.halfExtents = body.shape.halfExtents;
+    obb.axis[0] = body.localToWorldDirection(Vec3(1.0, 0.0, 0.0));
+    obb.axis[1] = body.localToWorldDirection(Vec3(0.0, 1.0, 0.0));
+    obb.axis[2] = body.localToWorldDirection(Vec3(0.0, 0.0, 1.0));
+    return obb;
+}
+
+Real component(const Vec3& v, int i) {
+    return i == 0 ? v.x : (i == 1 ? v.y : v.z);
+}
+
+Vec3 supportPoint(const Obb& obb, const Vec3& direction) {
+    Vec3 point = obb.center;
+    for (int i = 0; i < 3; ++i) {
+        const Real sign = glm::dot(direction, obb.axis[i]) >= 0.0 ? 1.0 : -1.0;
+        point += obb.axis[i] * (sign * component(obb.halfExtents, i));
+    }
+    return point;
+}
+
+int sphereSphere(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+    const Vec3 delta = b.position - a.position;
+    const Real distanceSquared = glm::dot(delta, delta);
+    const Real sumRadii = a.shape.radius + b.shape.radius;
+    if (distanceSquared > sumRadii * sumRadii) {
+        return 0;
+    }
+    const Real distance = std::sqrt(distanceSquared);
+    const Vec3 normal = distance > 1e-12 ? delta / distance : Vec3(0.0, 1.0, 0.0);
+    const Real penetration = sumRadii - distance;
+    out[0].normal = normal;
+    out[0].penetration = penetration;
+    out[0].position = a.position + normal * (a.shape.radius - 0.5 * penetration);
+    return 1;
+}
+
+// Sphere (a) against box (b). The returned normal points from the sphere to the
+// box.
+int sphereBox(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+    const Vec3 halfExtents = b.shape.halfExtents;
+    const Vec3 local = b.worldToLocalPoint(a.position);
+    const Vec3 clamped = glm::clamp(local, -halfExtents, halfExtents);
+    const Vec3 delta = local - clamped; // box surface -> sphere centre
+    const Real distanceSquared = glm::dot(delta, delta);
+
+    Vec3 normalLocal; // box -> sphere
+    Vec3 pointLocal;
+    Real penetration;
+    if (distanceSquared > 1e-24) {
+        const Real distance = std::sqrt(distanceSquared);
+        if (distance > a.shape.radius) {
+            return 0;
+        }
+        normalLocal = delta / distance;
+        pointLocal = clamped;
+        penetration = a.shape.radius - distance;
+    } else {
+        // Sphere centre inside the box: push out along the axis of least overlap.
+        int axis = 0;
+        Real least = halfExtents.x - std::abs(local.x);
+        for (int i = 1; i < 3; ++i) {
+            const Real overlap = component(halfExtents, i) - std::abs(component(local, i));
+            if (overlap < least) {
+                least = overlap;
+                axis = i;
+            }
+        }
+        const Real sign = component(local, axis) >= 0.0 ? 1.0 : -1.0;
+        normalLocal = Vec3(0.0);
+        normalLocal[axis] = sign;
+        pointLocal = local;
+        pointLocal[axis] = sign * component(halfExtents, axis);
+        penetration = a.shape.radius + least;
+    }
+
+    out[0].normal = -b.localToWorldDirection(normalLocal);
+    out[0].position = b.localToWorldPoint(pointLocal);
+    out[0].penetration = penetration;
+    return 1;
+}
+
+int sphereCylinder(const RigidBody& a, const RigidBody& b, ContactPoint* out) {
+    const Real radius = a.shape.radius;
+    const Real cylinderRadius = b.shape.radius;
+    const Real halfHeight = b.shape.halfHeight;
+
+    const Vec3 local = b.worldToLocalPoint(a.position);
+    const Real radialLength = std::sqrt(local.x * local.x + local.z * local.z);
+    const Real axial = std::clamp(local.y, -halfHeight, halfHeight);
+
+    Vec3 closestLocal;
+    if (radialLength > 1e-12) {
+        const Real clampedRadius = std::min(radialLength, cylinderRadius);
+        closestLocal = Vec3(local.x * (clampedRadius / radialLength), axial, local.z * (clampedRadius / radialLength));
+    } else {
+        closestLocal = Vec3(0.0, axial, 0.0);
+    }
+
+    const Vec3 delta = local - closestLocal; // cylinder surface -> sphere centre
+    const Real distance = glm::length(delta);
+
+    Vec3 normalLocal; // cylinder -> sphere
+    Real penetration;
+    if (distance > 1e-12) {
+        if (distance > radius) {
+            return 0;
+        }
+        normalLocal = delta / distance;
+        penetration = radius - distance;
+    } else {
+        // Sphere centre inside the solid cylinder: least of radial and cap gaps.
+        const Real radialPenetration = cylinderRadius - radialLength;
+        const Real capPenetration = halfHeight - std::abs(local.y);
+        if (radialPenetration <= capPenetration) {
+            const Vec3 radial(local.x, 0.0, local.z);
+            normalLocal = radialLength > 1e-12 ? radial / radialLength : Vec3(1.0, 0.0, 0.0);
+            penetration = radius + radialPenetration;
+        } else {
+            normalLocal = Vec3(0.0, local.y >= 0.0 ? 1.0 : -1.0, 0.0);
+            penetration = radius + capPenetration;
+        }
+        closestLocal = local;
+    }
+
+    out[0].normal = -b.localToWorldDirection(normalLocal);
+    out[0].position = b.localToWorldPoint(closestLocal);
+    out[0].penetration = penetration;
+    return 1;
+}
+
+// Clips a convex polygon (given as `count` points) against the half-space
+// dot(point - planePoint, inwardNormal) <= 0, writing the result into `out`.
+int clipPolygon(const Vec3* in, int count, const Vec3& planePoint, const Vec3& inwardNormal, Vec3* out) {
+    if (count == 0) {
+        return 0;
+    }
+    int outCount = 0;
+    for (int i = 0; i < count; ++i) {
+        const Vec3& current = in[i];
+        const Vec3& next = in[(i + 1) % count];
+        const Real currentDistance = glm::dot(current - planePoint, inwardNormal);
+        const Real nextDistance = glm::dot(next - planePoint, inwardNormal);
+        const bool currentInside = currentDistance <= 0.0;
+        const bool nextInside = nextDistance <= 0.0;
+        if (currentInside) {
+            out[outCount++] = current;
+        }
+        if (currentInside != nextInside) {
+            const Real t = currentDistance / (currentDistance - nextDistance);
+            out[outCount++] = current + (next - current) * t;
+        }
+    }
+    return outCount;
+}
+
+// Generates face contacts for two overlapping OBBs given the reference face
+// axis on `ref`. `normal` is the unit axis pointing from `ref` to `inc`.
+int faceContacts(const Obb& ref, const Obb& inc, int refAxis, const Vec3& normal, ContactPoint* out, int maxPoints) {
+    const Vec3 faceCenter = ref.center + normal * component(ref.halfExtents, refAxis);
+
+    // Incident face: the face of `inc` whose normal is most anti-parallel to the
+    // reference normal.
+    int incidentAxis = 0;
+    Real bestAlignment = std::abs(glm::dot(normal, inc.axis[0]));
+    for (int i = 1; i < 3; ++i) {
+        const Real alignment = std::abs(glm::dot(normal, inc.axis[i]));
+        if (alignment > bestAlignment) {
+            bestAlignment = alignment;
+            incidentAxis = i;
+        }
+    }
+    const Real alignment = glm::dot(normal, inc.axis[incidentAxis]);
+    const Vec3 incidentNormal = inc.axis[incidentAxis] * (alignment > 0.0 ? -1.0 : 1.0);
+    const Vec3 incidentCenter = inc.center + incidentNormal * component(inc.halfExtents, incidentAxis);
+
+    const int u = (incidentAxis + 1) % 3;
+    const int v = (incidentAxis + 2) % 3;
+    const Vec3 uAxis = inc.axis[u];
+    const Vec3 vAxis = inc.axis[v];
+    const Real uHalf = component(inc.halfExtents, u);
+    const Real vHalf = component(inc.halfExtents, v);
+
+    Vec3 polygon[8] = {
+        incidentCenter - uAxis * uHalf - vAxis * vHalf,
+        incidentCenter + uAxis * uHalf - vAxis * vHalf,
+        incidentCenter + uAxis * uHalf + vAxis * vHalf,
+        incidentCenter - uAxis * uHalf + vAxis * vHalf,
+    };
+    int pointCount = 4;
+
+    // Clip against the four side planes of the reference face.
+    Vec3 buffer[8];
+    const int sideAxes[2] = {(refAxis + 1) % 3, (refAxis + 2) % 3};
+    for (const int side : sideAxes) {
+        const Vec3 axis = ref.axis[side];
+        const Real half = component(ref.halfExtents, side);
+        pointCount = clipPolygon(polygon, pointCount, faceCenter + axis * half, axis, buffer);
+        std::copy(buffer, buffer + pointCount, polygon);
+        pointCount = clipPolygon(polygon, pointCount, faceCenter - axis * half, -axis, buffer);
+        std::copy(buffer, buffer + pointCount, polygon);
+        if (pointCount == 0) {
+            break;
+        }
+    }
+
+    int written = 0;
+    for (int i = 0; i < pointCount && written < maxPoints; ++i) {
+        const Real separation = glm::dot(polygon[i] - faceCenter, normal);
+        if (separation > 0.0) {
+            continue;
+        }
+        out[written].position = polygon[i];
+        out[written].normal = normal;
+        out[written].penetration = -separation;
+        ++written;
+    }
+
+    // Degenerate clip (numerical grazing contact): fall back to the deepest
+    // support point so the pair still reports a contact.
+    if (written == 0) {
+        const Vec3 deepest = supportPoint(inc, -normal);
+        const Real separation = glm::dot(deepest - faceCenter, normal);
+        out[0].position = deepest;
+        out[0].normal = normal;
+        out[0].penetration = std::max(0.0, -separation);
+        written = 1;
+    }
+    return written;
+}
+
+void closestPointsOnSegments(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2, Vec3& c1, Vec3& c2) {
+    const Vec3 d1 = q1 - p1;
+    const Vec3 d2 = q2 - p2;
+    const Vec3 r = p1 - p2;
+    const Real a = glm::dot(d1, d1);
+    const Real e = glm::dot(d2, d2);
+    const Real f = glm::dot(d2, r);
+    Real s = 0.0;
+    Real t = 0.0;
+    if (a <= 1e-24 && e <= 1e-24) {
+        c1 = p1;
+        c2 = p2;
+        return;
+    }
+    if (a <= 1e-24) {
+        t = std::clamp(f / e, 0.0, 1.0);
+    } else {
+        const Real c = glm::dot(d1, r);
+        if (e <= 1e-24) {
+            s = std::clamp(-c / a, 0.0, 1.0);
+        } else {
+            const Real b = glm::dot(d1, d2);
+            const Real denominator = a * e - b * b;
+            s = denominator > 1e-24 ? std::clamp((b * f - c * e) / denominator, 0.0, 1.0) : 0.0;
+            t = (b * s + f) / e;
+            if (t < 0.0) {
+                t = 0.0;
+                s = std::clamp(-c / a, 0.0, 1.0);
+            } else if (t > 1.0) {
+                t = 1.0;
+                s = std::clamp((b - c) / a, 0.0, 1.0);
+            }
+        }
+    }
+    c1 = p1 + d1 * s;
+    c2 = p2 + d2 * t;
+}
+
+int edgeContact(const Obb& a, const Obb& b, int axisA, int axisB, const Vec3& normal, ContactPoint* out) {
+    const int otherA[2] = {(axisA + 1) % 3, (axisA + 2) % 3};
+    const int otherB[2] = {(axisB + 1) % 3, (axisB + 2) % 3};
+
+    Vec3 p1 = a.center;
+    Vec3 p2 = b.center;
+    for (int i = 0; i < 2; ++i) {
+        const Vec3 axis = a.axis[otherA[i]];
+        const Real sign = glm::dot(b.center - a.center, axis) >= 0.0 ? 1.0 : -1.0;
+        p1 += axis * (sign * component(a.halfExtents, otherA[i]));
+    }
+    for (int i = 0; i < 2; ++i) {
+        const Vec3 axis = b.axis[otherB[i]];
+        const Real sign = glm::dot(a.center - b.center, axis) >= 0.0 ? 1.0 : -1.0;
+        p2 += axis * (sign * component(b.halfExtents, otherB[i]));
+    }
+    const Vec3 q1 = p1 + a.axis[axisA] * component(a.halfExtents, axisA);
+    const Vec3 r1 = p1 - a.axis[axisA] * component(a.halfExtents, axisA);
+    const Vec3 q2 = p2 + b.axis[axisB] * component(b.halfExtents, axisB);
+    const Vec3 r2 = p2 - b.axis[axisB] * component(b.halfExtents, axisB);
+
+    Vec3 c1;
+    Vec3 c2;
+    closestPointsOnSegments(q1, r1, q2, r2, c1, c2);
+
+    const Real projectedA = component(a.halfExtents, 0) * std::abs(glm::dot(normal, a.axis[0])) +
+                            component(a.halfExtents, 1) * std::abs(glm::dot(normal, a.axis[1])) +
+                            component(a.halfExtents, 2) * std::abs(glm::dot(normal, a.axis[2]));
+    const Real projectedB = component(b.halfExtents, 0) * std::abs(glm::dot(normal, b.axis[0])) +
+                            component(b.halfExtents, 1) * std::abs(glm::dot(normal, b.axis[1])) +
+                            component(b.halfExtents, 2) * std::abs(glm::dot(normal, b.axis[2]));
+    const Real separation = glm::dot(b.center - a.center, normal);
+    const Real depth = projectedA + projectedB - separation;
+
+    out[0].normal = normal;
+    out[0].position = 0.5 * (c1 + c2);
+    out[0].penetration = std::max(0.0, depth);
+    return 1;
+}
+
+int boxBox(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints) {
+    const Obb obbA = makeObb(a);
+    const Obb obbB = makeObb(b);
+    const Vec3 delta = obbB.center - obbA.center;
+
+    Real rotation[3][3];
+    Real absolute[3][3];
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            rotation[i][j] = glm::dot(obbA.axis[i], obbB.axis[j]);
+            absolute[i][j] = std::abs(rotation[i][j]) + 1e-12;
+        }
+    }
+
+    Real minimumOverlap = kInfinity;
+    int feature = -1; // 0..2: face of A, 3..5: face of B, 6..14: edge pair
+    int featureA = 0;
+    int featureB = 0;
+
+    // Faces of A.
+    for (int i = 0; i < 3; ++i) {
+        const Real projectedB = component(obbB.halfExtents, 0) * absolute[i][0] +
+                                component(obbB.halfExtents, 1) * absolute[i][1] +
+                                component(obbB.halfExtents, 2) * absolute[i][2];
+        const Real distance = std::abs(glm::dot(delta, obbA.axis[i]));
+        const Real overlap = component(obbA.halfExtents, i) + projectedB - distance;
+        if (overlap <= 0.0) {
+            return 0;
+        }
+        if (overlap < minimumOverlap - kOverlapTie) {
+            minimumOverlap = overlap;
+            feature = i;
+        }
+    }
+
+    // Faces of B.
+    for (int j = 0; j < 3; ++j) {
+        const Real projectedA = component(obbA.halfExtents, 0) * absolute[0][j] +
+                                component(obbA.halfExtents, 1) * absolute[1][j] +
+                                component(obbA.halfExtents, 2) * absolute[2][j];
+        const Real distance = std::abs(glm::dot(delta, obbB.axis[j]));
+        const Real overlap = projectedA + component(obbB.halfExtents, j) - distance;
+        if (overlap <= 0.0) {
+            return 0;
+        }
+        if (overlap < minimumOverlap - kOverlapTie) {
+            minimumOverlap = overlap;
+            feature = 3 + j;
+        }
+    }
+
+    // Edge-edge axes.
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            const Vec3 axis = glm::cross(obbA.axis[i], obbB.axis[j]);
+            const Real length = glm::length(axis);
+            if (length < 1e-9) {
+                continue;
+            }
+            const Vec3 unit = axis / length;
+            Real projectedA = 0.0;
+            Real projectedB = 0.0;
+            for (int k = 0; k < 3; ++k) {
+                projectedA += component(obbA.halfExtents, k) * std::abs(glm::dot(unit, obbA.axis[k]));
+                projectedB += component(obbB.halfExtents, k) * std::abs(glm::dot(unit, obbB.axis[k]));
+            }
+            const Real distance = std::abs(glm::dot(delta, unit));
+            const Real overlap = projectedA + projectedB - distance;
+            if (overlap <= 0.0) {
+                return 0;
+            }
+            if (overlap < minimumOverlap - kOverlapTie) {
+                minimumOverlap = overlap;
+                feature = 6 + i * 3 + j;
+                featureA = i;
+                featureB = j;
+            }
+        }
+    }
+
+    if (feature < 0) {
+        return 0;
+    }
+
+    if (feature < 3) {
+        Vec3 normal = obbA.axis[feature] * (glm::dot(delta, obbA.axis[feature]) >= 0.0 ? 1.0 : -1.0);
+        return faceContacts(obbA, obbB, feature, normal, out, maxPoints);
+    }
+    if (feature < 6) {
+        // Reference is B: the face normal must point from B towards A (the
+        // incident box); flip the reported normals so the manifold still points
+        // from A to B.
+        const int face = feature - 3;
+        const Vec3 refNormal = obbB.axis[face] * (glm::dot(-delta, obbB.axis[face]) >= 0.0 ? 1.0 : -1.0);
+        const int count = faceContacts(obbB, obbA, face, refNormal, out, maxPoints);
+        for (int i = 0; i < count; ++i) {
+            out[i].normal = -out[i].normal;
+        }
+        return count;
+    }
+
+    const Vec3 axis = glm::normalize(glm::cross(obbA.axis[featureA], obbB.axis[featureB]));
+    const Vec3 normal = axis * (glm::dot(delta, axis) >= 0.0 ? 1.0 : -1.0);
+    return edgeContact(obbA, obbB, featureA, featureB, normal, out);
+}
+
+} // namespace
+
+Aabb computeAabb(const RigidBody& body) {
+    switch (body.shape.type) {
+    case ShapeType::Sphere: {
+        const Vec3 radius(body.shape.radius);
+        return Aabb{body.position - radius, body.position + radius};
+    }
+    case ShapeType::Cylinder: {
+        const Vec3 radialX = glm::abs(body.localToWorldDirection(Vec3(1.0, 0.0, 0.0)));
+        const Vec3 radialZ = glm::abs(body.localToWorldDirection(Vec3(0.0, 0.0, 1.0)));
+        const Vec3 axial = glm::abs(body.localToWorldDirection(Vec3(0.0, 1.0, 0.0)));
+        const Vec3 extent = body.shape.radius * (radialX + radialZ) + body.shape.halfHeight * axial;
+        return Aabb{body.position - extent, body.position + extent};
+    }
+    case ShapeType::Box:
+    default: {
+        const Vec3 axisX = glm::abs(body.localToWorldDirection(Vec3(1.0, 0.0, 0.0)));
+        const Vec3 axisY = glm::abs(body.localToWorldDirection(Vec3(0.0, 1.0, 0.0)));
+        const Vec3 axisZ = glm::abs(body.localToWorldDirection(Vec3(0.0, 0.0, 1.0)));
+        const Vec3 extent =
+            body.shape.halfExtents.x * axisX + body.shape.halfExtents.y * axisY + body.shape.halfExtents.z * axisZ;
+        return Aabb{body.position - extent, body.position + extent};
+    }
+    }
+}
+
+int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPoints) {
+    if (maxPoints <= 0) {
+        return 0;
+    }
+    const ShapeType typeA = a.shape.type;
+    const ShapeType typeB = b.shape.type;
+
+    if (typeA == ShapeType::Sphere && typeB == ShapeType::Sphere) {
+        return sphereSphere(a, b, out);
+    }
+    if (typeA == ShapeType::Sphere && typeB == ShapeType::Box) {
+        return sphereBox(a, b, out);
+    }
+    if (typeA == ShapeType::Box && typeB == ShapeType::Sphere) {
+        const int count = sphereBox(b, a, out);
+        for (int i = 0; i < count; ++i) {
+            out[i].normal = -out[i].normal;
+        }
+        return count;
+    }
+    if (typeA == ShapeType::Box && typeB == ShapeType::Box) {
+        return boxBox(a, b, out, maxPoints);
+    }
+    if (typeA == ShapeType::Sphere && typeB == ShapeType::Cylinder) {
+        return sphereCylinder(a, b, out);
+    }
+    if (typeA == ShapeType::Cylinder && typeB == ShapeType::Sphere) {
+        const int count = sphereCylinder(b, a, out);
+        for (int i = 0; i < count; ++i) {
+            out[i].normal = -out[i].normal;
+        }
+        return count;
+    }
+    // Cylinder-cylinder and box-cylinder narrowphase is not implemented yet; the
+    // pair is skipped (see docs/ROADMAP.md, Phase 1).
+    return 0;
+}
+
+std::vector<BodyPair> broadphase(const PhysicsWorld& world) {
+    const std::size_t count = world.bodyCount();
+    std::vector<Aabb> boxes(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        boxes[i] = computeAabb(world.body(i));
+    }
+
+    std::vector<BodyPair> pairs;
+    for (std::size_t i = 0; i < count; ++i) {
+        for (std::size_t j = i + 1; j < count; ++j) {
+            if (!world.body(i).collisionEnabled || !world.body(j).collisionEnabled) {
+                continue;
+            }
+            if (!world.body(i).isDynamic() && !world.body(j).isDynamic()) {
+                continue;
+            }
+            if (boxes[i].overlaps(boxes[j])) {
+                pairs.push_back(BodyPair{i, j});
+            }
+        }
+    }
+    return pairs;
+}
+
+std::vector<ContactManifold> detectCollisions(const PhysicsWorld& world) {
+    std::vector<ContactManifold> manifolds;
+    for (const BodyPair& pair : broadphase(world)) {
+        ContactManifold manifold;
+        manifold.bodyA = pair.bodyA;
+        manifold.bodyB = pair.bodyB;
+        manifold.count = collide(world.body(pair.bodyA), world.body(pair.bodyB), manifold.points, kMaxContactPoints);
+        if (manifold.count > 0) {
+            manifolds.push_back(manifold);
+        }
+    }
+    return manifolds;
+}
+
+} // namespace sim::physics

@@ -9,15 +9,13 @@
 
 namespace sim::physics {
 
-enum class BodyType
-{
+enum class BodyType {
     Static,
     Kinematic,
     Dynamic,
 };
 
-enum class ShapeType
-{
+enum class ShapeType {
     Box,
     Sphere,
     Cylinder,
@@ -25,12 +23,11 @@ enum class ShapeType
 
 // A primitive used for automatic inertia computation and, later, collisions and
 // debug rendering. Dimensions are half-extents in the body frame.
-struct Shape
-{
+struct Shape {
     ShapeType type = ShapeType::Box;
-    Vec3 halfExtents{0.5, 0.5, 0.5};  // Box
-    Real radius = 0.5;                // Sphere, Cylinder
-    Real halfHeight = 0.5;            // Cylinder (local +Y axis)
+    Vec3 halfExtents{0.5, 0.5, 0.5}; // Box
+    Real radius = 0.5;               // Sphere, Cylinder
+    Real halfHeight = 0.5;           // Cylinder (local +Y axis)
 
     static Shape box(const Vec3& halfExtents);
     static Shape sphere(Real radius);
@@ -49,20 +46,24 @@ Vec3 symmetricEigenvalues(const Mat3& symmetric, Mat3* eigenvectors = nullptr);
 // A rigid body with full mass properties. Positions are stored in double
 // precision. Velocities and the inertia tensor live in world/body space as
 // documented on each accessor.
-class RigidBody
-{
+class RigidBody {
 public:
     // --- Description ------------------------------------------------------
     BodyType type = BodyType::Dynamic;
     Shape shape = Shape::box({0.5, 0.5, 0.5});
     std::string name;
 
+    // Opts the body into shape-based collision detection. Two bodies only
+    // generate contacts when both have this set, so existing scenes and the
+    // deterministic probe keep their behaviour until they opt in.
+    bool collisionEnabled = false;
+
     // --- Mass properties --------------------------------------------------
     Real mass = 1.0;
     Real inverseMass = 1.0;
-    Vec3 principalInertia{1.0};       // principal moments in the body frame
-    Mat3 inertiaLocal{1.0};           // full body-space inertia tensor
-    Mat3 inverseInertiaLocal{1.0};    // inverse of inertiaLocal
+    Vec3 principalInertia{1.0};    // principal moments in the body frame
+    Mat3 inertiaLocal{1.0};        // full body-space inertia tensor
+    Mat3 inverseInertiaLocal{1.0}; // inverse of inertiaLocal
 
     // --- State ------------------------------------------------------------
     Vec3 position{0.0};
@@ -75,7 +76,7 @@ public:
     Vec3 torqueAccumulator{0.0};
 
     // --- Material ---------------------------------------------------------
-    Real linearDamping = 0.0;   // per-second exponential decay rate
+    Real linearDamping = 0.0; // per-second exponential decay rate
     Real angularDamping = 0.0;
 
     // --- Cached world-space values (refreshed by updateCache) -------------
@@ -85,7 +86,7 @@ public:
     void setMass(Real newMass);
     void setInertiaPrincipal(const Vec3& moments);
     void setInertiaTensor(const Mat3& tensor);
-    void setShapeInertia();  // derive inertia from shape + mass
+    void setShapeInertia(); // derive inertia from shape + mass
 
     void setType(BodyType newType);
     bool isStatic() const { return type == BodyType::Static; }
@@ -104,8 +105,7 @@ public:
 
     Transform transform() const { return Transform{position, orientation}; }
     Vec3 localToWorldPoint(const Vec3& localPoint) const { return position + rotateVector(orientation, localPoint); }
-    Vec3 worldToLocalPoint(const Vec3& worldPoint) const
-    {
+    Vec3 worldToLocalPoint(const Vec3& worldPoint) const {
         return rotateVector(quaternionConjugate(orientation), worldPoint - position);
     }
     Vec3 localToWorldDirection(const Vec3& localDirection) const { return rotateVector(orientation, localDirection); }

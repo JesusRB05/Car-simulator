@@ -2,6 +2,7 @@
 # Copyright (C) 2026 The Car Simulator contributors
 add_executable(sim_tests
     test_main.cpp
+    test_collision.cpp
     test_core.cpp
     test_modding.cpp
     test_physics.cpp
@@ -32,6 +33,15 @@ sim_configure_target(sim_tests)
 add_test(NAME sim_tests COMMAND sim_tests)
 # Generous timeout: the Lua sandbox tests must never hang on a runaway script.
 set_tests_properties(sim_tests PROPERTIES TIMEOUT 300)
+
+# Standalone determinism probe: prints the `stateHash` of a fixed joint scene and
+# of a fixed contact scene after a fixed number of steps. CI compares the two
+# lines between Windows and Linux to pin cross-platform bit-for-bit
+# reproducibility (joints and collisions).
+add_executable(sim_determinism determinism.cpp)
+target_link_libraries(sim_determinism PRIVATE sim::physics)
+sim_configure_target(sim_determinism)
+add_test(NAME sim_determinism COMMAND sim_determinism)
 
 # Headless offscreen GPU smoke tests. They need a Vulkan ICD (SwiftShader
 # locally, Mesa lavapipe in CI) supplied through VK_ICD_FILENAMES. Enable with

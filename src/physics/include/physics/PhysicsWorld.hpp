@@ -2,16 +2,19 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <deque>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
+#include "physics/Collision.hpp"
 #include "physics/Constraint.hpp"
 #include "physics/ForceElements.hpp"
 #include "physics/Joints.hpp"
-#include "physics/RigidBody.hpp"
 #include "physics/PhysicsTypes.hpp"
+#include "physics/RigidBody.hpp"
 
 namespace sim::physics {
 
@@ -20,16 +23,14 @@ inline constexpr BodyId kInvalidBody = 0;
 
 // Rigid-body state used for the save/restore snapshots that the test harness and
 // the interactive reset button rely on.
-struct BodyState
-{
+struct BodyState {
     Vec3 position{0.0};
     Quat orientation{1.0, 0.0, 0.0, 0.0};
     Vec3 linearVelocity{0.0};
     Vec3 angularVelocity{0.0};
 };
 
-struct WorldSnapshot
-{
+struct WorldSnapshot {
     double time = 0.0;
     std::vector<BodyState> bodies;
     std::vector<std::vector<Real>> impulses;
@@ -38,8 +39,7 @@ struct WorldSnapshot
 // Owns bodies, joints and force elements and advances them with a deterministic
 // fixed step. Bodies are stored in a deque so pointers handed out by
 // createBody() stay valid for the lifetime of the world.
-class PhysicsWorld
-{
+class PhysicsWorld {
 public:
     Vec3 gravity{0.0, -9.80665, 0.0};
     int velocityIterations = 8;
@@ -63,14 +63,21 @@ public:
     Real positionTolerance = 1e-10;   // m or rad
     Real maxPositionCorrection = 0.2; // m or rad
 
+    // Collision-response tuning. Only bodies whose RigidBody::collisionEnabled
+    // is set take part. Contacts are solved as one-sided normal rows; the
+    // Baumgarte term removes penetration at the velocity level and `contactSlop`
+    // is the resting penetration left uncorrected so the response does not
+    // jitter. Friction is not applied yet (see docs/ROADMAP.md, Phase 1).
+    Real contactBaumgarte = 0.2;
+    Real contactSlop = 1e-3;
+
     RigidBody& createBody();
     std::size_t bodyCount() const { return bodies_.size(); }
     RigidBody& body(std::size_t index) { return bodies_[index]; }
     const RigidBody& body(std::size_t index) const { return bodies_[index]; }
 
-    template <typename T, typename... Args>
-    T& createConstraint(RigidBody& bodyA, RigidBody& bodyB, Args&&... args)
-    {
+    template<typename T, typename... Args>
+    T& createConstraint(RigidBody& bodyA, RigidBody& bodyB, Args&&... args) {
         auto constraint = std::make_unique<T>(std::forward<Args>(args)...);
         constraint->bodyA = &bodyA;
         constraint->bodyB = &bodyB;
@@ -80,9 +87,8 @@ public:
 
     std::size_t constraintCount() const { return constraints_.size(); }
 
-    template <typename T, typename... Args>
-    T& createForceElement(RigidBody* bodyA, RigidBody* bodyB, Args&&... args)
-    {
+    template<typename T, typename... Args>
+    T& createForceElement(RigidBody* bodyA, RigidBody* bodyB, Args&&... args) {
         auto element = std::make_unique<T>(std::forward<Args>(args)...);
         element->bodyA = bodyA;
         element->bodyB = bodyB;
@@ -108,13 +114,28 @@ public:
     void restoreSnapshot(const WorldSnapshot& snapshot);
 
 private:
-    std::vector<std::vector<Constraint*>> buildIslands() const;
+    // Rebuilds the transient contact constraints from the current overlap and
+    // seeds them with the previous step's impulses (warm starting).
+    void buildContacts(Real dt);
+    void storeContactImpulses();
+
+    std::vector<std::vector<Constraint*>> buildIslands(const std::vector<Constraint*>& all) const;
     void solveVelocities(const std::vector<std::vector<Constraint*>>& islands);
     void projectPositions(const std::vector<std::vector<Constraint*>>& islands, Real dt);
+
+    // Accumulated impulses of one contact pair, kept across steps so the solver
+    // warm starts instead of rebuilding the stack from zero.
+    struct ContactImpulseCache {
+        int count = 0;
+        Real normal[kMaxContactPoints]{};
+    };
 
     std::deque<RigidBody> bodies_;
     std::deque<std::unique_ptr<Constraint>> constraints_;
     std::deque<std::unique_ptr<ForceElement>> forceElements_;
+    std::vector<std::unique_ptr<Constraint>> contacts_;
+    std::vector<std::uint64_t> contactKeys_;
+    std::unordered_map<std::uint64_t, ContactImpulseCache> contactCache_;
     Real accumulator_ = 0.0;
     double time_ = 0.0;
 };
