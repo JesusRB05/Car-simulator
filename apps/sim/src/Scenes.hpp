@@ -35,6 +35,29 @@ const std::vector<std::string>& renderTestSceneNames();
 // then physics scenes).
 std::vector<std::string> sceneNames();
 
+// Browser grouping of the built-in scenes.
+enum class SceneCategory
+{
+    Physics,    // live PhysicsWorld scenes stepped with the fixed step
+    RenderTest, // static scenes used by the headless render checks
+};
+
+// One entry of the scene registry shown by the interactive scene browser.
+struct SceneInfo
+{
+    std::string name;
+    SceneCategory category = SceneCategory::RenderTest;
+    std::string description;
+};
+
+// Every scene the interactive app can load (physics scenes first, then the
+// render tests, including harness-only scenes such as "orientation"), with a
+// one-line description each.
+const std::vector<SceneInfo>& sceneCatalog();
+
+// Human-readable label of a category ("Physics", "Render tests").
+const char* sceneCategoryLabel(SceneCategory category);
+
 // Applies the shared demo key light (direction + colour) to the given scene.
 // Both the static render-test scenes and the physics scenes use it.
 void setDefaultLight(sim::render::Scene& scene);

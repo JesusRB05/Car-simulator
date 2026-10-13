@@ -26,6 +26,28 @@ namespace {
 // Every physics scene is captured after this many simulated seconds.
 constexpr double kSettleTime = 1.5;
 
+// Spring parameters shared by the scene builders and physicsSceneEnergy().
+constexpr double kOscillatorRest = 2.0;
+constexpr double kOscillatorStiffness = 100.0;
+
+struct PhysicsSceneEntry
+{
+    const char* name;
+    const char* description;
+};
+
+// Display order and descriptions of the physics scenes.
+constexpr PhysicsSceneEntry kPhysicsScenes[] = {
+    {"drop", "Projectile launched under gravity, drawn against its analytic parabola."},
+    {"oscillator", "Mass on a linear spring hanging from a fixed anchor."},
+    {"pendulum", "Simple pendulum on a rigid distance constraint."},
+    {"double_pendulum", "Chaotic double pendulum built from two spherical joints."},
+    {"chain", "Twenty box links joined by spherical joints, swinging from an anchor."},
+    {"dzhanibekov", "Free box spinning near its intermediate axis (tennis-racket flip)."},
+    {"gyro", "Fast-spinning wheel on an offset pivot: gyroscopic precession."},
+    {"masses", "1000 kg and 1 kg bodies on springs: a 1:1000 mass-ratio check."},
+};
+
 const glm::vec4 kGroundColor{0.30f, 0.33f, 0.28f, 1.0f};
 const glm::vec4 kStaticColor{0.55f, 0.57f, 0.60f, 1.0f};
 const glm::vec4 kTrajectoryColor{0.35f, 0.85f, 0.40f, 1.0f};
@@ -34,6 +56,9 @@ const glm::vec4 kSpringColor{0.95f, 0.80f, 0.35f, 1.0f};
 const glm::vec4 kAxisX{0.85f, 0.25f, 0.25f, 1.0f};
 const glm::vec4 kAxisY{0.30f, 0.85f, 0.35f, 1.0f};
 const glm::vec4 kAxisZ{0.35f, 0.55f, 0.95f, 1.0f};
+const glm::vec4 kVelocityColor{0.30f, 0.95f, 0.95f, 1.0f};
+constexpr float kVelocityArrowSeconds = 0.25f;
+constexpr float kVelocityArrowMax = 4.0f;
 
 glm::vec4 hueColor(float t)
 {
@@ -132,8 +157,8 @@ void buildOscillatorScene(physics::PhysicsWorld& world)
     physics::RigidBody& anchor = addStatic(world, physics::Vec3(0.0, 4.0, 0.0), 0.12f);
     physics::RigidBody& bob = addDynamic(world, "bob", 1.0f, physics::Shape::sphere(0.25), physics::Vec3(0.0, 2.3, 0.0));
     physics::PointSpringDamper& spring = world.createForceElement<physics::PointSpringDamper>(&bob, &anchor);
-    spring.restLength = 2.0;
-    spring.stiffness = 100.0;
+    spring.restLength = kOscillatorRest;
+    spring.stiffness = kOscillatorStiffness;
 }
 
 void buildPendulumScene(physics::PhysicsWorld& world)
@@ -290,9 +315,27 @@ glm::vec3 viewDirection(const std::string& name)
 
 const std::vector<std::string>& physicsSceneNames()
 {
-    static const std::vector<std::string> names{"drop", "oscillator", "pendulum",         "double_pendulum",
-                                                "chain", "dzhanibekov", "gyro",            "masses"};
+    static const std::vector<std::string> names = [] {
+        std::vector<std::string> list;
+        for (const PhysicsSceneEntry& entry : kPhysicsScenes)
+        {
+            list.emplace_back(entry.name);
+        }
+        return list;
+    }();
     return names;
+}
+
+const char* physicsSceneDescription(const std::string& name)
+{
+    for (const PhysicsSceneEntry& entry : kPhysicsScenes)
+    {
+        if (name == entry.name)
+        {
+            return entry.description;
+        }
+    }
+    return "";
 }
 
 bool isPhysicsScene(const std::string& name)
@@ -426,18 +469,156 @@ void buildSceneFromWorld(const physics::PhysicsWorld& world, render::Scene& scen
     }
 }
 
+double physicsSceneEnergy(const std::string& name, const physics::PhysicsWorld& world)
+{
+    double energy = 0.0;
+    for (std::size_t i = 0; i < world.bodyCount(); ++i)
+    {
+        const physics::RigidBody& body = world.body(i);
+        if (!body.isDynamic())
+        {
+            continue;
+        }
+        energy += body.kineticEnergy();
+        energy -= body.mass * glm::dot(world.gravity, body.position);
+    }
+
+    const auto elastic = [&](std::size_t a, std::size_t b, double rest, double stiffness) {
+        const double extension = glm::length(world.body(a).position - world.body(b).position) - rest;
+        return 0.5 * stiffness * extension * extension;
+    };
+    // Rigid rods (masses, pendulums, chain) store no energy; only the
+    // oscillator's spring does.
+    if (name == "oscillator" && world.bodyCount() >= 2)
+    {
+        energy += elastic(0, 1, kOscillatorRest, kOscillatorStiffness);
+    }
+    return energy;
+}
+
 void drawPhysicsSceneDebug(const std::string& name, const physics::PhysicsWorld& world, render::DebugDraw& draw)
+{
+    // Headless captures show every layer, like the windowed defaults.
+    drawPhysicsSceneDebug(name, world, draw, PhysicsDebugOptions{});
+}
+
+void drawPhysicsSceneDebug(const std::string& name, const physics::PhysicsWorld& world, render::DebugDraw& draw,
+                           const PhysicsDebugOptions& options)
 {
     const auto position = [&](std::size_t index) {
         const physics::Vec3 p = world.body(index).position;
         return glm::vec3(static_cast<float>(p.x), static_cast<float>(p.y), static_cast<float>(p.z));
     };
 
-    // Every dynamic body: its local axes (X red, Y green, Z blue, sized to the
-    // body) and its linear velocity (white, drawn as the distance covered in
-    // kVelocityScale seconds).
-    constexpr float kVelocityScale = 0.25f;
-    const glm::vec4 kVelocityColor{1.0f, 1.0f, 1.0f, 1.0f};
+    if (name == "drop")
+    {
+        if (options.reference)
+        {
+            // Analytic trajectories the numeric ones are expected to follow:
+            // the projectile's parabola and the free-falling body's vertical
+            // line, both drawn down to the ground.
+            constexpr int kSegments = 32;
+            constexpr float kGravity = 9.80665f;
+            const auto analytic = [&](const glm::vec3& start, const glm::vec3& velocity) {
+                const float landing =
+                    (velocity.y + std::sqrt(velocity.y * velocity.y + 2.0f * kGravity * start.y)) / kGravity;
+                glm::vec3 previous = start;
+                for (int i = 1; i <= kSegments; ++i)
+                {
+                    const float t = landing * static_cast<float>(i) / static_cast<float>(kSegments);
+                    const glm::vec3 point = start + velocity * t + glm::vec3(0.0f, -0.5f * kGravity * t * t, 0.0f);
+                    draw.addLine(previous, point, kTrajectoryColor);
+                    previous = point;
+                }
+            };
+            analytic(kProjectileStart, kProjectileVelocity);
+            analytic(kFreeFallStart, glm::vec3(0.0f));
+        }
+    }
+    else if (name == "oscillator")
+    {
+        if (options.springs)
+        {
+            addSpring(draw, position(0), position(1), 8, 0.25f, kSpringColor);
+        }
+    }
+    else if (name == "pendulum")
+    {
+        if (options.joints)
+        {
+            draw.addLine(position(0), position(1), kRodColor);
+        }
+    }
+    else if (name == "double_pendulum")
+    {
+        if (options.joints)
+        {
+            draw.addLine(position(0), position(1), kRodColor);
+            draw.addLine(position(1), position(2), kRodColor);
+        }
+    }
+    else if (name == "chain")
+    {
+        if (options.joints && options.genericOverlays)
+        {
+            // Polyline through the anchor and every link centre: the chain's
+            // spine, which passes through each spherical joint.
+            for (std::size_t i = 1; i < world.bodyCount(); ++i)
+            {
+                draw.addLine(position(i - 1), position(i), kRodColor);
+            }
+        }
+    }
+    else if (name == "dzhanibekov")
+    {
+        if (options.bodyAxes)
+        {
+            // Body-frame axes, so the intermediate-axis flip is read directly.
+            const physics::RigidBody& body = world.body(0);
+            const glm::vec3 origin(static_cast<float>(body.position.x), static_cast<float>(body.position.y),
+                                   static_cast<float>(body.position.z));
+            const glm::quat q = glm::quat(body.orientation);
+            draw.addLine(origin, origin + q * glm::vec3(0.0f, 0.0f, 1.0f) * 1.2f, kAxisZ);
+            draw.addLine(origin, origin + q * glm::vec3(0.0f, 1.0f, 0.0f) * 1.2f, kAxisY);
+            draw.addLine(origin, origin + q * glm::vec3(1.0f, 0.0f, 0.0f) * 1.2f, kAxisX);
+        }
+    }
+    else if (name == "gyro")
+    {
+        // Offset arm from the pivot to the wheel, then the spin axis.
+        const physics::RigidBody& wheel = world.body(1);
+        const glm::vec3 center = position(1);
+        const glm::vec3 arm = center - position(0);
+        if (options.joints)
+        {
+            draw.addLine(position(0), center, kRodColor);
+        }
+        if (options.bodyAxes)
+        {
+            const glm::quat q = glm::quat(wheel.orientation);
+            draw.addLine(center - q * glm::vec3(0.0f, 1.0f, 0.0f) * 0.9f, center + q * glm::vec3(0.0f, 1.0f, 0.0f) * 1.1f,
+                         kAxisY);
+        }
+        if (options.joints)
+        {
+            draw.addLine(center, center + glm::normalize(arm) * 0.3f, kSpringColor);
+        }
+    }
+    else if (name == "masses")
+    {
+        if (options.joints)
+        {
+            // Rigid rods: anchor -> upper -> lower for both columns.
+            draw.addLine(position(0), position(1), kRodColor);
+            draw.addLine(position(1), position(2), kRodColor);
+            draw.addLine(position(3), position(4), kRodColor);
+            draw.addLine(position(4), position(5), kRodColor);
+        }
+    }
+
+    // Generic per-body layers. The scenes that already draw their own body
+    // axes are skipped so the overlay never doubles up.
+    const bool sceneDrawsAxes = name == "dzhanibekov" || name == "gyro";
     for (std::size_t i = 0; i < world.bodyCount(); ++i)
     {
         const physics::RigidBody& body = world.body(i);
@@ -446,81 +627,49 @@ void drawPhysicsSceneDebug(const std::string& name, const physics::PhysicsWorld&
             continue;
         }
         const glm::vec3 origin = position(i);
-        const glm::quat q = glm::quat(body.orientation);
-        const float axisLength = 1.6f * static_cast<float>(boundingRadius(body.shape));
-        draw.addLine(origin, origin + q * glm::vec3(axisLength, 0.0f, 0.0f), kAxisX);
-        draw.addLine(origin, origin + q * glm::vec3(0.0f, axisLength, 0.0f), kAxisY);
-        draw.addLine(origin, origin + q * glm::vec3(0.0f, 0.0f, axisLength), kAxisZ);
-        const glm::vec3 velocity(body.linearVelocity);
-        if (glm::length(velocity) > 1e-3f)
+        if (options.bodyAxes && options.genericOverlays && !sceneDrawsAxes)
         {
-            draw.addLine(origin, origin + velocity * kVelocityScale, kVelocityColor);
-        }
-    }
-
-    if (name == "drop")
-    {
-        // Analytic trajectories the numeric ones are expected to follow: the
-        // projectile's parabola and the free-falling body's vertical line,
-        // both drawn down to the ground.
-        constexpr int kSegments = 32;
-        constexpr float kGravity = 9.80665f;
-        const auto analytic = [&](const glm::vec3& start, const glm::vec3& velocity) {
-            const float landing =
-                (velocity.y + std::sqrt(velocity.y * velocity.y + 2.0f * kGravity * start.y)) / kGravity;
-            glm::vec3 previous = start;
-            for (int i = 1; i <= kSegments; ++i)
+            const physics::Shape& shape = body.shape;
+            double extent = glm::length(shape.halfExtents);
+            if (shape.type == physics::ShapeType::Sphere)
             {
-                const float t = landing * static_cast<float>(i) / static_cast<float>(kSegments);
-                const glm::vec3 point = start + velocity * t + glm::vec3(0.0f, -0.5f * kGravity * t * t, 0.0f);
-                draw.addLine(previous, point, kTrajectoryColor);
-                previous = point;
+                extent = shape.radius;
             }
-        };
-        analytic(kProjectileStart, kProjectileVelocity);
-        analytic(kFreeFallStart, glm::vec3(0.0f));
-    }
-    else if (name == "oscillator")
-    {
-        addSpring(draw, position(0), position(1), 8, 0.25f, kSpringColor);
-    }
-    else if (name == "pendulum")
-    {
-        draw.addLine(position(0), position(1), kRodColor);
-    }
-    else if (name == "double_pendulum")
-    {
-        draw.addLine(position(0), position(1), kRodColor);
-        draw.addLine(position(1), position(2), kRodColor);
-    }
-    else if (name == "dzhanibekov")
-    {
-        // Body-frame axes, so the intermediate-axis flip is read directly.
-        const physics::RigidBody& body = world.body(0);
-        const glm::vec3 origin(static_cast<float>(body.position.x), static_cast<float>(body.position.y),
-                               static_cast<float>(body.position.z));
-        const glm::quat q = glm::quat(body.orientation);
-        draw.addLine(origin, origin + q * glm::vec3(0.0f, 0.0f, 1.0f) * 1.2f, kAxisZ);
-        draw.addLine(origin, origin + q * glm::vec3(0.0f, 1.0f, 0.0f) * 1.2f, kAxisY);
-        draw.addLine(origin, origin + q * glm::vec3(1.0f, 0.0f, 0.0f) * 1.2f, kAxisX);
-    }
-    else if (name == "gyro")
-    {
-        // Offset arm from the pivot to the wheel, then the spin axis.
-        const physics::RigidBody& wheel = world.body(1);
-        const glm::vec3 center = position(1);
-        const glm::vec3 arm = center - position(0);
-        draw.addLine(position(0), center, kRodColor);
-        const glm::quat q = glm::quat(wheel.orientation);
-        draw.addLine(center - q * glm::vec3(0.0f, 1.0f, 0.0f) * 0.9f, center + q * glm::vec3(0.0f, 1.0f, 0.0f) * 1.1f, kAxisY);
-        draw.addLine(center, center + glm::normalize(arm) * 0.3f, kSpringColor);
-    }
-    else if (name == "masses")
-    {
-        draw.addLine(position(0), position(1), kRodColor);
-        draw.addLine(position(1), position(2), kRodColor);
-        draw.addLine(position(3), position(4), kRodColor);
-        draw.addLine(position(4), position(5), kRodColor);
+            else if (shape.type == physics::ShapeType::Cylinder)
+            {
+                extent = std::max(shape.radius, shape.halfHeight);
+            }
+            const float axisLength = std::max(0.25f, static_cast<float>(extent) * 1.6f);
+            const glm::quat q = glm::quat(body.orientation);
+            draw.addLine(origin, origin + q * glm::vec3(1.0f, 0.0f, 0.0f) * axisLength, kAxisX);
+            draw.addLine(origin, origin + q * glm::vec3(0.0f, 1.0f, 0.0f) * axisLength, kAxisY);
+            draw.addLine(origin, origin + q * glm::vec3(0.0f, 0.0f, 1.0f) * axisLength, kAxisZ);
+        }
+        if (options.velocities)
+        {
+            // Velocity over a quarter of a second, capped so fast bodies stay
+            // on screen, with a small arrow head.
+            const glm::vec3 velocity(static_cast<float>(body.linearVelocity.x), static_cast<float>(body.linearVelocity.y),
+                                     static_cast<float>(body.linearVelocity.z));
+            glm::vec3 arrow = velocity * kVelocityArrowSeconds;
+            const float arrowLength = glm::length(arrow);
+            if (arrowLength < 1e-4f)
+            {
+                continue;
+            }
+            if (arrowLength > kVelocityArrowMax)
+            {
+                arrow *= kVelocityArrowMax / arrowLength;
+            }
+            const glm::vec3 tip = origin + arrow;
+            const glm::vec3 dir = glm::normalize(arrow);
+            const glm::vec3 side = glm::normalize(std::abs(dir.y) < 0.9f ? glm::cross(dir, glm::vec3(0.0f, 1.0f, 0.0f))
+                                                                         : glm::cross(dir, glm::vec3(1.0f, 0.0f, 0.0f)));
+            const float head = std::min(0.15f, glm::length(arrow) * 0.3f);
+            draw.addLine(origin, tip, kVelocityColor);
+            draw.addLine(tip, tip - dir * head + side * (head * 0.6f), kVelocityColor);
+            draw.addLine(tip, tip - dir * head - side * (head * 0.6f), kVelocityColor);
+        }
     }
 }
 

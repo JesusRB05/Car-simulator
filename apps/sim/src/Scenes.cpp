@@ -83,6 +83,36 @@ std::vector<std::string> sceneNames()
     return names;
 }
 
+const std::vector<SceneInfo>& sceneCatalog()
+{
+    static const std::vector<SceneInfo> catalog = [] {
+        std::vector<SceneInfo> entries;
+        for (const std::string& name : physicsSceneNames())
+        {
+            entries.push_back({name, SceneCategory::Physics, physicsSceneDescription(name)});
+        }
+        const std::vector<SceneInfo> renderTests{
+            {"default", SceneCategory::RenderTest, "Single car-sized box: the baseline lighting and depth check."},
+            {"grid", SceneCategory::RenderTest, "6x6 grid of alternating boxes seen from above."},
+            {"pyramid", SceneCategory::RenderTest, "Four stacked layers of boxes with hue-coded levels."},
+            {"ramp", SceneCategory::RenderTest, "Row of boxes of increasing height."},
+            {"orbit", SceneCategory::RenderTest, "Ring of rotated boxes around the origin."},
+            {"tower", SceneCategory::RenderTest, "Eight-box vertical tower."},
+            {"checker", SceneCategory::RenderTest, "Thin checkerboard tiles just above the ground (depth precision)."},
+            {"rows", SceneCategory::RenderTest, "Three coloured rows of boxes."},
+            {"orientation", SceneCategory::RenderTest, "Off-axis boxes that prove +Y is up and +X is right on screen."},
+        };
+        entries.insert(entries.end(), renderTests.begin(), renderTests.end());
+        return entries;
+    }();
+    return catalog;
+}
+
+const char* sceneCategoryLabel(SceneCategory category)
+{
+    return category == SceneCategory::Physics ? "Physics" : "Render tests";
+}
+
 void setDefaultLight(render::Scene& scene)
 {
     scene.setDirectionalLight(kLightDirection, kLightColor);
