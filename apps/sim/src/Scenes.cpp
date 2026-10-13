@@ -166,13 +166,17 @@ bool buildScene(const std::string& name, render::Scene& scene, const std::shared
                 const float z = (static_cast<float>(j) - 3.5f) * 1.8f;
                 const glm::vec4 color = ((i + j) % 2 == 0) ? glm::vec4(0.85f, 0.30f, 0.20f, 1.0f)
                                                            : glm::vec4(0.15f, 0.20f, 0.75f, 1.0f);
-                // Tiles are lifted well clear of the ground: with reversed-Z the
-                // huge ground quad can win a grazing depth tie against a tile
-                // barely above it, so the checker needs real height separation.
-                addBox(scene, cube, {x, 0.35f, z}, {1.8f, 0.70f, 1.8f}, color);
+                // Tiles are thin slabs floating a couple of millimetres above
+                // the ground. With reversed-Z the huge ground quad can win a
+                // grazing depth tie against geometry resting right on it, so a
+                // small-but-material separation is needed: at ~18 m with
+                // near=0.1, far=1000 a D32Sfloat buffer resolves ~0.2 mm, so a
+                // 2 mm gap is ~10 depth units and never ties. The thickness is
+                // 10 mm so the top face is at y = 0.012 (where the probe sits).
+                addBox(scene, cube, {x, 0.007f, z}, {1.8f, 0.010f, 1.8f}, color);
             }
         }
-        setCamera(scene, {0.0f, 13.0f, 14.0f}, {0.9f, 0.35f, 0.9f});
+        setCamera(scene, {0.0f, 13.0f, 14.0f}, {0.9f, 0.012f, 0.9f});
         return true;
     }
 
@@ -225,7 +229,7 @@ std::vector<SceneProbe> sceneProbes(const std::string& name)
     }
     if (name == "checker")
     {
-        return {{glm::vec3(0.9f, 0.35f, 0.9f), glm::vec4(0.85f, 0.30f, 0.20f, 1.0f)}};
+        return {{glm::vec3(0.9f, 0.012f, 0.9f), glm::vec4(0.85f, 0.30f, 0.20f, 1.0f)}};
     }
     if (name == "rows")
     {

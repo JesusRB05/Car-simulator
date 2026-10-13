@@ -83,6 +83,27 @@ Si la swapchain queda desactualizada (`out of date`/`suboptimal`), `begin()` o
   color de la luz.
 - Por objeto, **push constants** con la matriz de modelo y el color base.
 
+### Precisión de profundidad (reversed-Z)
+
+La proyección es diestra con profundidad inversa (cerca → 1, lejos → 0). Para
+`near = 0,1`, `far = 1000` y `D32Sfloat`, la resolución del buffer a una distancia
+`z` es
+
+$$
+\delta z \approx \frac{2^{-24}}{\frac{F\,N}{(F-N)}\,\frac{1}{z^2}} \approx 0{,}2\;\text{mm}\ \text{a } z = 18\ \text{m}.
+$$
+
+La precisión mejora con la distancia (es el motivo de usar reversed-Z), pero en
+los planos de apoyo hay un problema práctico: un quad de suelo enorme en pie a la
+misma altura de una losa apoyada produce **empates de profundidad** al ras en
+vistas rasantes, y el suelo puede ganar el *depth test*.
+
+Regla para geometría de escena: **toda superficie apoyada en otra se separa con
+un despegue mínimo de 1–2 mm** (≈10 unidades de profundidad a 20 m, nunca un
+empate). La escena `checker` aplica esta regla: sus losas son planchas de 10 mm
+flotando 2 mm sobre el suelo. No usar *depth bias* salvo que una pasada lo pida
+explícitamente: rompe la semejanza con la geometría y depende del driver.
+
 ### Formato de `FrameUniforms` / `ObjectPushConstants`
 
 Convención única de matrices: **GLM column-major en CPU y `column_major` en
