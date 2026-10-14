@@ -67,6 +67,9 @@ add_library(sim_vehicle STATIC
     # Disc brakes and their thermal model (Phase 2, P2.12).
     include/vehicle/Brake.hpp
     src/Brake.cpp
+    # Driver aids ABS / TCS / ESC (Phase 2, Section 7.8).
+    include/vehicle/Electronics.hpp
+    src/Electronics.cpp
     # TEMPORARY kinematic placeholder implementing IVehicleModel.
     include/vehicle/PlaceholderVehicle.hpp
     src/PlaceholderVehicle.cpp)

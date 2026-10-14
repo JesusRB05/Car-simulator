@@ -15,6 +15,7 @@
 #include "vehicle/Gearbox.hpp"
 #include "vehicle/GroundQuery.hpp"
 #include "vehicle/ITireModel.hpp"
+#include "vehicle/IVehicleElectronics.hpp"
 #include "vehicle/IVehicleModel.hpp"
 #include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/SpringDamper.hpp"
@@ -66,6 +67,7 @@ struct VehicleCorner {
     Real lateralForce = 0.0;      // N
     Real driveTorque = 0.0;       // N*m at the wheel
     Real brakeTorque = 0.0;       // N*m at the wheel
+    Vec3 mountWorld{0.0};         // strut top mount in world space (m)
     Vec3 contactPoint{0.0};
     Vec3 contactNormal{0.0, 1.0, 0.0};
     Vec3 wheelCentre{0.0};
@@ -197,6 +199,13 @@ public:
     Real brake() const { return brake_; }
     Real clutchEngagement() const { return clutchEngagement_; }
 
+    // Optional driver aids. The model samples them once per step and lets them
+    // trim the throttle and add per-wheel brake torque; passing nullptr (the
+    // default) leaves the driver's request untouched. The unit must outlive the
+    // model and its own state is not owned here.
+    void setElectronics(IVehicleElectronics* electronics) { electronics_ = electronics; }
+    IVehicleElectronics* electronics() const { return electronics_; }
+
 private:
     void buildCorners();
     void updateDriver(Real dt);
@@ -206,6 +215,7 @@ private:
 
     physics::PhysicsWorld* world_ = nullptr;
     const IGroundQuery* ground_ = nullptr;
+    IVehicleElectronics* electronics_ = nullptr;
     Real dt_ = 1.0 / 1000.0;
     Real gravity_ = 9.80665;
 
@@ -229,6 +239,7 @@ private:
     Real loadTorque_ = 0.0; // clutch torque fed back to the engine next step
     Real shiftTimer_ = 0.0;
     Real directionTimer_ = 0.0;
+    BrakeModulation brakeModulation_{}; // per-wheel brake torque from the aids
 };
 
 // A well-tuned default car (six-speed, rear-wheel drive) built from the library

@@ -137,6 +137,7 @@ void VehicleModel::reset(const Vec3& position, Real headingRadians) {
         corner.lateralForce = 0.0;
         corner.driveTorque = 0.0;
         corner.brakeTorque = 0.0;
+        corner.mountWorld = body.localToWorldPoint(corner.localMount);
         corner.contactPoint = body.localToWorldPoint(corner.localMount) - up * setup_.restLength;
         corner.contactNormal = ground.normal;
         corner.wheelCentre = corner.contactPoint;
@@ -327,6 +328,30 @@ void VehicleModel::apply() {
     const VehicleSetup& setup = setup_;
 
     updateDriver(dt);
+
+    // Optional driver aids: sampled from the last integrated step, they may trim
+    // the throttle and add per-wheel brake torque before the drivetrain and the
+    // brakes see the driver's request.
+    brakeModulation_ = BrakeModulation{};
+    if (electronics_ != nullptr) {
+        ElectronicsSensors sensors;
+        for (std::size_t i = 0; i < corners_.size(); ++i) {
+            sensors.wheelSlipRatio[i] = corners_[i].slipRatio;
+            sensors.wheelAngularVelocity[i] = corners_[i].spinWheel.spin;
+        }
+        sensors.yawRate = body.angularVelocity.y;
+        sensors.forwardSpeed = forwardSpeed();
+        sensors.steerAngle = steerAngle_;
+        sensors.lateralAcceleration = glm::dot(body.linearVelocity, right());
+
+        electronics_->update(sensors, dt);
+        VehicleInput filtered =
+            electronics_->filterInput(VehicleInput{throttle_, brake_, steerInput_, input_.handbrake});
+        throttle_ = filtered.throttle;
+        brake_ = filtered.brake;
+        brakeModulation_ = electronics_->brakeModulation();
+    }
+
     updateTransmission(dt);
 
     const Vec3 up = body.localToWorldDirection(Vec3(0.0, 1.0, 0.0));
@@ -337,6 +362,7 @@ void VehicleModel::apply() {
     // --- 1. Raycast suspension, spring and damper --------------------------
     for (VehicleCorner& corner : corners_) {
         const Vec3 mountWorld = body.localToWorldPoint(corner.localMount);
+        corner.mountWorld = mountWorld;
         Real distance = 0.0;
         GroundSample sample;
         corner.contact = raycastGround(*ground_, mountWorld, down, suspensionLength, distance, sample);
@@ -387,8 +413,10 @@ void VehicleModel::apply() {
     }
 
     // --- 4. Tyres and wheel spin ------------------------------------------
-    for (VehicleCorner& corner : corners_) {
-        corner.brakeTorque = corner.front ? frontWheelBrake : rearWheelBrake;
+    for (std::size_t i = 0; i < corners_.size(); ++i) {
+        VehicleCorner& corner = corners_[i];
+        const Real baseBrake = corner.front ? frontWheelBrake : rearWheelBrake;
+        corner.brakeTorque = std::max(0.0, baseBrake + brakeModulation_.torqueDelta[i]);
 
         const Real c = std::cos(corner.steerAngle);
         const Real s = std::sin(corner.steerAngle);

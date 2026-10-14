@@ -2,6 +2,7 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #include <doctest/doctest.h>
 
+#include <array>
 #include <cmath>
 #include <sstream>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "vehicle/Differential.hpp"
 #include "vehicle/DoubleWishbone.hpp"
 #include "vehicle/DrivelineCompliance.hpp"
+#include "vehicle/Electronics.hpp"
 #include "vehicle/Engine.hpp"
 #include "vehicle/FrameTorsion.hpp"
 #include "vehicle/Gearbox.hpp"
@@ -1579,4 +1581,129 @@ TEST_CASE("VehicleModel is deterministic for the same input script") {
     CHECK(positionA.x == positionB.x);
     CHECK(positionA.y == positionB.y);
     CHECK(positionA.z == positionB.z);
+}
+
+TEST_CASE("ElectronicControlUnit: traction control trims the throttle on a spinning driven wheel") {
+    ElectronicControlUnit ecu;
+    ecu.setEnabled(false, true, false);
+
+    ElectronicsSensors sensors;
+    sensors.forwardSpeed = 5.0;
+    sensors.wheelSlipRatio = {0.0, 0.0, 0.4, 0.4}; // rear wheels spinning
+    ecu.update(sensors, 0.01);
+
+    CHECK(ecu.tcsActive());
+    CHECK(ecu.throttleScale() < 1.0);
+    VehicleInput pedal;
+    pedal.throttle = 1.0;
+    CHECK(ecu.filterInput(pedal).throttle == doctest::Approx(ecu.throttleScale()));
+    CHECK(ecu.brakeModulation().torqueDelta == std::array<Real, 4>{}); // TCS never brakes
+
+    // A front wheel cannot spin a rear-drive: the throttle stays untouched.
+    sensors.wheelSlipRatio = {0.4, 0.4, 0.0, 0.0};
+    ecu.update(sensors, 0.01);
+    CHECK_FALSE(ecu.tcsActive());
+    CHECK(ecu.throttleScale() == doctest::Approx(1.0));
+
+    // Disabled: even a spinning driven wheel is left alone.
+    ecu.setEnabled(false, false, false);
+    sensors.wheelSlipRatio = {0.0, 0.0, 0.5, 0.5};
+    ecu.update(sensors, 0.01);
+    CHECK_FALSE(ecu.tcsActive());
+}
+
+TEST_CASE("ElectronicControlUnit: ABS releases the torque of a locking wheel") {
+    ElectronicControlUnit ecu;
+    ecu.setEnabled(true, false, false);
+
+    ElectronicsSensors sensors;
+    sensors.forwardSpeed = 20.0;
+    sensors.wheelSlipRatio = {-0.5, -0.2, 0.0, 0.0}; // both fronts locking under braking
+    ecu.update(sensors, 0.01);
+
+    CHECK(ecu.absActive());
+    const BrakeModulation modulation = ecu.brakeModulation();
+    CHECK(modulation.torqueDelta[0] < 0.0); // released
+    CHECK(modulation.torqueDelta[1] < 0.0);
+    CHECK(modulation.torqueDelta[0] < modulation.torqueDelta[1]); // more slip, more release
+    CHECK(modulation.torqueDelta[2] == doctest::Approx(0.0));
+    CHECK(modulation.torqueDelta[3] == doctest::Approx(0.0));
+    CHECK(ecu.throttleScale() == doctest::Approx(1.0)); // ABS does not touch the throttle
+
+    // Below the engage speed the wheels may lock: the ABS is out of the way.
+    sensors.forwardSpeed = 1.0;
+    ecu.update(sensors, 0.01);
+    CHECK_FALSE(ecu.absActive());
+    CHECK(ecu.brakeModulation().torqueDelta == std::array<Real, 4>{});
+}
+
+TEST_CASE("ElectronicControlUnit: ESC brakes the outer front wheel when the car over-yaws") {
+    ElectronicControlConfig config;
+    config.stability.wheelbase = 2.6;
+    ElectronicControlUnit ecu(config);
+    ecu.setEnabled(false, false, true);
+
+    ElectronicsSensors sensors;
+    sensors.forwardSpeed = 20.0;
+    sensors.steerAngle = 0.0;
+    sensors.yawRate = 0.5; // yaws far more to the left than asked for
+    ecu.update(sensors, 0.01);
+
+    CHECK(ecu.escActive());
+    CHECK(ecu.brakeModulation().torqueDelta[1] > 0.0); // front-right braked
+    CHECK(ecu.brakeModulation().torqueDelta[0] == doctest::Approx(0.0));
+    CHECK(ecu.throttleScale() < 1.0);
+
+    // Mirrored: yawing right brakes the front-left instead.
+    sensors.yawRate = -0.5;
+    ecu.update(sensors, 0.01);
+    CHECK(ecu.brakeModulation().torqueDelta[0] > 0.0);
+    CHECK(ecu.brakeModulation().torqueDelta[1] == doctest::Approx(0.0));
+
+    // Inside the dead band nothing happens.
+    sensors.yawRate = 0.005;
+    ecu.update(sensors, 0.01);
+    CHECK_FALSE(ecu.escActive());
+    CHECK(ecu.throttleScale() == doctest::Approx(1.0));
+    CHECK(ecu.brakeModulation().torqueDelta == std::array<Real, 4>{});
+}
+
+TEST_CASE("VehicleModel: traction control tames a low-grip launch") {
+    const auto run = [](bool tcsEnabled, Real& peakSlip, bool& engaged) {
+        physics::PhysicsWorld world;
+        FlatGroundQuery ground(0.0, 0.6); // slippery: the rear tyres want to spin
+        ElectronicControlUnit ecu;
+        ecu.setEnabled(false, tcsEnabled, false);
+        VehicleModel& car = VehicleModel::spawn(world, makeDefaultVehicleSetup(), ground);
+        car.setElectronics(&ecu);
+        VehicleInput input;
+        input.throttle = 1.0;
+        car.setInput(input);
+        peakSlip = 0.0;
+        engaged = false;
+        for (int i = 0; i < 2000; ++i) {
+            car.step(world.fixedStep);
+            engaged = engaged || ecu.tcsActive();
+            // Ignore the first instants, before the controller has a sample to act on.
+            if (i < 1000) {
+                continue;
+            }
+            for (const VehicleCorner& corner : car.corners()) {
+                if (corner.driven) {
+                    peakSlip = std::max(peakSlip, corner.slipRatio);
+                }
+            }
+        }
+    };
+
+    Real peakWithTcs = 0.0;
+    Real peakWithout = 0.0;
+    bool engagedWith = false;
+    bool engagedWithout = false;
+    run(true, peakWithTcs, engagedWith);
+    run(false, peakWithout, engagedWithout);
+
+    CHECK(engagedWith); // the aid actually stepped in
+    CHECK_FALSE(engagedWithout);
+    CHECK(peakWithTcs < peakWithout);
 }
