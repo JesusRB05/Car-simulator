@@ -251,7 +251,6 @@ void VehicleModel::updateTransmission(Real dt) {
     const Real ratio = totalRatio();
     const Real inputOmega = drivenWheelSpeed() * ratio;
     const Real idle = engine_.config.idleSpeed;
-    const Real revLimit = engine_.config.revLimit;
 
     // Clutch engagement closes as the input shaft catches up; a throttle launch
     // map lets the pedal feed torque into a stationary driveline so the engine
@@ -269,29 +268,33 @@ void VehicleModel::updateTransmission(Real dt) {
         engineSpeed_ = engine_.angularVelocity();
         loadTorque_ = 0.0;
     } else {
-        const Real slip = engine_.angularVelocity() - inputOmega;
-        // Above idle, a small slip is a locked clutch: the engine is rigidly tied
-        // to the wheels, so it turns at the input speed and delivers its map
-        // torque (minus friction) to the driveline. Below idle the clutch slips so
-        // the engine can idle and launch the car.
-        const bool locked = std::abs(slip) < clutch_.lockThreshold && std::abs(inputOmega) >= idle;
-        if (locked) {
-            engine_.setAngularVelocity(inputOmega);
-            engineSpeed_ = inputOmega;
-            const Real effectiveThrottle = (engineSpeed_ >= revLimit) ? 0.0 : throttle_; // fuel cut
-            engineTorque_ =
-                engine_.map.torqueAt(engineSpeed_, effectiveThrottle) - engine_.friction.torqueAt(engineSpeed_);
-            inputTorque = engineTorque_ * shift_.torqueFactor();
-            loadTorque_ = 0.0;
-        } else {
-            engineTorque_ = engine_.step(dt, throttle_, loadTorque_);
-            engineSpeed_ = engine_.angularVelocity();
-            FrictionClutch clutch = clutch_;
-            clutch.engagement = clutchEngagement_;
-            const ClutchTorque transmitted = computeClutchTorque(clutch, engineSpeed_ - inputOmega, engineTorque_);
-            inputTorque = transmitted.torque * shift_.torqueFactor();
-            loadTorque_ = transmitted.torque;
+        // Couple the engine to the input shaft implicitly (PHYSICS_PLAN 7.6). The
+        // engine first responds freely to its map torque and friction; the clutch
+        // then carries exactly the torque that brings its speed onto the driveline
+        // this step, clamped to what the plates can hold. Below the capacity the
+        // clutch is locked and the engine follows the wheels (delivering its net
+        // torque, so it brakes the car when coasting); above it the clutch slips at
+        // that limit during a launch. Solving it implicitly keeps it energy
+        // consistent: it never drives the driveline while the engine is back-driven.
+        const Real engineInertia = engine_.config.inertia;
+        engineTorque_ = engine_.step(dt, throttle_, 0.0);
+        const Real freeSpeed = engine_.angularVelocity();
+
+        FrictionClutch clutch = clutch_;
+        clutch.engagement = clutchEngagement_;
+        const Real capacity = clutch.capacity();
+
+        Real transmitted = engineInertia * (freeSpeed - inputOmega) / dt;
+        if (transmitted > capacity) {
+            transmitted = capacity;
+        } else if (transmitted < -capacity) {
+            transmitted = -capacity;
         }
+        engine_.setAngularVelocity(freeSpeed - transmitted * dt / engineInertia);
+        engineSpeed_ = engine_.angularVelocity();
+
+        inputTorque = transmitted * shift_.torqueFactor();
+        loadTorque_ = transmitted;
     }
 
     const Real axleTorque = setup_.gearbox.outputTorque(gear_, inputTorque) * setup_.finalDrive;
@@ -527,7 +530,9 @@ VehicleSetup makeDefaultVehicleSetup() {
 
     setup.brakeBias.frontFraction = 0.62;
     setup.brakeBias.handbrakePressure = 3.0e6;
-    setup.maxBrakePressure = 5.0e6;
+    // Master pressure that yields the documented 3600 N*m of total brake torque
+    // (DRIVE.md): T = 2 mu_p A_p R_eff p, so p = 3600 / (2 * 0.40 * 0.002 * 0.13).
+    setup.maxBrakePressure = 8.65e6;
 
     setup.centreOfPressure = Vec3(0.0, 0.4, 0.0);
     setup.dragCoefficient = 0.30;
