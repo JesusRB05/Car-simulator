@@ -9,9 +9,10 @@
 #include <glm/glm.hpp>
 
 #include "drive/Obstacles.hpp"
-#include "drive/RaycastCar.hpp"
 #include "drive/Track.hpp"
+#include "drive/TrackGroundQuery.hpp"
 #include "physics/PhysicsWorld.hpp"
+#include "vehicle/VehicleModel.hpp"
 
 namespace sim::rhi {
 class Device;
@@ -31,7 +32,7 @@ inline bool isDriveScene(const std::string& name) {
     return name == kDriveSceneName;
 }
 
-// Raw keyboard state for one frame; DriveScene turns it into DriverInput.
+// Raw keyboard state for one frame; DriveScene turns it into VehicleInput.
 struct DriveKeys {
     bool throttle = false;
     bool brake = false;
@@ -46,10 +47,11 @@ enum class DriveCamera {
     Orbit,
 };
 
-// The keyboard-drivable test scene: a procedural circuit, a raycast-wheel car in
-// its own PhysicsWorld stepped with the fixed 1 ms step, a smoothed chase
-// camera, an ImGui HUD and a debug overlay (suspension rays, contact points,
-// tyre forces). Simulation and rendering live on the calling (main) thread.
+// The keyboard-drivable test scene: a procedural circuit, the assembled
+// VehicleModel in its own PhysicsWorld stepped with the fixed 1 ms step, a
+// smoothed chase camera, an ImGui HUD and a debug overlay (suspension rays,
+// contact points, tyre forces). Simulation and rendering live on the calling
+// (main) thread.
 class DriveScene {
 public:
     explicit DriveScene(rhi::Device& device);
@@ -82,7 +84,7 @@ public:
     void drawHud() const;
     void drawDebug(render::DebugDraw& draw) const;
 
-    const RaycastCar& car() const { return *car_; }
+    const vehicle::VehicleModel& car() const { return *car_; }
     const Track& track() const { return track_; }
     double simTime() const { return world_.time(); }
 
@@ -100,8 +102,9 @@ private:
     };
 
     Track track_;
+    TrackGroundQuery ground_{track_};
     physics::PhysicsWorld world_;
-    RaycastCar* car_ = nullptr;
+    vehicle::VehicleModel* car_ = nullptr;
     double remainder_ = 0.0;
 
     std::vector<Obstacle> obstacles_;

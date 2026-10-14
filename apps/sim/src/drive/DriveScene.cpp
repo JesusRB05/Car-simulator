@@ -22,7 +22,15 @@
 #include "rhi/Device.hpp"
 
 namespace sim::app::drive {
+
+using vehicle::VehicleCorner;
+using vehicle::VehicleInput;
+using vehicle::VehicleModel;
+
 namespace {
+
+constexpr double kTwoPi = 6.283185307179586;
+constexpr float kTyreHalfWidth = 0.12f;
 
 const glm::vec4 kGrassColor{0.24f, 0.42f, 0.20f, 1.0f};
 const glm::vec4 kVergeColor{0.21f, 0.37f, 0.17f, 1.0f};
@@ -65,9 +73,7 @@ struct MeshBuilder {
         return static_cast<std::uint32_t>(vertices.size() - 1);
     }
 
-    void triangle(std::uint32_t a, std::uint32_t b, std::uint32_t c) {
-        indices.insert(indices.end(), {a, b, c});
-    }
+    void triangle(std::uint32_t a, std::uint32_t b, std::uint32_t c) { indices.insert(indices.end(), {a, b, c}); }
 
     void quad(std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
         triangle(a, b, c);
@@ -80,8 +86,8 @@ struct MeshBuilder {
     // about the direction of travel versus the driver's left and right at each
     // call site.
     void quadUp(std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
-        const glm::vec3 normal = glm::cross(vertices[b].position - vertices[a].position,
-                                            vertices[c].position - vertices[a].position);
+        const glm::vec3 normal =
+            glm::cross(vertices[b].position - vertices[a].position, vertices[c].position - vertices[a].position);
         if (normal.y >= 0.0f) {
             triangle(a, b, c);
             triangle(a, c, d);
@@ -152,7 +158,7 @@ std::string formatLap(double seconds) {
 
 DriveScene::DriveScene(rhi::Device& device) {
     world_.fixedStep = 1.0 / 1000.0;
-    car_ = &RaycastCar::spawn(world_, CarParams{}, track_);
+    car_ = &VehicleModel::spawn(world_, vehicle::makeDefaultVehicleSetup(), ground_);
     buildMeshes(device);
     buildObstacles(device);
     reset();
@@ -178,7 +184,7 @@ void DriveScene::cycleCamera() {
 }
 
 void DriveScene::setKeys(const DriveKeys& keys) {
-    DriverInput input;
+    VehicleInput input;
     input.throttle = keys.throttle ? 1.0 : 0.0;
     input.brake = keys.brake ? 1.0 : 0.0;
     input.steer = (keys.left ? 1.0 : 0.0) - (keys.right ? 1.0 : 0.0);
@@ -196,7 +202,9 @@ void DriveScene::advance(double wallDelta) {
     remainder_ += std::clamp(wallDelta, 0.0, kMaxFrameDelta);
     const double dt = world_.fixedStep;
     while (remainder_ >= dt) {
-        world_.step(dt);
+        // The model owns the world: stepping it advances both the chassis and
+        // the static scenery in the same fixed step.
+        car_->step(dt);
         updateLapTimer();
         remainder_ -= dt;
     }
@@ -205,7 +213,7 @@ void DriveScene::advance(double wallDelta) {
 void DriveScene::simulate(double seconds) {
     const int steps = static_cast<int>(seconds / world_.fixedStep + 0.5);
     for (int i = 0; i < steps; ++i) {
-        world_.step(world_.fixedStep);
+        car_->step(world_.fixedStep);
         updateLapTimer();
     }
 }
@@ -497,19 +505,17 @@ void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelt
         scene.add(cube_, boxAt(frame, {side * 0.62f, 0.00f, 2.16f}, {0.30f, 0.10f, 0.04f}), kTaillightColor);
     }
 
-    const CarParams& params = car_->params();
-    const float radius = static_cast<float>(params.wheelRadius);
-    const float halfWidth = static_cast<float>(params.wheelHalfWidth);
     const glm::mat4 chassisRotation = glm::mat4_cast(glm::quat(body.orientation));
-    for (const WheelState& wheel : car_->wheels()) {
+    for (const VehicleCorner& corner : car_->corners()) {
+        const float radius = static_cast<float>(corner.wheelRadius);
         const glm::mat4 wheelFrame =
-            glm::translate(glm::mat4(1.0f), toVec3(wheel.wheelCentre)) * chassisRotation *
-            glm::rotate(glm::mat4(1.0f), static_cast<float>(wheel.steerAngle), glm::vec3(0.0f, 1.0f, 0.0f)) *
-            glm::rotate(glm::mat4(1.0f), -static_cast<float>(wheel.spinAngle), glm::vec3(1.0f, 0.0f, 0.0f));
+            glm::translate(glm::mat4(1.0f), toVec3(corner.wheelCentre)) * chassisRotation *
+            glm::rotate(glm::mat4(1.0f), static_cast<float>(corner.steerAngle), glm::vec3(0.0f, 1.0f, 0.0f)) *
+            glm::rotate(glm::mat4(1.0f), -static_cast<float>(corner.spinAngle), glm::vec3(1.0f, 0.0f, 0.0f));
         const glm::mat4 tyre = wheelFrame * glm::rotate(glm::mat4(1.0f), 1.5707963f, glm::vec3(0.0f, 0.0f, 1.0f)) *
-                               glm::scale(glm::mat4(1.0f), glm::vec3(radius, halfWidth, radius));
+                               glm::scale(glm::mat4(1.0f), glm::vec3(radius, kTyreHalfWidth, radius));
         scene.add(cylinder_, tyre, kTyreColor);
-        const float outer = wheel.left ? -(halfWidth + 0.01f) : (halfWidth + 0.01f);
+        const float outer = corner.left ? -(kTyreHalfWidth + 0.01f) : (kTyreHalfWidth + 0.01f);
         scene.add(cube_, boxAt(wheelFrame, {outer, 0.0f, 0.0f}, {0.02f, 0.40f, 0.08f}), kHubColor);
     }
 
@@ -565,7 +571,7 @@ void DriveScene::updateCamera(float aspect, double frameDelta, render::Scene& sc
 }
 
 void DriveScene::drawHud() const {
-    const RaycastCar& car = *car_;
+    const VehicleModel& car = *car_;
     ImGui::SetNextWindowPos(ImVec2(290.0f, 40.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(400.0f, 0.0f), ImGuiCond_FirstUseEver);
     if (!ImGui::Begin("Drive")) {
@@ -579,10 +585,11 @@ void DriveScene::drawHud() const {
     ImGui::SameLine();
     ImGui::TextDisabled("%s", car.shifting() ? "(shifting)" : "");
 
-    const CarParams& params = car.params();
+    const double rpm = car.engineSpeed() * 60.0 / kTwoPi;
+    const double maxRpm = car.setup().engine.config.revLimit * 60.0 / kTwoPi;
     char rpmText[32];
-    std::snprintf(rpmText, sizeof(rpmText), "%.0f rpm", car.engineRpm());
-    ImGui::ProgressBar(static_cast<float>(car.engineRpm() / params.maxRpm), ImVec2(-1.0f, 0.0f), rpmText);
+    std::snprintf(rpmText, sizeof(rpmText), "%.0f rpm", rpm);
+    ImGui::ProgressBar(static_cast<float>(rpm / maxRpm), ImVec2(-1.0f, 0.0f), rpmText);
     ImGui::Text("Throttle");
     ImGui::SameLine(80.0f);
     ImGui::ProgressBar(static_cast<float>(car.throttle()), ImVec2(-1.0f, 0.0f), "");
@@ -608,18 +615,23 @@ void DriveScene::drawHud() const {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
             ImGui::TextUnformatted(label);
-            for (std::size_t i = 0; i < car.wheels().size(); ++i) {
+            for (std::size_t i = 0; i < car.corners().size(); ++i) {
                 ImGui::TableSetColumnIndex(static_cast<int>(i + 1));
-                cell(car.wheels()[i]);
+                cell(car.corners()[i]);
             }
         };
-        row("Load N", [](const WheelState& w) { ImGui::Text("%.0f", w.load); });
-        row("Slip %", [](const WheelState& w) { ImGui::Text("%.1f", w.slipRatio * 100.0); });
-        row("Angle deg", [](const WheelState& w) { ImGui::Text("%.1f", w.slipAngle * 57.29578); });
-        row("Fx N", [](const WheelState& w) { ImGui::Text("%.0f", w.longitudinalForce); });
-        row("Fy N", [](const WheelState& w) { ImGui::Text("%.0f", w.lateralForce); });
-        row("Comp mm", [](const WheelState& w) { ImGui::Text("%.0f", w.compression * 1000.0); });
-        row("Surface", [](const WheelState& w) { ImGui::TextUnformatted(w.contact ? surfaceName(w.surface) : "air"); });
+        row("Load N", [](const VehicleCorner& c) { ImGui::Text("%.0f", c.load); });
+        row("Susp mm", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.compression * 1000.0); });
+        row("Slip", [](const VehicleCorner& c) { ImGui::Text("%+.3f", c.slipRatio); });
+        row("Slip deg", [](const VehicleCorner& c) { ImGui::Text("%+.1f", c.slipAngle * 57.29578); });
+        row("Fx N", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.longitudinalForce); });
+        row("Fy N", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.lateralForce); });
+        row("Drive Nm", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.driveTorque); });
+        row("Brake Nm", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.brakeTorque); });
+        row("Surface", [this](const VehicleCorner& c) {
+            ImGui::TextUnformatted(c.contact ? surfaceName(track_.sample(c.contactPoint.x, c.contactPoint.z).surface)
+                                             : "air");
+        });
         ImGui::EndTable();
     }
 
@@ -639,7 +651,7 @@ void DriveScene::drawDebug(render::DebugDraw& draw) const {
     const glm::vec4 loadColor{0.25f, 0.75f, 1.0f, 1.0f};
     constexpr float kForceScale = 1.0f / 2500.0f; // metres per newton
 
-    for (const WheelState& wheel : car_->wheels()) {
+    for (const VehicleCorner& wheel : car_->corners()) {
         const glm::vec3 mount = toVec3(wheel.mountWorld);
         const glm::vec3 contact = toVec3(wheel.contactPoint);
         draw.addLine(mount, contact, wheel.contact ? rayContact : rayFree);
