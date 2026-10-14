@@ -95,6 +95,18 @@ public:
     Real sleepAngularThreshold = 0.05; // rad/s
     Real sleepTime = 0.5;              // s below the thresholds to fall asleep
 
+    // Sub-stepping against tunnelling (opt-in). When enabled and the fastest
+    // body would move more than `maxSubStepDistance` (or more than half its own
+    // smallest half-size) in one step, `step()` splits the step so no body moves
+    // further than that per substep. The number of substeps is capped at
+    // `maxSubSteps`; ordinary scenes stay at a single substep. It is off by
+    // default because a stiff joint/spring can legitimately reach high speeds
+    // without any tunnelling risk. The substep size is a deterministic function
+    // of the state, so runs stay reproducible.
+    bool enableSubStepping = false;
+    int maxSubSteps = 32;
+    Real maxSubStepDistance = 0.02; // m
+
     RigidBody& createBody();
     std::size_t bodyCount() const { return bodies_.size(); }
     RigidBody& body(std::size_t index) { return bodies_[index]; }
@@ -138,6 +150,11 @@ public:
     void restoreSnapshot(const WorldSnapshot& snapshot);
 
 private:
+    // One integration step (the body of `step`, run once per substep).
+    void stepInternal(Real dt);
+    // How many substeps this state needs (1 unless a fast body would overshoot).
+    int substepCount(Real dt) const;
+
     // Rebuilds the transient contact constraints from the current overlap and
     // seeds them with the previous step's impulses (warm starting).
     void buildContacts(Real dt);

@@ -362,7 +362,47 @@ RigidBody& PhysicsWorld::createBody() {
     return created;
 }
 
+int PhysicsWorld::substepCount(Real dt) const {
+    if (!enableSubStepping || maxSubSteps <= 1 || dt <= 0.0) {
+        return 1;
+    }
+    int substeps = 1;
+    for (const RigidBody& body : bodies_) {
+        if (!body.isDynamic() || body.sleeping) {
+            continue;
+        }
+        const Real speed = glm::length(body.linearVelocity);
+        if (speed <= 0.0) {
+            continue;
+        }
+        const Real displacement = speed * dt;
+        const Aabb box = computeAabb(body);
+        const Vec3 half = 0.5 * (box.max - box.min);
+        const Real halfSize = std::min(half.x, std::min(half.y, half.z));
+        const Real sizeLimit = halfSize > 1e-6 ? 0.5 * halfSize : maxSubStepDistance;
+        const Real allowed = std::min(maxSubStepDistance, sizeLimit);
+        const int needed = static_cast<int>(std::ceil(displacement / allowed));
+        substeps = std::max(substeps, needed);
+        if (substeps >= maxSubSteps) {
+            return maxSubSteps;
+        }
+    }
+    return std::min(substeps, maxSubSteps);
+}
+
 void PhysicsWorld::step(Real dt) {
+    const int substeps = substepCount(dt);
+    if (substeps <= 1) {
+        stepInternal(dt);
+        return;
+    }
+    const Real h = dt / static_cast<Real>(substeps);
+    for (int i = 0; i < substeps; ++i) {
+        stepInternal(h);
+    }
+}
+
+void PhysicsWorld::stepInternal(Real dt) {
     for (RigidBody& body : bodies_) {
         body.updateCache();
         body.clearAccumulators();

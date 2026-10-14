@@ -313,6 +313,19 @@ impulses and `RigidBody::wake()` also wake a body. The sleep flag and timer are
 part of `stateHash` and the snapshot, so sleeping is reproducible and restorable.
 `enableSleeping = false` disables it (and wakes everything).
 
+### Sub-stepping (`enableSubStepping`)
+
+A fast body can move past thin geometry in one step and tunnel through it. When
+`enableSubStepping` is set, `step()` measures how far the fastest dynamic body
+would move in the step; if that exceeds `maxSubStepDistance` (2 cm) or half the
+body's own smallest AABB half-size, it splits the step into equal substeps (each
+re-running the whole pipeline) so no body advances further than that per substep,
+capped at `maxSubSteps` (32). The substep count is a pure function of the current
+state, so runs stay reproducible. It is **off by default**: a stiff joint or
+spring can legitimately reach high speed without being anywhere near a contact,
+and sub-stepping such a scene only costs time. Enable it for scenes with
+projectiles or small fast bodies near thin walls.
+
 ### Determinism and snapshots
 
 - Ids and creation order (bodies, constraints, elements) are fixed, so the
@@ -444,7 +457,7 @@ spring-damper with its effective-radius curve.
 
 ## Results
 
-Full suite: **81 cases / 7596 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **82 cases / 7598 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -502,6 +515,7 @@ absolute error in metres/radians/J for physical magnitudes).
 | GJK overlap / hull | boolean / depth | true / 0.4 m | true / 0.4 m | 0 | < 1e-6 | A hull of a box's eight corners reproduces the analytic box |
 | Sphere on triangle-mesh plane | penetration / n | r − y = 0.1 m / (0, 1, 0) | 0.1 m / (0, 1, 0) | 0 | exact | Closest point on the soup; the normal flips when the argument order does |
 | Box on triangle-mesh plane | contacts / penetration | 4 / 0.1 m | 4 / 0.1 m | 0 | exact | The four bottom corners sit 0.1 m behind the plane along its outward normal |
+| Sub-stepping, fast sphere vs thin wall | final position | < 0.06 m (stopped at the wall) | 0.06 m | — | informative | Without `enableSubStepping` the sphere moves 0.5 m in one step and jumps the 2 cm wall; with it the step is split and the wall is hit |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000

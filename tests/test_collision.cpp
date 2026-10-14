@@ -254,6 +254,37 @@ TEST_CASE("sweep-and-prune matches a brute-force broadphase") {
     }
 }
 
+TEST_CASE("sub-stepping stops a fast sphere tunnelling a thin wall") {
+    PhysicsWorld world;
+    world.gravity = Vec3(0.0);
+    world.enableSubStepping = true;
+
+    RigidBody& wall = world.createBody();
+    wall.shape = Shape::box(Vec3(0.01, 1.0, 1.0));
+    wall.setType(BodyType::Static);
+    wall.setMass(0.0);
+    wall.collisionEnabled = true;
+    wall.updateCache();
+
+    RigidBody& ball = world.createBody();
+    ball.shape = Shape::sphere(0.05);
+    ball.setMass(1.0);
+    ball.position = Vec3(-0.3, 0.0, 0.0);
+    ball.linearVelocity = Vec3(500.0, 0.0, 0.0);
+    ball.restitution = 0.0;
+    ball.collisionEnabled = true;
+    ball.updateCache();
+
+    // One step moves the ball 0.5 m, far past the 2 cm wall: without
+    // sub-stepping it would jump straight through.
+    for (int i = 0; i < 5; ++i) {
+        world.step(1.0 / 1000.0);
+    }
+
+    CHECK(ball.position.x < 0.06); // never crossed the wall
+    CHECK(std::abs(ball.linearVelocity.x) < 1.0);
+}
+
 TEST_CASE("a dynamic box comes to rest on static ground without tunnelling") {
     PhysicsWorld world;
 
