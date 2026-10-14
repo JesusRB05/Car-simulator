@@ -91,7 +91,7 @@ manoeuvres and the numbered work packages are in the
 |---|---|
 | Rigid-body core | Done: fixed step, deterministic, soft and rigid joints with an exact island block solve, 1:1000 mass-ratio tests, energy and angular-momentum tests |
 | Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, a generic GJK/EPA convex path, a heightfield terrain surface, a static triangle-mesh soup, a sweep-and-prune broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, sleep-capable and deterministic, with optional sub-stepping against tunnelling. Still missing: speculative contacts. The raycast-wheel car still uses an analytic ground |
-| Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a pure-slip Magic Formula `MagicFormulaTire` (P2.2 core) plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
+| Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a pure-slip Magic Formula `MagicFormulaTire` with camber thrust and rolling resistance (P2.2 core) plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
 | App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit |
 | Mods | Sandboxed Lua (JIT disabled, instruction budget), mod VFS with priorities, native plugin API skeleton |
@@ -180,8 +180,9 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
 - **Started:** `MagicFormulaTire` (`vehicle/MagicFormulaTire.hpp`) implements
   `ITireModel` with the pure-slip Magic Formula 6.x curve, load-dependent peaks
   and stiffness, a friction-circle bound, a self-aligning moment from the
-  pneumatic trail and a `.tir` coefficient parser (P2.2 core; the remaining
-  moments and transient relaxation are still pending). `TireVertical`
+  pneumatic trail, camber thrust, a rolling-resistance moment and a `.tir`
+  coefficient parser (P2.2 core; combined slip beyond the friction circle, the
+  overturning moment and transient relaxation are still pending). `TireVertical`
   (`vehicle/TireVertical.hpp`) adds the one-sided vertical spring-damper and the
   effective-radius curve (P2.1 core).
 

@@ -110,6 +110,10 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
     const Real by = (cy * dy != 0.0) ? ky / (cy * dy) : 0.0;
     Real fy = -magic(by, cy, dy, c.pEy1, state.slipAngle);
 
+    // Camber thrust: the leaning tyre pushes towards the lean. A positive camber
+    // angle adds a lateral force towards the wheel's left (+Fy).
+    fy += c.pKyg1 * fz * state.camber;
+
     // Friction-circle bound so a combined (kappa, alpha) input never asks for
     // more grip than the peak available on this surface.
     const Real muX = c.pDx1 + c.pDx2 * dfz;
@@ -133,6 +137,11 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
     forces.longitudinal = fx;
     forces.lateral = fy;
     forces.aligningMoment = mz;
+
+    // Rolling resistance opposes travel; its sign follows the contact speed, so
+    // it vanishes at a standstill (the caller supplies the wheel's direction).
+    const Real travelDirection = state.contactSpeed > 0.0 ? 1.0 : (state.contactSpeed < 0.0 ? -1.0 : 0.0);
+    forces.rollingResistanceMoment = -c.rollingResistance * fz * c.radius * travelDirection;
     return forces;
 }
 

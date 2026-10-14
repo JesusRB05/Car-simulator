@@ -198,6 +198,35 @@ TEST_CASE("MagicFormulaTire matches the pure-slip Magic Formula curve") {
     CHECK(tire.unloadedRadius() == doctest::Approx(c.radius));
 }
 
+TEST_CASE("MF tyre camber thrust and rolling resistance") {
+    MagicFormulaTire tire;
+    const MagicFormulaCoefficients& c = tire.coefficients();
+    const Real fz0 = c.nominalLoad;
+
+    TireState leaned;
+    leaned.normalLoad = fz0;
+    leaned.camber = 0.05;
+    const TireForces camberForces = tire.computeForces(leaned);
+    CHECK(camberForces.lateral == doctest::Approx(c.pKyg1 * fz0 * 0.05));
+
+    // Reversed camber flips the thrust.
+    TireState other = leaned;
+    other.camber = -0.05;
+    CHECK(tire.computeForces(other).lateral == doctest::Approx(-camberForces.lateral));
+
+    // Rolling resistance opposes travel and vanishes at rest.
+    TireState rolling = leaned;
+    rolling.camber = 0.0;
+    rolling.contactSpeed = 10.0;
+    const TireForces forward = tire.computeForces(rolling);
+    CHECK(forward.rollingResistanceMoment == doctest::Approx(-c.rollingResistance * fz0 * c.radius));
+
+    TireState backward = rolling;
+    backward.contactSpeed = -10.0;
+    CHECK(tire.computeForces(backward).rollingResistanceMoment == doctest::Approx(-forward.rollingResistanceMoment));
+    CHECK(tire.computeForces(leaned).rollingResistanceMoment == doctest::Approx(0.0)); // contactSpeed = 0
+}
+
 TEST_CASE("the vertical tyre never pulls and its radius follows the load") {
     TireVerticalCoefficients c;
 

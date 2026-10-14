@@ -47,6 +47,12 @@ struct MagicFormulaCoefficients {
     Real qDz2 = -0.05; // trail load sensitivity
     Real qEz1 = -1.0;  // trail curvature
 
+    // Camber thrust: leaning the tyre develops a lateral force towards the lean,
+    // Kyg = pKyg1 * Fz (N per radian of camber angle).
+    Real pKyg1 = 1.0;
+    // Rolling resistance (dimensionless; ~0.012 for a road tyre).
+    Real rollingResistance = 0.012;
+
     Real radius = 0.31; // unloaded tyre radius (m)
 };
 
