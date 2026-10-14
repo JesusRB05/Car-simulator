@@ -220,7 +220,11 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   differential) plus brakes, Ackermann steering and aero; it implements
   `IVehicleModel` and a `makeDefaultVehicleSetup()` describes the first car. The
   `PlaceholderVehicle` and `RaycastCar` prototypes are still present and are removed
-  once the app drives the assembled model.
+  once the app drives the assembled model. `Electronics` (`vehicle/Electronics.hpp`)
+  implements the `IVehicleElectronics` hook (Section 7.8) as one combined ABS, TCS
+  and ESC unit: per-wheel brake release, a throttle cut on driven-wheel slip and an
+  outer-front brake plus throttle trim from the yaw-rate error; a `VehicleModel`
+  may hold one and it is inert when none is attached.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,
