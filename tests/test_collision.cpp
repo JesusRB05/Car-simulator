@@ -12,6 +12,7 @@
 #include "physics/Math.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "physics/RigidBody.hpp"
+#include "physics/TriangleMesh.hpp"
 
 using namespace sim::physics;
 
@@ -965,6 +966,61 @@ TEST_CASE("a convex hull behaves like the analytic box") {
 
     // A separated hull produces no contact.
     CHECK(collide(hull, makeBox(Vec3(0.5), Vec3(3.0, 0.0, 0.0)), points, kMaxContactPoints) == 0);
+}
+
+namespace {
+
+std::shared_ptr<const TriangleMesh> unitQuad() {
+    auto mesh = std::make_shared<TriangleMesh>();
+    mesh->vertices = {Vec3(-1.0, 0.0, -1.0), Vec3(1.0, 0.0, -1.0), Vec3(1.0, 0.0, 1.0), Vec3(-1.0, 0.0, 1.0)};
+    // Wound so the outward normal is +Y.
+    mesh->indices = {0, 2, 1, 0, 3, 2};
+    return mesh;
+}
+
+} // namespace
+
+TEST_CASE("a sphere and a box rest on a triangle-mesh plane") {
+    RigidBody ground;
+    ground.shape = Shape::triangleMesh(unitQuad());
+    ground.setType(BodyType::Static);
+    ground.updateCache();
+
+    // AABB matches the quad.
+    const Aabb box = computeAabb(ground);
+    CHECK(box.min == Vec3(-1.0, 0.0, -1.0));
+    CHECK(box.max == Vec3(1.0, 0.0, 1.0));
+
+    RigidBody sphere = makeSphere(0.5, Vec3(0.0, 0.4, 0.0));
+    ContactPoint points[kMaxContactPoints];
+    int count = collide(ground, sphere, points, kMaxContactPoints);
+    REQUIRE(count == 1);
+    CHECK(points[0].penetration == doctest::Approx(0.1));
+    CHECK(points[0].normal == Vec3(0.0, 1.0, 0.0));
+
+    // Flipped order flips the normal.
+    CHECK(collide(sphere, ground, points, kMaxContactPoints) == 1);
+    CHECK(points[0].normal == Vec3(0.0, -1.0, 0.0));
+
+    // A box above the plane rests on its four bottom corners.
+    RigidBody resting = makeBox(Vec3(0.5), Vec3(0.0, 0.4, 0.0));
+    const int boxCount = collide(ground, resting, points, kMaxContactPoints);
+    REQUIRE(boxCount == 4);
+    for (int i = 0; i < boxCount; ++i) {
+        CHECK(points[i].penetration == doctest::Approx(0.1));
+        CHECK(points[i].normal == Vec3(0.0, 1.0, 0.0));
+    }
+}
+
+TEST_CASE("triangle-mesh contacts reject separated shapes") {
+    RigidBody ground;
+    ground.shape = Shape::triangleMesh(unitQuad());
+    ground.setType(BodyType::Static);
+    ground.updateCache();
+
+    ContactPoint points[kMaxContactPoints];
+    CHECK(collide(ground, makeSphere(0.5, Vec3(0.0, 2.0, 0.0)), points, kMaxContactPoints) == 0);
+    CHECK(collide(ground, makeBox(Vec3(0.5), Vec3(0.0, 3.0, 0.0)), points, kMaxContactPoints) == 0);
 }
 
 TEST_CASE("heightfield footprint and bounds follow the grid") {

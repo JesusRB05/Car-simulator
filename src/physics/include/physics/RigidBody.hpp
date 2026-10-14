@@ -11,8 +11,10 @@
 
 namespace sim::physics {
 
-// Defined in physics/Heightfield.hpp; only referenced through a shared pointer.
+// Defined in physics/Heightfield.hpp and physics/TriangleMesh.hpp; only
+// referenced through a shared pointer here.
 struct Heightfield;
+struct TriangleMesh;
 
 enum class BodyType {
     Static,
@@ -26,6 +28,7 @@ enum class ShapeType {
     Cylinder,
     Heightfield,
     Convex,
+    Mesh,
 };
 
 // A primitive used for automatic inertia computation and, later, collisions and
@@ -39,6 +42,7 @@ struct Shape {
     Real radius = 0.5;                              // Sphere, Cylinder
     Real halfHeight = 0.5;                          // Cylinder (local +Y axis)
     std::shared_ptr<const Heightfield> heightfield; // Heightfield
+    std::shared_ptr<const TriangleMesh> mesh;       // Mesh
     std::vector<Vec3> vertices;                     // Convex hull (local frame)
 
     static Shape box(const Vec3& halfExtents);
@@ -46,6 +50,7 @@ struct Shape {
     static Shape cylinder(Real radius, Real halfHeight);
     static Shape terrain(std::shared_ptr<const Heightfield> field);
     static Shape convex(std::vector<Vec3> vertices);
+    static Shape triangleMesh(std::shared_ptr<const TriangleMesh> mesh);
 };
 
 // Computes the principal inertia moments of a uniform solid shape of the given
