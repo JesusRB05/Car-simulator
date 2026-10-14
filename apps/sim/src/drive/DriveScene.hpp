@@ -112,9 +112,12 @@ private:
     std::shared_ptr<render::Mesh> terrain_;
     std::shared_ptr<render::Mesh> farGround_;
     std::shared_ptr<render::Mesh> asphalt_;
+    std::shared_ptr<render::Mesh> verge_;
+    std::shared_ptr<render::Mesh> edgeLines_;
     std::shared_ptr<render::Mesh> kerbRed_;
     std::shared_ptr<render::Mesh> kerbWhite_;
     std::shared_ptr<render::Mesh> startLine_;
+    std::shared_ptr<render::Mesh> startLineDark_;
 
     DriveCamera cameraMode_ = DriveCamera::Chase;
     bool cameraSnap_ = true;

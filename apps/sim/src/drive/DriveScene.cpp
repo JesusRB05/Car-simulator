@@ -25,8 +25,10 @@ namespace sim::app::drive {
 namespace {
 
 const glm::vec4 kGrassColor{0.24f, 0.42f, 0.20f, 1.0f};
+const glm::vec4 kVergeColor{0.21f, 0.37f, 0.17f, 1.0f};
 const glm::vec4 kFarGrassColor = kGrassColor;
 const glm::vec4 kAsphaltColor{0.20f, 0.20f, 0.22f, 1.0f};
+const glm::vec4 kCheckerDark{0.07f, 0.07f, 0.08f, 1.0f};
 const glm::vec4 kKerbRed{0.85f, 0.10f, 0.08f, 1.0f};
 const glm::vec4 kKerbWhite{0.92f, 0.92f, 0.92f, 1.0f};
 const glm::vec4 kLineWhite{0.95f, 0.95f, 0.95f, 1.0f};
@@ -48,8 +50,9 @@ glm::vec3 toVec3(const Vec3& v) {
     return {static_cast<float>(v.x), static_cast<float>(v.y), static_cast<float>(v.z)};
 }
 
-// CPU mesh builder. Every triangle is emitted with both windings so the flat
-// track and terrain surfaces render regardless of the culling convention.
+// CPU mesh builder. Triangles are wound counter-clockwise seen from outside
+// (matching Mesh.hpp and the scene pipeline's back-face culling), so each
+// triangle is emitted once with a single winding.
 struct MeshBuilder {
     std::vector<render::Vertex> vertices;
     std::vector<std::uint32_t> indices;
@@ -63,12 +66,29 @@ struct MeshBuilder {
     }
 
     void triangle(std::uint32_t a, std::uint32_t b, std::uint32_t c) {
-        indices.insert(indices.end(), {a, b, c, a, c, b});
+        indices.insert(indices.end(), {a, b, c});
     }
 
     void quad(std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
         triangle(a, b, c);
         triangle(a, c, d);
+    }
+
+    // A near-horizontal quad, wound so its face normal points up (+Y) whatever
+    // order the corners were given in. Every track surface is flat or gently
+    // banked, so this keeps the single winding correct without having to reason
+    // about the direction of travel versus the driver's left and right at each
+    // call site.
+    void quadUp(std::uint32_t a, std::uint32_t b, std::uint32_t c, std::uint32_t d) {
+        const glm::vec3 normal = glm::cross(vertices[b].position - vertices[a].position,
+                                            vertices[c].position - vertices[a].position);
+        if (normal.y >= 0.0f) {
+            triangle(a, b, c);
+            triangle(a, c, d);
+        } else {
+            triangle(a, c, b);
+            triangle(a, d, c);
+        }
     }
 
     std::shared_ptr<render::Mesh> build(rhi::Device& device) const {
@@ -227,12 +247,11 @@ void DriveScene::updateLapTimer() {
 void DriveScene::buildMeshes(rhi::Device& device) {
     const std::vector<TrackSample>& samples = track_.samples();
     const std::size_t count = samples.size();
-    const double halfWidth = track_.halfWidth();
     const double kerbWidth = track_.kerbWidth();
 
     // Shared unit primitives (cube +-0.5, cylinder radius 1 / half-height 1 on +Y)
     // for the car and the gantry. The flat terrain/track meshes below are built
-    // double-sided.
+    // single-sided.
     cube_ = render::Mesh::makeCube(device);
     cylinder_ = render::Mesh::makeCylinder(device);
 
@@ -258,8 +277,8 @@ void DriveScene::buildMeshes(rhi::Device& device) {
         };
         for (int row = 0; row < rows; ++row) {
             for (int column = 0; column < columns; ++column) {
-                builder.quad(index(column, row), index(column + 1, row), index(column + 1, row + 1),
-                             index(column, row + 1));
+                builder.quadUp(index(column, row), index(column + 1, row), index(column + 1, row + 1),
+                               index(column, row + 1));
             }
         }
         terrain_ = builder.build(device);
@@ -270,29 +289,75 @@ void DriveScene::buildMeshes(rhi::Device& device) {
         MeshBuilder builder;
         constexpr double kHalf = 2500.0;
         const Vec3 up(0.0, 1.0, 0.0);
-        builder.quad(builder.vertex(Vec3(-kHalf, -0.10, -kHalf), up), builder.vertex(Vec3(kHalf, -0.10, -kHalf), up),
-                     builder.vertex(Vec3(kHalf, -0.10, kHalf), up), builder.vertex(Vec3(-kHalf, -0.10, kHalf), up));
+        builder.quadUp(builder.vertex(Vec3(-kHalf, -0.10, -kHalf), up), builder.vertex(Vec3(kHalf, -0.10, -kHalf), up),
+                       builder.vertex(Vec3(kHalf, -0.10, kHalf), up), builder.vertex(Vec3(-kHalf, -0.10, kHalf), up));
         farGround_ = builder.build(device);
     }
 
-    // Asphalt ribbon: two vertices per centreline sample, on the terrain.
+    // Asphalt ribbon: two vertices per centreline sample, following the
+    // per-sample width and banking that Track also feeds to the wheels.
     {
         MeshBuilder builder;
         for (const TrackSample& sample : samples) {
-            const Vec3 left = onTerrain(sample.position - sample.right * halfWidth, 0.0);
-            const Vec3 right = onTerrain(sample.position + sample.right * halfWidth, 0.0);
-            builder.vertex(left, Track::terrainNormal(left.x, left.z));
-            builder.vertex(right, Track::terrainNormal(right.x, right.z));
+            const Vec3 left = track_.roadPoint(sample, -sample.halfWidth, 0.0);
+            const Vec3 right = track_.roadPoint(sample, sample.halfWidth, 0.0);
+            builder.vertex(left, track_.roadNormal(sample, -sample.halfWidth));
+            builder.vertex(right, track_.roadNormal(sample, sample.halfWidth));
         }
         for (std::size_t i = 0; i < count; ++i) {
             const std::uint32_t a = static_cast<std::uint32_t>(2 * i);
             const std::uint32_t b = static_cast<std::uint32_t>(2 * ((i + 1) % count));
-            builder.quad(a, a + 1, b + 1, b);
+            builder.quadUp(a, a + 1, b + 1, b);
         }
         asphalt_ = builder.build(device);
     }
 
-    // Kerbs: 3 m red/white blocks on both edges where the corner is tight.
+    // Grass verge: a strip from the asphalt edge down to the terrain, so the
+    // raised side of a banked corner never shows a step.
+    {
+        MeshBuilder builder;
+        constexpr double kVergeWidth = 3.0;
+        for (const double side : {-1.0, 1.0}) {
+            const auto base = static_cast<std::uint32_t>(builder.vertices.size());
+            for (const TrackSample& sample : samples) {
+                const Vec3 edge = track_.roadPoint(sample, side * sample.halfWidth, 0.0);
+                const Vec3 outer = sample.position + sample.right * (side * (sample.halfWidth + kVergeWidth));
+                builder.vertex(edge, track_.roadNormal(sample, side * sample.halfWidth));
+                builder.vertex(Vec3(outer.x, Track::terrainHeight(outer.x, outer.z), outer.z),
+                               Track::terrainNormal(outer.x, outer.z));
+            }
+            for (std::size_t i = 0; i < count; ++i) {
+                const std::uint32_t a = base + static_cast<std::uint32_t>(2 * i);
+                const std::uint32_t b = base + static_cast<std::uint32_t>(2 * ((i + 1) % count));
+                builder.quadUp(a, a + 1, b + 1, b);
+            }
+        }
+        verge_ = builder.build(device);
+    }
+
+    // White edge lines just inside both asphalt edges.
+    {
+        MeshBuilder builder;
+        constexpr double kInset = 0.30;
+        constexpr double kLineWidth = 0.15;
+        for (const double side : {-1.0, 1.0}) {
+            const auto base = static_cast<std::uint32_t>(builder.vertices.size());
+            for (const TrackSample& sample : samples) {
+                const double outer = side * (sample.halfWidth - kInset);
+                const double inner = side * (sample.halfWidth - kInset - kLineWidth);
+                builder.vertex(track_.roadPoint(sample, inner, kLineRaise), track_.roadNormal(sample, inner));
+                builder.vertex(track_.roadPoint(sample, outer, kLineRaise), track_.roadNormal(sample, outer));
+            }
+            for (std::size_t i = 0; i < count; ++i) {
+                const std::uint32_t a = base + static_cast<std::uint32_t>(2 * i);
+                const std::uint32_t b = base + static_cast<std::uint32_t>(2 * ((i + 1) % count));
+                builder.quadUp(a, a + 1, b + 1, b);
+            }
+        }
+        edgeLines_ = builder.build(device);
+    }
+
+    // Kerbs: red/white blocks on both edges where the corner is tight.
     {
         MeshBuilder red;
         MeshBuilder white;
@@ -304,31 +369,46 @@ void DriveScene::buildMeshes(rhi::Device& device) {
             const TrackSample& b = samples[(i + 1) % count];
             MeshBuilder& builder = ((i / 3) % 2 == 0) ? red : white;
             for (const double side : {-1.0, 1.0}) {
-                const Vec3 a0 = onTerrain(a.position + a.right * (side * halfWidth), kKerbRaise);
-                const Vec3 a1 = onTerrain(a.position + a.right * (side * (halfWidth + kerbWidth)), kKerbRaise);
-                const Vec3 b0 = onTerrain(b.position + b.right * (side * halfWidth), kKerbRaise);
-                const Vec3 b1 = onTerrain(b.position + b.right * (side * (halfWidth + kerbWidth)), kKerbRaise);
-                const Vec3 n = Track::terrainNormal(a0.x, a0.z);
-                builder.quad(builder.vertex(a0, n), builder.vertex(a1, n), builder.vertex(b1, n),
-                             builder.vertex(b0, n));
+                const Vec3 a0 = track_.roadPoint(a, side * a.halfWidth, kKerbRaise);
+                const Vec3 a1 = track_.roadPoint(a, side * (a.halfWidth + kerbWidth), kKerbRaise);
+                const Vec3 b0 = track_.roadPoint(b, side * b.halfWidth, kKerbRaise);
+                const Vec3 b1 = track_.roadPoint(b, side * (b.halfWidth + kerbWidth), kKerbRaise);
+                const Vec3 n = track_.roadNormal(a, side * a.halfWidth);
+                builder.quadUp(builder.vertex(a0, n), builder.vertex(a1, n), builder.vertex(b1, n),
+                               builder.vertex(b0, n));
             }
         }
         kerbRed_ = red.build(device);
         kerbWhite_ = white.build(device);
     }
 
-    // Start/finish line: a 1 m white band across the asphalt.
+    // Start/finish line: a black-and-white chequer across the asphalt.
     {
-        MeshBuilder builder;
+        MeshBuilder light;
+        MeshBuilder dark;
         const TrackSample& start = samples[track_.startIndex()];
-        const Vec3 along = start.tangent * 0.5;
-        const Vec3 across = start.right * halfWidth;
-        const Vec3 n = Track::terrainNormal(start.position.x, start.position.z);
-        builder.quad(builder.vertex(onTerrain(start.position - across - along, kLineRaise), n),
-                     builder.vertex(onTerrain(start.position + across - along, kLineRaise), n),
-                     builder.vertex(onTerrain(start.position + across + along, kLineRaise), n),
-                     builder.vertex(onTerrain(start.position - across + along, kLineRaise), n));
-        startLine_ = builder.build(device);
+        constexpr int kAcross = 10;
+        constexpr int kAlong = 2;
+        const double tileWidth = 2.0 * start.halfWidth / kAcross;
+        const double tileLength = 0.6 / kAlong;
+        const Vec3 n = track_.roadNormal(start, 0.0);
+        const auto point = [&](double lateral, double along) {
+            const Vec3 p = track_.roadPoint(start, lateral, kLineRaise);
+            return Vec3(p.x + start.tangent.x * along, p.y, p.z + start.tangent.z * along);
+        };
+        for (int row = 0; row < kAlong; ++row) {
+            for (int column = 0; column < kAcross; ++column) {
+                const double l0 = -start.halfWidth + tileWidth * column;
+                const double l1 = l0 + tileWidth;
+                const double t0 = (row - 0.5 * kAlong) * tileLength;
+                const double t1 = t0 + tileLength;
+                MeshBuilder& builder = ((row + column) % 2 == 0) ? light : dark;
+                builder.quadUp(builder.vertex(point(l0, t0), n), builder.vertex(point(l1, t0), n),
+                               builder.vertex(point(l1, t1), n), builder.vertex(point(l0, t1), n));
+            }
+        }
+        startLine_ = light.build(device);
+        startLineDark_ = dark.build(device);
     }
 }
 
@@ -379,10 +459,13 @@ void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelt
     setDefaultLight(scene);
     scene.add(farGround_, glm::mat4(1.0f), kFarGrassColor);
     scene.add(terrain_, glm::mat4(1.0f), kGrassColor);
+    scene.add(verge_, glm::mat4(1.0f), kVergeColor);
     scene.add(asphalt_, glm::mat4(1.0f), kAsphaltColor);
+    scene.add(edgeLines_, glm::mat4(1.0f), kLineWhite);
     scene.add(kerbRed_, glm::mat4(1.0f), kKerbRed);
     scene.add(kerbWhite_, glm::mat4(1.0f), kKerbWhite);
     scene.add(startLine_, glm::mat4(1.0f), kLineWhite);
+    scene.add(startLineDark_, glm::mat4(1.0f), kCheckerDark);
 
     // Static collision scenery (barrier walls + the run-off test yard).
     for (const ObstacleBatch& batch : obstacleBatches_) {
