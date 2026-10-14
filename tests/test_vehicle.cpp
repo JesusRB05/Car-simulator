@@ -29,7 +29,6 @@
 #include "vehicle/IVehicleModel.hpp"
 #include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/MassProperties.hpp"
-#include "vehicle/PlaceholderVehicle.hpp"
 #include "vehicle/SpringDamper.hpp"
 #include "vehicle/Steering.hpp"
 #include "vehicle/TireBristle.hpp"
@@ -41,15 +40,6 @@ using namespace sim::vehicle;
 namespace physics = sim::physics;
 
 namespace {
-
-constexpr Real kDt = 1.0 / 1000.0;
-
-void run(IVehicleModel& model, const VehicleInput& input, int steps) {
-    model.setInput(input);
-    for (int i = 0; i < steps; ++i) {
-        REQUIRE(model.step(kDt));
-    }
-}
 
 // A purely linear longitudinal tyre, so the wheel run-up has an exact analytic
 // solution to compare the implicit step against.
@@ -89,54 +79,6 @@ DoubleWishboneCorner sampleCorner() {
 }
 
 } // namespace
-
-TEST_CASE("PlaceholderVehicle at heading 0 faces and drives towards -Z") {
-    PlaceholderVehicle car;
-    car.reset(Vec3(0.0), 0.0);
-
-    CHECK(car.forward().x == doctest::Approx(0.0));
-    CHECK(car.forward().z == doctest::Approx(-1.0));
-    CHECK(car.right().x == doctest::Approx(1.0));
-
-    VehicleInput input;
-    input.throttle = 1.0;
-    run(car, input, 2000);
-
-    CHECK(car.forwardSpeed() > 0.0);
-    CHECK(car.position().z < -1.0);
-    CHECK(std::abs(car.position().x) < 1e-9);
-    CHECK(car.linearVelocity().z < 0.0);
-
-    // The orientation quaternion maps body -Z onto the forward direction.
-    const Vec3 rotated = car.orientation() * Vec3(0.0, 0.0, -1.0);
-    CHECK(rotated.x == doctest::Approx(car.forward().x));
-    CHECK(rotated.z == doctest::Approx(car.forward().z));
-}
-
-// Convention: positive steer (and positive heading/yaw rate about +Y) turns
-// the vehicle to the LEFT, i.e. counter-clockwise seen from above (+Y), so a
-// car starting at heading 0 drifts towards -X.
-TEST_CASE("PlaceholderVehicle positive steer turns left (towards -X)") {
-    PlaceholderVehicle car;
-    car.reset(Vec3(0.0), 0.0);
-
-    VehicleInput input;
-    input.throttle = 1.0;
-    input.steer = 1.0;
-    run(car, input, 2000);
-
-    CHECK(car.heading() > 0.0);
-    CHECK(car.angularVelocity().y > 0.0);
-    CHECK(car.position().x < 0.0);
-    CHECK(car.position().z < 0.0);
-
-    PlaceholderVehicle mirrored;
-    mirrored.reset(Vec3(0.0), 0.0);
-    input.steer = -1.0;
-    run(mirrored, input, 2000);
-    CHECK(mirrored.position().x > 0.0);
-    CHECK(mirrored.position().x == doctest::Approx(-car.position().x));
-}
 
 TEST_CASE("MagicFormulaTire matches the pure-slip Magic Formula curve") {
     MagicFormulaTire tire;

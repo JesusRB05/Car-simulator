@@ -138,9 +138,10 @@ bool Application::initialise() {
 
     const double fixedDt = config_->getDouble("physics.fixed_dt", 1.0 / 1000.0);
     physicsClock_.setFixedDt(fixedDt);
-    vehicle_.reset(physics::Vec3(0.0, 0.0, 0.0), 0.0);
-    for (std::size_t i = 0; i < wheelOffsets_.size() && i < vehicle_.wheels().size(); ++i) {
-        const physics::Vec3 local = vehicle_.wheels()[i].localPosition;
+    world_.fixedStep = fixedDt;
+    vehicle_ = &vehicle::VehicleModel::spawn(world_, vehicle::makeDefaultVehicleSetup(), vehicleGround_);
+    for (std::size_t i = 0; i < wheelOffsets_.size() && i < vehicle_->corners().size(); ++i) {
+        const physics::Vec3 local = vehicle_->corners()[i].localMount;
         wheelOffsets_[i] =
             glm::vec3(static_cast<float>(local.x), static_cast<float>(local.y), static_cast<float>(local.z));
     }
@@ -286,12 +287,13 @@ void Application::physicsLoop() {
             input.brake = inputBrake_.load(std::memory_order_relaxed);
             input.steer = inputSteer_.load(std::memory_order_relaxed);
             input.handbrake = inputHandbrake_.load(std::memory_order_relaxed);
-            vehicle_.setInput(input);
+            vehicle_->setInput(input);
 
             const double startMs = wallNow();
             for (std::uint32_t i = 0; i < result.steps; ++i) {
-                vehicle_.step(dt);
-                world_.step(dt);
+                // VehicleModel advances the world it was spawned into, so the
+                // chassis and the rest of the world share one fixed step.
+                vehicle_->step(dt);
             }
             physicsTimeMs_.store((wallNow() - startMs) * 1000.0, std::memory_order_relaxed);
             physicsSteps_.store(static_cast<int>(result.steps), std::memory_order_relaxed);
@@ -300,13 +302,13 @@ void Application::physicsLoop() {
             snapshot.simTime = physicsClock_.simTime();
             snapshot.wallTime = wallNow();
             snapshot.steps = static_cast<int>(result.steps);
-            snapshot.vehiclePosition = toDvec(vehicle_.position());
-            snapshot.heading = vehicle_.heading();
-            snapshot.speed = vehicle_.speed();
-            snapshot.rpm = vehicle_.engineRpm();
-            snapshot.steer = vehicle_.steerAngle();
+            snapshot.vehiclePosition = toDvec(vehicle_->position());
+            snapshot.heading = vehicle_->heading();
+            snapshot.speed = vehicle_->forwardSpeed();
+            snapshot.rpm = vehicle_->engineSpeed() * 9.549296585513721; // rad/s -> rpm
+            snapshot.steer = vehicle_->steerAngle();
             for (std::size_t i = 0; i < snapshot.wheelSpin.size(); ++i) {
-                snapshot.wheelSpin[i] = vehicle_.wheels()[i].spinAngle;
+                snapshot.wheelSpin[i] = vehicle_->corners()[i].spinAngle;
             }
             for (std::size_t i = 0; i < world_.bodyCount(); ++i) {
                 const physics::RigidBody& body = world_.body(i);

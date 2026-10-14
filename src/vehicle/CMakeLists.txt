@@ -69,10 +69,7 @@ add_library(sim_vehicle STATIC
     src/Brake.cpp
     # Driver aids ABS / TCS / ESC (Phase 2, Section 7.8).
     include/vehicle/Electronics.hpp
-    src/Electronics.cpp
-    # TEMPORARY kinematic placeholder implementing IVehicleModel.
-    include/vehicle/PlaceholderVehicle.hpp
-    src/PlaceholderVehicle.cpp)
+    src/Electronics.cpp)
 add_library(sim::vehicle ALIAS sim_vehicle)
 
 target_include_directories(sim_vehicle PUBLIC include)

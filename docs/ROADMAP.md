@@ -218,17 +218,17 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   `PhysicsWorld`, with raycast corners that read the tyre, the spring-damper and the
   `IGroundQuery` surface, and a rear-wheel-drive driveline (engine, clutch, gearbox,
   differential) plus brakes, Ackermann steering and aero; it implements
-  `IVehicleModel` and a `makeDefaultVehicleSetup()` describes the first car. The
-  keyboard-drivable circuit (`apps/sim/src/drive/DriveScene`) now simulates the
-  assembled model through the `TrackGroundQuery` adapter, so its HUD, wheel
-  rendering and debug overlay read `VehicleCorner`. The `RaycastCar` prototype
-  (still exercised only by its tests) and the `PlaceholderVehicle` that drives the
-  default `driving` scene remain and are removed next. `Electronics`
-  (`vehicle/Electronics.hpp`) implements the `IVehicleElectronics` hook (Section
-  7.8) as one combined ABS, TCS and ESC unit: per-wheel brake release, a throttle
-  cut on driven-wheel slip and an outer-front brake plus throttle trim from the
-  yaw-rate error; a `VehicleModel` may hold one and it is inert when none is
-  attached.
+  `IVehicleModel` and a `makeDefaultVehicleSetup()` describes the first car. Both
+  the keyboard-drivable circuit (`apps/sim/src/drive/DriveScene`) and the default
+  `driving` scene (`Application`) now simulate the assembled model, the circuit
+  through the `TrackGroundQuery` adapter (HUD, wheel rendering and debug overlay
+  read `VehicleCorner`) and the app through a `FlatGroundQuery` on the physics
+  thread; the `RaycastCar` and `PlaceholderVehicle` prototypes are retired.
+  `Electronics` (`vehicle/Electronics.hpp`) implements the `IVehicleElectronics`
+  hook (Section 7.8) as one combined ABS, TCS and ESC unit: per-wheel brake
+  release, a throttle cut on driven-wheel slip and an outer-front brake plus
+  throttle trim from the yaw-rate error; a `VehicleModel` may hold one and it is
+  inert when none is attached.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,

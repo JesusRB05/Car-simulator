@@ -35,7 +35,8 @@
 #include "scripting/LuaSandbox.hpp"
 #include "scripting/ScriptHost.hpp"
 #include "telemetry/Telemetry.hpp"
-#include "vehicle/PlaceholderVehicle.hpp"
+#include "vehicle/GroundQuery.hpp"
+#include "vehicle/VehicleModel.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
 #include "OrbitCamera.hpp"
@@ -218,7 +219,8 @@ private:
 
     // Simulation.
     physics::PhysicsWorld world_;
-    vehicle::PlaceholderVehicle vehicle_; // TEMPORARY until the real IVehicleModel lands
+    vehicle::FlatGroundQuery vehicleGround_;   // the flat demo ground
+    vehicle::VehicleModel* vehicle_ = nullptr; // the assembled car, owned by world_
     std::thread physicsThread_;
     std::atomic<bool> physicsRunning_{false};
     core::FixedStepClock physicsClock_{1.0 / 1000.0, 16};
