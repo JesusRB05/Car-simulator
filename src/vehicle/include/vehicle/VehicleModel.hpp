@@ -236,7 +236,8 @@ private:
     Real engineSpeed_ = 0.0;
     Real engineTorque_ = 0.0;
     Real clutchEngagement_ = 1.0;
-    Real loadTorque_ = 0.0; // clutch torque fed back to the engine next step
+    Real loadTorque_ = 0.0;           // clutch torque fed back to the engine next step
+    Real drivenInertiaReflect_ = 0.0; // engine inertia folded onto each driven wheel
     Real shiftTimer_ = 0.0;
     Real directionTimer_ = 0.0;
     BrakeModulation brakeModulation_{}; // per-wheel brake torque from the aids

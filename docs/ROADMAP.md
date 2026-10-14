@@ -241,9 +241,12 @@ coasting deceleration invariant. Writing it exposed and fixed a driveline energy
 leak - the clutch now couples the engine to the input shaft implicitly, clamped to
 the plate capacity (Section 7.2), instead of the old two-branch rule that drove the
 car with the throttle closed - and an under-sized default master cylinder, now the
-documented 3600 N*m of total brake torque (`DRIVE.md`). The friction-limit stopping
-distance still needs the rear-axle braking (chatter against the reflected
-driveline) sorted first.
+documented 3600 N*m of total brake torque (`DRIVE.md`). A second pass fixed the
+rear-axle brake chatter: with the clutch locked and the driver off the power or on
+the brakes, the engine inertia is folded onto the driven wheels before the wheel-spin
+solve, so the stiff engine-to-shaft link can no longer amplify step-to-step
+wheel-speed jitter into a capacity-limited bang-bang against the brakes. The
+friction-limit stopping distance oracle can now be built on a calm driveline.
 - **Validation suite in CI** with reference values: braking distance
   (`v^2 / (2 mu g)`), steady-state circular driving (understeer gradient against the
   linear bicycle model), step steer and sine-sweep response, constant-radius

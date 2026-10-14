@@ -172,6 +172,38 @@ TEST_CASE("Manoeuvre: coasting in gear slows the car (no driveline energy inject
     CHECK(rig.car->engineSpeed() > 100.0);
 }
 
+TEST_CASE("Manoeuvre: braking in gear does not chatter the driveline") {
+    FlatRig rig;
+    rig.launchTo(20.0);
+
+    VehicleInput input;
+    input.brake = 1.0;
+    rig.car->setInput(input);
+
+    // Hold the brakes from 20 m/s and watch the driven axle: the clutch must not
+    // slam between driving the wheels and engine-braking them every step.
+    int flips = 0;
+    Real lastSign = 0.0;
+    Real peakDrive = 0.0;
+    for (int i = 0; i < 4000 && rig.car->forwardSpeed() > 0.2; ++i) {
+        rig.car->step(kDt);
+        const Real drive = rig.car->corners()[2].driveTorque;
+        peakDrive = std::max(peakDrive, std::abs(drive));
+        const Real sign = drive > 1.0 ? 1.0 : (drive < -1.0 ? -1.0 : 0.0);
+        if (sign != 0.0) {
+            if (lastSign != 0.0 && sign != lastSign) {
+                ++flips;
+            }
+            lastSign = sign;
+        }
+    }
+    INFO("brake chatter: " << flips << " drive-torque sign flips, peak |drive| = " << peakDrive
+                           << " N*m, v = " << rig.car->forwardSpeed());
+
+    CHECK(flips <= 2);
+    CHECK(peakDrive < 1200.0);
+}
+
 TEST_CASE("Manoeuvre: low-speed cornering matches the kinematic bicycle radius") {
     FlatRig rig;
     const Turn turn = steadyTurn(rig, 5.0, 0.25);

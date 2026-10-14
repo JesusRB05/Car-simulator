@@ -149,6 +149,7 @@ void VehicleModel::reset(const Vec3& position, Real headingRadians) {
     engineTorque_ = 0.0;
     loadTorque_ = 0.0;
     clutchEngagement_ = 1.0;
+    drivenInertiaReflect_ = 0.0;
     shift_ = SequentialShift{};
     gear_ = 1;
     shiftTimer_ = 0.0;
@@ -262,6 +263,7 @@ void VehicleModel::updateTransmission(Real dt) {
     clutchEngagement_ = (ratio == 0.0) ? 0.0 : engagement;
 
     Real inputTorque = 0.0;
+    drivenInertiaReflect_ = 0.0;
     if (ratio == 0.0) {
         // Neutral: the engine turns freely against the clutch as no load.
         engineTorque_ = engine_.step(dt, throttle_, 0.0);
@@ -274,8 +276,7 @@ void VehicleModel::updateTransmission(Real dt) {
         // this step, clamped to what the plates can hold. Below the capacity the
         // clutch is locked and the engine follows the wheels (delivering its net
         // torque, so it brakes the car when coasting); above it the clutch slips at
-        // that limit during a launch. Solving it implicitly keeps it energy
-        // consistent: it never drives the driveline while the engine is back-driven.
+        // that limit during a launch.
         const Real engineInertia = engine_.config.inertia;
         engineTorque_ = engine_.step(dt, throttle_, 0.0);
         const Real freeSpeed = engine_.angularVelocity();
@@ -284,17 +285,32 @@ void VehicleModel::updateTransmission(Real dt) {
         clutch.engagement = clutchEngagement_;
         const Real capacity = clutch.capacity();
 
-        Real transmitted = engineInertia * (freeSpeed - inputOmega) / dt;
-        if (transmitted > capacity) {
-            transmitted = capacity;
-        } else if (transmitted < -capacity) {
-            transmitted = -capacity;
-        }
+        const Real required = engineInertia * (freeSpeed - inputOmega) / dt;
+        Real transmitted = std::clamp(required, -capacity, capacity);
         engine_.setAngularVelocity(freeSpeed - transmitted * dt / engineInertia);
         engineSpeed_ = engine_.angularVelocity();
 
         inputTorque = transmitted * shift_.torqueFactor();
         loadTorque_ = transmitted;
+
+        // When the clutch holds and the driver is off the power (braking, coasting or
+        // overrun) the engine is rigidly tied to the driven wheels, so fold its
+        // inertia into theirs for the wheel-spin solve. Without this the stiff
+        // engine-to-shaft link amplifies each step of wheel-speed jitter into a
+        // capacity-limited bang-bang against the brakes, which is the chatter. Under
+        // power the reflection is left off so a standing launch (and the traction
+        // control that tames it) is untouched.
+        if (std::abs(required) <= capacity && (throttle_ <= 0.05 || brake_ > 0.05)) {
+            std::size_t driven = 0;
+            for (const VehicleCorner& corner : corners_) {
+                if (corner.driven) {
+                    ++driven;
+                }
+            }
+            if (driven > 0) {
+                drivenInertiaReflect_ = engineInertia * ratio * ratio / static_cast<Real>(driven);
+            }
+        }
     }
 
     const Real axleTorque = setup_.gearbox.outputTorque(gear_, inputTorque) * setup_.finalDrive;
@@ -443,7 +459,7 @@ void VehicleModel::apply() {
         context.contactSpeed = vx;
 
         WheelSpinCoefficients spinCoefficients;
-        spinCoefficients.inertia = corner.wheelInertia;
+        spinCoefficients.inertia = corner.wheelInertia + (corner.driven ? drivenInertiaReflect_ : 0.0);
         spinCoefficients.minContactSpeed = setup.lowSpeedSpeed;
 
         WheelSpinInput spinInput;
