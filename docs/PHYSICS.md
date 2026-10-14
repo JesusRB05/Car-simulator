@@ -223,7 +223,8 @@ constraints and force elements. It exposes `createBody()`,
 ### Collisions and contacts (`physics/Collision.hpp`)
 
 Shape-vs-shape detection is the "detection half" of Phase 1: a deterministic
-brute-force broadphase (AABB overlap, pairs ordered by `(bodyA, bodyB)`) feeds
+**sweep-and-prune** broadphase (bodies sorted by their AABB's lower X edge, pairs
+emitted in `(bodyA, bodyB)` order, bit-identical to a brute-force scan) feeds
 analytic narrowphase routines for **sphere–sphere, sphere–box, box–box (SAT with
 face clipping and edge–edge) and sphere–cylinder**, the generic **GJK/EPA**
 convex path for `Convex` hulls (P1.2) and the `Heightfield` surface (P1.3). Each
@@ -443,7 +444,7 @@ spring-damper with its effective-radius curve.
 
 ## Results
 
-Full suite: **80 cases / 7525 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **81 cases / 7596 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).

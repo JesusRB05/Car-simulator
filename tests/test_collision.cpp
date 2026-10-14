@@ -212,6 +212,48 @@ TEST_CASE("broadphase is ordered and ignores non-dynamic pairs") {
     CHECK(pairs[0].bodyB == 1);
 }
 
+TEST_CASE("sweep-and-prune matches a brute-force broadphase") {
+    PhysicsWorld world;
+    // A deterministic scatter of overlapping and separated bodies.
+    for (int i = 0; i < 12; ++i) {
+        RigidBody& body = world.createBody();
+        const Real x = 0.4 * static_cast<Real>((i * 7) % 5);
+        const Real y = 0.5 + 0.35 * static_cast<Real>(i % 3);
+        const Real z = 0.4 * static_cast<Real>((i * 3) % 4);
+        if (i % 2 == 0) {
+            body.shape = Shape::sphere(0.5);
+        } else {
+            body.shape = Shape::box(Vec3(0.4));
+        }
+        body.setMass(1.0);
+        body.position = Vec3(x, y, z);
+        body.collisionEnabled = true;
+        body.updateCache();
+    }
+
+    std::vector<BodyPair> reference;
+    for (std::size_t i = 0; i < world.bodyCount(); ++i) {
+        for (std::size_t j = i + 1; j < world.bodyCount(); ++j) {
+            if (!world.body(i).collisionEnabled || !world.body(j).collisionEnabled) {
+                continue;
+            }
+            if (!world.body(i).isDynamic() && !world.body(j).isDynamic()) {
+                continue;
+            }
+            if (computeAabb(world.body(i)).overlaps(computeAabb(world.body(j)))) {
+                reference.push_back(BodyPair{i, j});
+            }
+        }
+    }
+
+    const std::vector<BodyPair> pairs = broadphase(world);
+    REQUIRE(pairs.size() == reference.size());
+    for (std::size_t k = 0; k < pairs.size(); ++k) {
+        CHECK(pairs[k].bodyA == reference[k].bodyA);
+        CHECK(pairs[k].bodyB == reference[k].bodyB);
+    }
+}
+
 TEST_CASE("a dynamic box comes to rest on static ground without tunnelling") {
     PhysicsWorld world;
 

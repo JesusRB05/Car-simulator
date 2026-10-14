@@ -870,9 +870,29 @@ std::vector<BodyPair> broadphase(const PhysicsWorld& world) {
         boxes[i] = computeAabb(world.body(i));
     }
 
-    std::vector<BodyPair> pairs;
+    // Sweep and prune along X: sort by the box's lower X edge, then only test a
+    // body against the following ones whose lower edge is still inside its
+    // upper edge. Sorting the result back by (bodyA, bodyB) keeps the pair order
+    // identical to a brute-force scan, so contact ordering stays deterministic.
+    std::vector<std::size_t> order(count);
     for (std::size_t i = 0; i < count; ++i) {
-        for (std::size_t j = i + 1; j < count; ++j) {
+        order[i] = i;
+    }
+    std::sort(order.begin(), order.end(), [&boxes](std::size_t a, std::size_t b) {
+        if (boxes[a].min.x != boxes[b].min.x) {
+            return boxes[a].min.x < boxes[b].min.x;
+        }
+        return a < b;
+    });
+
+    std::vector<BodyPair> pairs;
+    for (std::size_t a = 0; a < count; ++a) {
+        const std::size_t i = order[a];
+        for (std::size_t b = a + 1; b < count; ++b) {
+            const std::size_t j = order[b];
+            if (boxes[j].min.x > boxes[i].max.x) {
+                break;
+            }
             if (!world.body(i).collisionEnabled || !world.body(j).collisionEnabled) {
                 continue;
             }
@@ -880,10 +900,16 @@ std::vector<BodyPair> broadphase(const PhysicsWorld& world) {
                 continue;
             }
             if (boxes[i].overlaps(boxes[j])) {
-                pairs.push_back(BodyPair{i, j});
+                pairs.push_back(i < j ? BodyPair{i, j} : BodyPair{j, i});
             }
         }
     }
+    std::sort(pairs.begin(), pairs.end(), [](const BodyPair& l, const BodyPair& r) {
+        if (l.bodyA != r.bodyA) {
+            return l.bodyA < r.bodyA;
+        }
+        return l.bodyB < r.bodyB;
+    });
     return pairs;
 }
 
