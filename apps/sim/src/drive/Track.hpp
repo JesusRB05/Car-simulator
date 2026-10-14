@@ -70,14 +70,18 @@ struct TrackSample {
     Vec3 right{1.0, 0.0, 0.0};    // horizontal unit vector to the driver's right
     Real distance = 0.0;          // arc length from sample 0 (metres, horizontal)
     Real curvature = 0.0;         // signed horizontal curvature (1/m, > 0 turns left)
+    Real halfWidth = 5.0;         // asphalt half-width here (metres, >= 0)
+    Real banking = 0.0;           // cross-slope (radians, > 0 raises the right edge)
     bool kerb = false;            // kerbs are laid on both edges of this sample
 };
 
 // The procedural test circuit: a closed centripetal Catmull-Rom spline through a
 // fixed set of control points (long straight, hairpin, fast sweeper, chicane)
-// laid over a terrain with one smooth hill. The terrain height is analytic, so
-// every query is exact; the track only changes the surface (friction) in a band
-// around the centreline.
+// laid over a rolling terrain of a few smooth hills. The terrain height is
+// analytic, so every query is exact; each centreline sample also carries its own
+// asphalt width and banking, so the road widens on the straights, narrows into
+// the corners and leans into them. The track changes both the surface (friction)
+// and the height (banking) in a band around the centreline.
 class Track final : public GroundQuery {
 public:
     Track();
@@ -96,6 +100,13 @@ public:
     Real length() const { return length_; }
     Real halfWidth() const { return halfWidth_; }
     Real kerbWidth() const { return kerbWidth_; }
+
+    // Road cross-section geometry, shared by the physics query and the renderer
+    // so the wheels always sit on the asphalt that is actually drawn. `lateral`
+    // is signed (positive to the driver's right) and `raise` lifts the point
+    // along +Y (for decals like edge lines). Both account for the banking.
+    Vec3 roadPoint(const TrackSample& sample, Real lateral, Real raise) const;
+    Vec3 roadNormal(const TrackSample& sample, Real lateral) const;
 
     // Closest point on the centreline polyline to (x, z), searched through a
     // uniform grid. `found` is false when (x, z) is far from the track.
