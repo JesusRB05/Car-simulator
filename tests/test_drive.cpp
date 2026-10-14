@@ -10,7 +10,9 @@
 #include "drive/Obstacles.hpp"
 #include "drive/RaycastCar.hpp"
 #include "drive/Track.hpp"
+#include "drive/TrackGroundQuery.hpp"
 #include "physics/PhysicsWorld.hpp"
+#include "vehicle/VehicleModel.hpp"
 
 using namespace sim::app::drive;
 using namespace sim::physics;
@@ -199,6 +201,46 @@ TEST_CASE("drive: the obstacle layout lines the circuit and keeps the asphalt cl
     }
     CHECK(sawBarrier);
     CHECK(sawYard);
+}
+
+TEST_CASE("drive: the adapter exposes the circuit surface to the vehicle") {
+    const Track track;
+    TrackGroundQuery query(track);
+
+    const Vec3 onAsphalt = track.samples()[track.startIndex()].position;
+    const GroundSample surface = track.sample(onAsphalt.x, onAsphalt.z);
+    const sim::vehicle::GroundSample viaAdapter = query.sample(onAsphalt.x, onAsphalt.z);
+    CHECK(viaAdapter.height == doctest::Approx(surface.height).epsilon(1e-12));
+    CHECK(viaAdapter.normal.y == doctest::Approx(surface.normal.y).epsilon(1e-12));
+    CHECK(viaAdapter.friction == doctest::Approx(surface.friction).epsilon(1e-12));
+    CHECK(viaAdapter.rollingResistance == doctest::Approx(surface.rollingResistance).epsilon(1e-12));
+
+    // Far from the track the surface is grass: the friction the model reads matches.
+    const Vec3 onGrass(onAsphalt.x + 30.0, 0.0, onAsphalt.z);
+    CHECK(query.sample(onGrass.x, onGrass.z).friction ==
+          doctest::Approx(track.sample(onGrass.x, onGrass.z).friction).epsilon(1e-12));
+    CHECK(query.sample(onGrass.x, onGrass.z).friction < query.sample(onAsphalt.x, onAsphalt.z).friction);
+}
+
+TEST_CASE("drive: an assembled VehicleModel settles on the circuit through the adapter") {
+    const Track track;
+    PhysicsWorld world;
+    TrackGroundQuery ground(track);
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), ground);
+    car.reset(track.startPosition(), track.startHeading());
+
+    // VehicleModel owns the step: the world advances inside car.step().
+    for (int i = 0; i < 3000; ++i) {
+        car.step(world.fixedStep);
+    }
+
+    REQUIRE(car.chassis().isFiniteState());
+    for (const sim::vehicle::VehicleCorner& corner : car.corners()) {
+        CHECK(corner.load > 0.0);
+    }
+    CHECK(car.forwardSpeed() > -0.5);
+    CHECK(car.forwardSpeed() < 0.5);
 }
 
 TEST_CASE("drive: two identical scripted runs produce the same state hash") {
