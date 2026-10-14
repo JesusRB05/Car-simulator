@@ -234,6 +234,16 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,
 ISO 3888-2, jumps, kart and rally cases) are listed in
 [PHYSICS_PLAN, Section 10](PHYSICS_PLAN.md#10-validation-plan); work packages P3.1-P3.6.
+P3.2 has started: `tests/test_manoeuvres.cpp` drives the assembled car on a flat
+plane through the 0-100 km/h launch (power- and grip-limited), the kinematic
+low-speed circle, the understeer trend, a constant-force braking stop and the
+coasting deceleration invariant. Writing it exposed and fixed a driveline energy
+leak - the clutch now couples the engine to the input shaft implicitly, clamped to
+the plate capacity (Section 7.2), instead of the old two-branch rule that drove the
+car with the throttle closed - and an under-sized default master cylinder, now the
+documented 3600 N*m of total brake torque (`DRIVE.md`). The friction-limit stopping
+distance still needs the rear-axle braking (chatter against the reflected
+driveline) sorted first.
 - **Validation suite in CI** with reference values: braking distance
   (`v^2 / (2 mu g)`), steady-state circular driving (understeer gradient against the
   linear bicycle model), step steer and sine-sweep response, constant-radius
