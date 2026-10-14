@@ -8,10 +8,10 @@
 #include <vector>
 
 #include "drive/Obstacles.hpp"
-#include "drive/RaycastCar.hpp"
 #include "drive/Track.hpp"
 #include "drive/TrackGroundQuery.hpp"
 #include "physics/PhysicsWorld.hpp"
+#include "vehicle/GroundQuery.hpp"
 #include "vehicle/VehicleModel.hpp"
 
 using namespace sim::app::drive;
@@ -20,28 +20,31 @@ using sim::physics::PhysicsWorld;
 
 namespace {
 
-void stepFor(PhysicsWorld& world, double seconds) {
-    const int steps = static_cast<int>(seconds / world.fixedStep + 0.5);
-    for (int i = 0; i < steps; ++i) {
-        world.step(world.fixedStep);
-    }
+// Spawns the assembled model on the circuit at the start line.
+sim::vehicle::VehicleModel& spawnOnTrack(PhysicsWorld& world, const Track& track, TrackGroundQuery& ground) {
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), ground);
+    car.reset(track.startPosition(), track.startHeading());
+    return car;
 }
 
 // Scripted drive on the circuit: launch, steer into a curve, then brake.
 std::uint64_t scriptedRun(const Track& track, double& finalSpeed) {
     PhysicsWorld world;
-    RaycastCar& car = RaycastCar::spawn(world, CarParams{}, track);
+    TrackGroundQuery ground(track);
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), ground);
     car.reset(track.startPosition(), track.startHeading());
     for (int step = 0; step < 6000; ++step) {
         const double t = world.time();
-        DriverInput input;
+        sim::vehicle::VehicleInput input;
         input.throttle = t < 4.0 ? 1.0 : 0.0;
         input.steer = (t > 2.0 && t < 3.0) ? 0.6 : (t > 3.0 && t < 4.0 ? -0.4 : 0.0);
         input.brake = t > 4.5 ? 1.0 : 0.0;
         car.setInput(input);
-        world.step(world.fixedStep);
+        car.step(world.fixedStep); // the model advances the world
     }
-    finalSpeed = car.speed();
+    finalSpeed = car.forwardSpeed();
     return world.stateHash();
 }
 
@@ -97,69 +100,15 @@ TEST_CASE("drive: the circuit is closed, smooth and does not overlap itself") {
     CHECK(std::abs(track.startHeading()) < 0.03);
 }
 
-TEST_CASE("drive: a car at rest settles to the static ride height") {
+TEST_CASE("drive: the assembled vehicle is stopped by a static barrier") {
     PhysicsWorld world;
-    const FlatGround ground(0.0);
-    const CarParams params;
-    RaycastCar& car = RaycastCar::spawn(world, params, ground);
-    car.reset(Vec3(0.0), 0.0);
-    // Start slightly high so it actually has to settle.
-    car.chassis().position.y += 0.05;
-
-    stepFor(world, 4.0);
-
-    const double weight = params.mass * -world.gravity.y;
-    double springSum = 0.0;
-    for (const WheelState& wheel : car.wheels()) {
-        CHECK(wheel.contact);
-        springSum += wheel.springForce;
-    }
-    CHECK(std::abs(springSum - weight) / weight < 0.01);
-    CHECK(car.chassis().position.y == doctest::Approx(car.staticRideHeight(-world.gravity.y)).epsilon(0.005));
-    CHECK(glm::length(car.chassis().linearVelocity) < 1e-3);
-    CHECK(glm::length(car.chassis().angularVelocity) < 1e-3);
-    // The car does not creep.
-    CHECK(std::abs(car.chassis().position.x) < 1e-3);
-    CHECK(std::abs(car.chassis().position.z) < 1e-3);
-}
-
-TEST_CASE("drive: full throttle in a straight line accelerates towards -Z") {
-    PhysicsWorld world;
-    const FlatGround ground(0.0);
-    RaycastCar& car = RaycastCar::spawn(world, CarParams{}, ground);
-    car.reset(Vec3(0.0), 0.0);
-
-    DriverInput input;
-    input.throttle = 1.0;
-    car.setInput(input);
-    stepFor(world, 5.0);
-
-    const auto& body = car.chassis();
-    CHECK(body.position.z < -25.0);
-    CHECK(body.linearVelocity.z < -12.0);
-    CHECK(car.forwardSpeed() > 12.0);
-    CHECK(std::abs(body.position.x) < 0.1);
-    CHECK(std::abs(body.linearVelocity.x) < 0.05);
-    CHECK(car.gear() >= 2);
-    CHECK(body.isFiniteState());
-
-    // Braking brings it back to rest, and holding the brake then engages reverse.
-    input = DriverInput{};
-    input.brake = 1.0;
-    car.setInput(input);
-    stepFor(world, 6.0);
-    CHECK(car.gear() == -1);
-    CHECK(car.forwardSpeed() < 0.0); // reversing
-}
-
-TEST_CASE("drive: the car is stopped by a static barrier") {
-    PhysicsWorld world;
-    const FlatGround ground(0.0);
-    RaycastCar& car = RaycastCar::spawn(world, CarParams{}, ground);
+    const sim::vehicle::FlatGroundQuery ground(0.0);
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), ground);
     car.reset(Vec3(0.0), 0.0); // facing -Z
 
-    // A wide barrier 30 m ahead, tall enough that the chassis box (0.14..0.84 m)
-    // overlaps it. Both bodies opt into collision.
+    // A wide barrier 30 m ahead, tall enough that the chassis box overlaps it.
+    // Both bodies opt into collision.
     RigidBody& barrier = world.createBody();
     barrier.name = "barrier";
     barrier.setType(BodyType::Static);
@@ -169,10 +118,12 @@ TEST_CASE("drive: the car is stopped by a static barrier") {
     barrier.setMass(0.0);
     barrier.updateCache();
 
-    DriverInput input;
+    sim::vehicle::VehicleInput input;
     input.throttle = 1.0;
     car.setInput(input);
-    stepFor(world, 6.0);
+    for (int i = 0; i < 6000; ++i) {
+        car.step(world.fixedStep);
+    }
 
     REQUIRE(car.chassis().isFiniteState());
     // The barrier's near face is at z = -29.75 and the nose is 2.15 m ahead of
@@ -257,9 +208,10 @@ TEST_CASE("drive: two identical scripted runs produce the same state hash") {
 TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rolling over") {
     const Track track;
     PhysicsWorld world;
-    const CarParams params;
-    RaycastCar& car = RaycastCar::spawn(world, params, track);
-    car.reset(track.startPosition(), track.startHeading());
+    TrackGroundQuery ground(track);
+    const sim::vehicle::VehicleSetup setup = sim::vehicle::makeDefaultVehicleSetup();
+    const double wheelbase = setup.rearAxleZ - setup.frontAxleZ;
+    sim::vehicle::VehicleModel& car = spawnOnTrack(world, track, ground);
 
     const auto& samples = track.samples();
     const double length = track.length();
@@ -290,7 +242,7 @@ TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rol
         previousAlong = here.along;
         maxLateral = std::max(maxLateral, std::abs(here.lateral));
         minUp = std::min(minUp, body.localToWorldDirection(Vec3(0.0, 1.0, 0.0)).y);
-        topSpeed = std::max(topSpeed, car.speed());
+        topSpeed = std::max(topSpeed, std::abs(car.forwardSpeed()));
 
         // Pure pursuit on the centreline.
         const double v = car.forwardSpeed();
@@ -300,9 +252,9 @@ TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rol
         const Vec3 forward = body.localToWorldDirection(Vec3(0.0, 0.0, -1.0));
         const Vec3 left = body.localToWorldDirection(Vec3(-1.0, 0.0, 0.0));
         const double alpha = std::atan2(glm::dot(toTarget, left), glm::dot(toTarget, forward));
-        const double wheelAngle = std::atan(2.0 * params.wheelbase() * std::sin(alpha) / lookahead);
+        const double wheelAngle = std::atan(2.0 * wheelbase * std::sin(alpha) / lookahead);
         const double limit =
-            std::max(params.minSteerAngle, params.maxSteerAngle / (1.0 + std::abs(v) / params.steerSpeedScale));
+            std::max(setup.minSteerAngle, setup.maxSteerAngle / (1.0 + std::abs(v) / setup.steerSpeedScale));
 
         // Speed from the tightest curvature in the next 60 m.
         double curvature = 1e-3;
@@ -311,13 +263,13 @@ TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rol
         }
         const double targetSpeed = std::min(32.0, std::sqrt(0.7 * 9.81 / curvature));
 
-        DriverInput input;
+        sim::vehicle::VehicleInput input;
         input.steer = std::clamp(wheelAngle / limit, -1.0, 1.0);
         input.throttle = v < targetSpeed - 1.0 ? 1.0 : 0.0;
         input.brake = v > targetSpeed + 1.5 ? 1.0 : 0.0;
         car.setInput(input);
 
-        world.step(world.fixedStep);
+        car.step(world.fixedStep);
         ++steps;
         if (!car.chassis().isFiniteState()) {
             valid = false;

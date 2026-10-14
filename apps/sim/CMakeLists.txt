@@ -11,7 +11,6 @@ add_executable(sim
     src/SimUi.cpp
     src/drive/DriveScene.cpp
     src/drive/Obstacles.cpp
-    src/drive/RaycastCar.cpp
     src/drive/Track.cpp)
 
 find_package(Stb REQUIRED)

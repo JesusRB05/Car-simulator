@@ -10,11 +10,10 @@ add_executable(sim_tests
     test_scripting.cpp
     test_vehicle.cpp
     test_drive.cpp
-    # The raycast-car drive scene lives in the app; its simulation half is
-    # render-free and tested directly.
+    # The drive scene lives in the app; its simulation half is render-free and
+    # tested directly.
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
-    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp
-    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/RaycastCar.cpp)
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp)
 
 target_include_directories(sim_tests PRIVATE . ${CMAKE_SOURCE_DIR}/apps/sim/src)
 
