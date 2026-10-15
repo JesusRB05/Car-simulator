@@ -9,6 +9,50 @@ ImGui and ImPlot. All of it lives in `apps/sim/src/SimUi.{hpp,cpp}` and
 state (`SimUiFrame`) and applies the actions it returns (`SimUiActions`). The
 headless runner never constructs any of it.
 
+## Session flow
+
+Before driving, the windowed app shows a short pre-session flow over a 3D
+showroom of the selected car. It is a small state machine (`GameScreen` in
+`apps/sim/src/session/SessionState.hpp`) and the screens live in
+`apps/sim/src/session/SessionUI.{hpp,cpp}`:
+
+| Screen          | What it does                                                            |
+|-----------------|-------------------------------------------------------------------------|
+| Main menu       | Start session, choose car / track, configure controls, reduced-motion toggle, quit. Shows the saved car and track. |
+| Choose your car | The car list with the derived specs (power, torque, mass, drivetrain, gearbox, wheelbase) and the 3D preview. |
+| Choose your track | The circuit list with a 2D minimap drawn from the real centreline, its length and width, plus the game mode, weather and time-of-day. |
+| Session         | The recap (car, track, mode, weather, time, controls) and the **Drive** button. |
+| Control setup   | The six-step peripheral wizard (see below).                             |
+| Driving         | The simulation runs; `Escape` returns to the main menu.                 |
+
+While any menu screen is active the physics is paused and the **garage scene**
+(`apps/sim/src/session/GarageScene.{hpp,cpp}`) fills the frame: the selected car,
+assembled from the engine primitives on the real `VehicleSetup`, on a dark floor,
+with an orbit camera the player drives with the mouse. There is no glTF pipeline
+for the cars yet (the catalog bodies are placeholders), so the preview is the
+same procedural car the simulation drives.
+
+The catalogs (`CarCatalog`, `TrackCatalog`) are the single source of truth: the
+car specs are derived from the physics `VehicleSetup` (never invented), and the
+track length and minimap come from the real `Track`. Only one car (*Voyager*)
+and one circuit (*Sunset Circuit*) exist today; the flow is built for more.
+Game mode (only *Practice*), weather and time of day are listed but **disabled**
+and labelled as not simulated, rather than faked. The car, track, mode, weather,
+time and the "controls configured" flag persist in `config.toml` under
+`session.*` (and `ui.reduced_motion`).
+
+### Control setup wizard
+
+`apps/sim/src/session/ControlSetupWizard.{hpp,cpp}` walks through the connected
+hardware; it only drives `sim::input::WheelManager`, so it works with the same
+mocks as the tests. Steps: **Devices** (list, hot-plug, pick the primary),
+**Compatibility** (identified model, tier, force-feedback capabilities),
+**Steering** (capture left/centre/right, deadzone, invert, lock-to-lock range),
+**Pedals** (assign each pedal axis, combined-pedal mode, learned travel),
+**Buttons** (assign shift, handbrake and look controls, with a conflict warning
+before overwriting another role) and **Test** (live bars and a force-feedback
+pulse). Finishing stores every profile and marks the session configured.
+
 ## Main menu bar
 
 | Menu   | Contents                                                              |
@@ -48,8 +92,14 @@ frame rate.
 - **Camera**: FOV slider (also used by the driving cameras), *Frame scene*,
   and the orbit target, yaw, pitch and distance. Inspection scenes start from
   their curated camera and then orbit around a target on its line of sight.
-- **Vehicle**, **Mods**, **Input**: the previous driving, mod and input panels,
-  hidden by default.
+- **Vehicle**, **Mods**: the previous driving and mod panels, hidden by default.
+- **Input**: the wheel / pedal / gamepad stack (see `docs/INPUT.md`). Hidden by
+  default. It lists the connected devices with their identified model and
+  verification tier, lets you pick the primary device (or *Auto-select*), remaps
+  every control role to an axis, button or hat direction, edits each axis'
+  calibration (deadzone, saturation, invert, active), tunes force feedback
+  (enable, gains, max force, direction), runs a bounded **Test** and
+  **Save profiles**.
 
 Panel visibility is stored in ImGui's own `imgui.ini` (relative to the working
 directory, ignored by git) under a `[SimUi][Panels]` section; window positions
@@ -71,6 +121,7 @@ and sizes use ImGui's normal persistence.
 | `W A S D`, arrows| Drive; fly with `Q`/`E` in the free camera                |
 | `F1`             | Keyboard shortcuts window                                 |
 | `Ctrl+Q`         | Quit                                                      |
+| `Escape`         | Leave the drive scene back to the main menu               |
 
 In the `drive` scene the keys differ (they take priority, and play/pause/step
 are disabled): `W`/Up throttle, `S`/Down brake and reverse, `A D`/Left Right

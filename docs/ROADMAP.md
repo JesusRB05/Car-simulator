@@ -93,7 +93,8 @@ manoeuvres and the numbered work packages are in the
 | Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, a generic GJK/EPA convex path, a heightfield terrain surface, AABB-tree broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, speculative contacts against tunnelling, sleep-capable and deterministic. Still missing: triangle-mesh soup and a per-primitive (BVH) mid-phase. The raycast-wheel car still uses an analytic ground |
 | Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a Magic Formula `MagicFormulaTire` (pure slip, both combined-slip forms, self-aligning, overturning and rolling-resistance moments, camber thrust with its horizontal and vertical shifts, `.tir` scaling factors, `.tir` parser), a `TireVertical` spring-damper, a `TireRelaxation` transient filter, a `TireBristle` standstill model, an implicit `WheelSpin` step and a `DoubleWishbone` hardpoint closure solver (camber, toe, motion ratio), plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
-| App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit |
+| App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit, and a pre-session flow (main menu, car / track selection with a 3D garage preview, a controls setup wizard, a session recap) |
+| Input | In progress: `sim::input` (SDL-free) over an SDL3 backend - compatibility database (VID:PID, vendor families, name heuristics), per-axis calibration, live remapping, multi-device merge, hot-plug, TOML-persisted profiles and a force-feedback controller. Force feedback currently sends rumble and LED only; DirectInput constant-force and spring/damper/friction conditions are a Windows-only follow-up. Profiles are not yet verified on real hardware |
 | Mods | Sandboxed Lua (JIT disabled, instruction budget), mod VFS with priorities, native plugin API skeleton |
 | CI | Defined (format, Linux, Windows, gpu-linux); runs on push once the repository has CI enabled |
 
@@ -293,7 +294,11 @@ Runs in parallel with Phase 4 once Phase 3 is done.
 
 ### Phase 6 - Game experience and immersion (L)
 - Main menu, car and track selection, settings, lap timing, ghosts, race starts,
-  basic race rules.
+  basic race rules. **Started:** the app has a pre-session flow (main menu, car and
+  track selection catalogs with a 3D garage preview and a real minimap, a six-step
+  controls setup wizard and a session recap) that persists the selection; only one
+  car and one circuit exist and the game modes / weather / time of day are listed
+  but disabled (not simulated), so this is the UI foundation rather than the phase.
 - Audio: engine sound from RPM/load, tyre noise from slip, wind, collisions,
   3D positioned sound (miniaudio is already integrated).
 - Cockpit and helmet cameras, mirrors, triple-screen and VR research.
