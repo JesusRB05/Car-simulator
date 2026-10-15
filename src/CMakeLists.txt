@@ -2,6 +2,7 @@
 # Copyright (C) 2026 The Car Simulator contributors
 add_subdirectory(core)
 add_subdirectory(platform)
+add_subdirectory(input)
 add_subdirectory(vfs)
 add_subdirectory(modding)
 add_subdirectory(scripting)

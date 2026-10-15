@@ -196,6 +196,7 @@ docs/                Documentation
 - [Building](docs/BUILDING.md)
 - [Physics](docs/PHYSICS.md)
 - [Rendering](docs/RENDERING.md)
+- [Wheel, pedal and gamepad input](docs/INPUT.md)
 - [Mod system](docs/MODS.md)
 - [Scripting (Lua)](docs/SCRIPTS.md)
 - [Native plugins](docs/PLUGINS.md)

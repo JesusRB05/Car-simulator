@@ -25,7 +25,8 @@ From bottom to top:
 | Module | Responsibility | Depends on |
 |---|---|---|
 | `core` | Fixed-step clock, jobs, TOML config, logging, math, assertions | — |
-| `platform` | SDL3: context, window, input, Vulkan surface | `core` |
+| `input` | Wheel/pedal/gamepad stack: compatibility database, calibration, mapping, profiles, force feedback (OS-free) | `core` |
+| `platform` | SDL3: context, window, input backend, Vulkan surface | `core`, `input` |
 | `vfs` | Virtual file system (PhysicsFS) | `core` |
 | `modding` | Manifests, versions, dependencies, mod manager | `core`, `vfs` |
 | `scripting` | Lua sandbox and script host | `core`, `vfs` |

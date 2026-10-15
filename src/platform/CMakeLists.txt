@@ -10,6 +10,7 @@ target_include_directories(sim_platform PUBLIC include)
 target_link_libraries(sim_platform
     PUBLIC
         sim::core
+        sim::input
         SDL3::SDL3
         volk::volk)
 sim_configure_target(sim_platform)
