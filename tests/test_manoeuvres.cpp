@@ -228,3 +228,27 @@ TEST_CASE("Manoeuvre: the car understeers as the cornering speed rises") {
     CHECK(fast.radius > slow.radius);
     CHECK(fast.radius > fast.kinematicRadius * 1.1);
 }
+
+TEST_CASE("Manoeuvre: the car pulls away again after braking to a stop") {
+    FlatRig rig;
+
+    // Bring the car up to speed, brake it to a standstill and hold the brake long
+    // enough for the solver to put the chassis to sleep.
+    rig.launchTo(8.0);
+    VehicleInput brake;
+    brake.brake = 1.0;
+    rig.hold(brake, 2500);
+    const Real stopped = rig.car->forwardSpeed();
+
+    // The driver releases the brake and asks for full throttle: the car must wake
+    // and accelerate away again. Regression: a sleeping chassis used to swallow
+    // every drivetrain force, stranding the car at the lights.
+    VehicleInput go;
+    go.throttle = 1.0;
+    rig.hold(go, 2500);
+    const Real went = rig.car->forwardSpeed();
+
+    INFO("stopped at " << stopped << " m/s, then reached " << went << " m/s");
+    CHECK(std::abs(stopped) < 0.5);
+    CHECK(went > 3.0);
+}

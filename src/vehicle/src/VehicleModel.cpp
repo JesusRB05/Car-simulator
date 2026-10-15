@@ -346,6 +346,14 @@ void VehicleModel::apply() {
     const Real dt = dt_;
     const VehicleSetup& setup = setup_;
 
+    // A car left standing for a moment is put to sleep by the solver, and while
+    // asleep its forces are dropped. Any driver command must therefore wake the
+    // chassis so the throttle, brake and steering below actually take effect;
+    // otherwise the car is stranded until something else touches it.
+    if (input_.throttle > 0.0 || input_.brake > 0.0 || input_.steer != 0.0 || input_.handbrake) {
+        body.wake();
+    }
+
     updateDriver(dt);
 
     // Optional driver aids: sampled from the last integrated step, they may trim
