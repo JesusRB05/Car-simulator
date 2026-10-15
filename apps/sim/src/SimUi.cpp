@@ -17,6 +17,7 @@
 #include "OrbitCamera.hpp"
 #include "Scenes.hpp"
 #include "core/Version.hpp"
+#include "input/WheelManager.hpp"
 #include "physics/PhysicsWorld.hpp"
 
 namespace sim::app {
@@ -26,6 +27,8 @@ constexpr const char* kSettingsType = "SimUi";
 constexpr double kHistorySeconds = 10.0;
 constexpr float kMinTimeScale = 0.1f;
 constexpr float kMaxTimeScale = 4.0f;
+constexpr double k_minUnit = 0.0;
+constexpr double k_maxUnit = 1.0;
 
 // Window titles double as their .ini identifiers; keep them stable.
 constexpr const char* kSceneBrowserTitle = "Scenes";
@@ -33,6 +36,7 @@ constexpr const char* kSimulationTitle = "Simulation";
 constexpr const char* kDebugDrawTitle = "Debug draw";
 constexpr const char* kTelemetryTitle = "Telemetry";
 constexpr const char* kCameraTitle = "Camera";
+constexpr const char* kInputTitle = "Input";
 
 struct PanelField {
     const char* key;
@@ -189,6 +193,9 @@ SimUiActions SimUi::draw(const SimUiFrame& frame, OrbitCamera& camera) {
     }
     if (panels_.camera) {
         drawCamera(frame, camera, actions);
+    }
+    if (panels_.input) {
+        drawInput(frame);
     }
     drawAbout();
     drawShortcuts();
@@ -586,6 +593,222 @@ void SimUi::drawCamera(const SimUiFrame& frame, OrbitCamera& camera, SimUiAction
     }
     ImGui::DragFloat("Distance", &camera.distance, 0.05f, 0.5f, 500.0f, "%.2f m");
     ImGui::TextDisabled("Left-drag orbit, right-drag pan, wheel zoom.");
+    ImGui::End();
+}
+
+void SimUi::drawInput(const SimUiFrame& frame) {
+    placeWindow(280.0f, 330.0f, 340.0f, 460.0f);
+    if (!ImGui::Begin(kInputTitle, &panels_.input)) {
+        ImGui::End();
+        return;
+    }
+    input::WheelManager* wheel = frame.wheel;
+    if (wheel == nullptr) {
+        ImGui::TextDisabled("Input system unavailable.");
+        ImGui::End();
+        return;
+    }
+
+    const input::InputDiagnostics& diag = wheel->diagnostics();
+    ImGui::Text("Devices: %d   unknown: %d   removed: %d", diag.connectedDevices, diag.unknownDevices,
+                diag.removedDevices);
+    ImGui::Text("Force feedback: %s", !diag.ffbAvailable ? "not available" : diag.ffbActive ? "active" : "idle");
+    ImGui::Separator();
+
+    if (wheel->devices().empty()) {
+        ImGui::TextDisabled("No wheel, pedals, shifter or gamepad connected.");
+        ImGui::Spacing();
+        ImGui::TextWrapped("Connect a device; it is detected and mapped automatically, and its profile is saved "
+                           "for the next time.");
+        ImGui::End();
+        return;
+    }
+
+    const int primary = wheel->primaryDeviceIndex();
+    bool automatic = wheel->selectedDevice() < 0;
+    if (ImGui::Checkbox("Auto-select", &automatic)) {
+        wheel->selectDevice(automatic ? -1 : primary);
+    }
+    ImGui::SetItemTooltip("Let the engine pick the wheel that drives the car.");
+
+    for (std::size_t i = 0; i < wheel->devices().size(); ++i) {
+        const input::DeviceEntry& device = wheel->devices()[i];
+        char label[192];
+        std::snprintf(label, sizeof(label), "%s [%s]%s", device.descriptor.name.c_str(),
+                      input::toString(device.identification.kind), static_cast<int>(i) == primary ? "  *" : "");
+        if (ImGui::Selectable(label, static_cast<int>(i) == wheel->selectedDevice())) {
+            wheel->selectDevice(static_cast<int>(i));
+        }
+        ImGui::SetItemTooltip(
+            "%s - %s%s%s", device.identification.modelName.c_str(), input::toString(device.identification.status),
+            device.descriptor.manufacturer.empty() ? "" : " | ", device.descriptor.manufacturer.c_str());
+    }
+
+    int index = wheel->selectedDevice();
+    if (index < 0) {
+        index = primary;
+    }
+    if (index < 0 || static_cast<std::size_t>(index) >= wheel->devices().size()) {
+        ImGui::End();
+        return;
+    }
+    const input::DeviceEntry& device = wheel->devices()[static_cast<std::size_t>(index)];
+    const input::DeviceCapabilities& caps = device.descriptor.caps;
+
+    ImGui::Separator();
+    ImGui::Text("%s", device.descriptor.name.c_str());
+    char ids[128];
+    std::snprintf(ids, sizeof(ids), "%04x:%04x  axes %d  buttons %d  hats %d", device.descriptor.vendorId,
+                  device.descriptor.productId, caps.axes, caps.buttons, caps.hats);
+    ImGui::TextDisabled("%s", ids);
+    if (caps.requiresVendorDriver) {
+        ImGui::TextDisabled("Full support needs the vendor driver.");
+    }
+
+    // --- Mapping -----------------------------------------------------------
+    if (ImGui::CollapsingHeader("Mapping", ImGuiTreeNodeFlags_DefaultOpen)) {
+        if (ImGui::BeginTable("mapping", 3, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+            for (int r = 0; r < static_cast<int>(input::ControlRole::Count); ++r) {
+                const input::ControlRole role = static_cast<input::ControlRole>(r);
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::AlignTextToFramePadding();
+                ImGui::TextUnformatted(input::roleName(role));
+
+                std::vector<std::string> labels;
+                std::vector<input::ControlBinding> choices;
+                labels.emplace_back("(none)");
+                choices.emplace_back();
+                for (int a = 0; a < caps.axes; ++a) {
+                    labels.push_back("Axis " + std::to_string(a));
+                    input::ControlBinding binding;
+                    binding.kind = input::BindingKind::Axis;
+                    binding.axis.axis = a;
+                    choices.push_back(binding);
+                }
+                for (int b = 0; b < caps.buttons; ++b) {
+                    labels.push_back("Button " + std::to_string(b));
+                    input::ControlBinding binding;
+                    binding.kind = input::BindingKind::Button;
+                    binding.button = b;
+                    choices.push_back(binding);
+                }
+                const int hatDirs[4] = {1, 2, 4, 8};
+                const char* hatNames[4] = {"up", "right", "down", "left"};
+                for (int h = 0; h < caps.hats; ++h) {
+                    for (int d = 0; d < 4; ++d) {
+                        labels.push_back("Hat " + std::to_string(h) + " " + hatNames[d]);
+                        input::ControlBinding binding;
+                        binding.kind = input::BindingKind::Hat;
+                        binding.hat = h;
+                        binding.hatDirection = hatDirs[d];
+                        choices.push_back(binding);
+                    }
+                }
+
+                const input::ControlBinding* current = device.profile.find(role);
+                int currentIndex = 0;
+                if (current != nullptr) {
+                    for (std::size_t c = 1; c < choices.size(); ++c) {
+                        const input::ControlBinding& candidate = choices[c];
+                        if (candidate.kind != current->kind) {
+                            continue;
+                        }
+                        const bool same =
+                            (current->kind == input::BindingKind::Axis && candidate.axis.axis == current->axis.axis) ||
+                            (current->kind == input::BindingKind::Button && candidate.button == current->button) ||
+                            (current->kind == input::BindingKind::Hat && candidate.hat == current->hat &&
+                             candidate.hatDirection == current->hatDirection);
+                        if (same) {
+                            currentIndex = static_cast<int>(c);
+                            break;
+                        }
+                    }
+                }
+
+                ImGui::TableSetColumnIndex(1);
+                ImGui::SetNextItemWidth(-1.0f);
+                if (ImGui::BeginCombo(("##bind" + std::to_string(r)).c_str(), labels[currentIndex].c_str())) {
+                    for (std::size_t c = 0; c < labels.size(); ++c) {
+                        if (!ImGui::Selectable(labels[c].c_str(), static_cast<int>(c) == currentIndex)) {
+                            continue;
+                        }
+                        const input::ControlBinding& chosen = choices[c];
+                        switch (chosen.kind) {
+                        case input::BindingKind::Axis:
+                            wheel->bindAxis(static_cast<std::size_t>(index), role, chosen.axis.axis,
+                                            input::AxisHalf::Full);
+                            break;
+                        case input::BindingKind::Button:
+                            wheel->bindButton(static_cast<std::size_t>(index), role, chosen.button);
+                            break;
+                        case input::BindingKind::Hat:
+                            wheel->bindHat(static_cast<std::size_t>(index), role, chosen.hat, chosen.hatDirection);
+                            break;
+                        case input::BindingKind::None:
+                            wheel->clearBinding(static_cast<std::size_t>(index), role);
+                            break;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                ImGui::TableSetColumnIndex(2);
+                if (current != nullptr && current->kind != input::BindingKind::None &&
+                    ImGui::SmallButton(("x##clear" + std::to_string(r)).c_str())) {
+                    wheel->clearBinding(static_cast<std::size_t>(index), role);
+                }
+            }
+            ImGui::EndTable();
+        }
+    }
+
+    // --- Calibration -------------------------------------------------------
+    if (ImGui::CollapsingHeader("Calibration")) {
+        for (int r = 0; r < static_cast<int>(input::ControlRole::Count); ++r) {
+            const input::ControlRole role = static_cast<input::ControlRole>(r);
+            const input::ControlBinding* binding = device.profile.find(role);
+            if (binding == nullptr || binding->kind != input::BindingKind::Axis) {
+                continue;
+            }
+            input::AxisCalibration cal = binding->axis.calibration;
+            ImGui::PushID(r);
+            bool changed = false;
+            ImGui::Text("%s (axis %d)", input::roleName(role), binding->axis.axis);
+            changed |=
+                ImGui::SliderScalar("Deadzone", ImGuiDataType_Double, &cal.deadzone, &k_minUnit, &k_maxUnit, "%.2f");
+            changed |= ImGui::SliderScalar("Saturation", ImGuiDataType_Double, &cal.saturation, &k_minUnit, &k_maxUnit,
+                                           "%.2f");
+            changed |= ImGui::Checkbox("Invert", &cal.invert);
+            changed |= ImGui::Checkbox("Active", &cal.active);
+            if (changed) {
+                wheel->setCalibration(static_cast<std::size_t>(index), role, cal);
+            }
+            ImGui::Separator();
+            ImGui::PopID();
+        }
+    }
+
+    // --- Force feedback ----------------------------------------------------
+    input::FfbSettings& ffb = wheel->ffb().settings();
+    if (ImGui::CollapsingHeader("Force feedback")) {
+        ImGui::Checkbox("Enabled", &ffb.enabled);
+        ImGui::SliderScalar("Master gain", ImGuiDataType_Double, &ffb.masterGain, &k_minUnit, &k_maxUnit, "%.2f");
+        ImGui::SliderScalar("Force", ImGuiDataType_Double, &ffb.constantForceGain, &k_minUnit, &k_maxUnit, "%.2f");
+        ImGui::SliderScalar("Rumble", ImGuiDataType_Double, &ffb.rumbleGain, &k_minUnit, &k_maxUnit, "%.2f");
+        ImGui::SliderScalar("Max force", ImGuiDataType_Double, &ffb.maxForce, &k_minUnit, &k_maxUnit, "%.2f");
+        ImGui::Checkbox("Invert direction", &ffb.invertDirection);
+        ImGui::TextDisabled("Effects: %s%s%s%s", caps.ffb.constantForce ? "force " : "",
+                            caps.ffb.spring ? "spring " : "", caps.ffb.rumble ? "rumble " : "",
+                            caps.ffb.led ? "led" : "");
+        if (ImGui::Button("Test")) {
+            wheel->ffb().startTest(1.0);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Save profiles")) {
+            wheel->storeProfiles();
+        }
+    }
+
     ImGui::End();
 }
 

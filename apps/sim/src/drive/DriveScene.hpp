@@ -33,12 +33,19 @@ inline bool isDriveScene(const std::string& name) {
 }
 
 // Raw keyboard state for one frame; DriveScene turns it into VehicleInput.
+// A connected wheel, pedal set or gamepad contributes analog values on top of
+// the digital keys (the analog value wins for steering and handbrake, and is
+// taken alongside the keys for throttle and brake).
 struct DriveKeys {
     bool throttle = false;
     bool brake = false;
     bool left = false;
     bool right = false;
     bool handbrake = false;
+    double throttleAnalog = 0.0;  // [0, 1]
+    double brakeAnalog = 0.0;     // [0, 1]
+    double steerAnalog = 0.0;     // [-1, 1], + = left
+    double handbrakeAnalog = 0.0; // [0, 1]
 };
 
 enum class DriveCamera {

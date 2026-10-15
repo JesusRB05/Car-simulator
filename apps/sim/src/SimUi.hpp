@@ -9,6 +9,10 @@ namespace sim::physics {
 class PhysicsWorld;
 } // namespace sim::physics
 
+namespace sim::input {
+class WheelManager;
+} // namespace sim::input
+
 namespace sim::app {
 
 struct OrbitCamera;
@@ -48,8 +52,9 @@ struct SimUiFrame {
     double cpuFrameMs = 0.0;
     double gpuFrameMs = 0.0;
     double fps = 0.0;
-    double nowSeconds = 0.0;     // wall clock, for the plots
-    float viewportHeight = 1.0f; // pixels, for panning
+    double nowSeconds = 0.0;              // wall clock, for the plots
+    float viewportHeight = 1.0f;          // pixels, for panning
+    input::WheelManager* wheel = nullptr; // live wheel/pedal stack, if any
 };
 
 // What the user asked for this frame. Applied by the Application.
@@ -104,6 +109,7 @@ private:
     void drawDebugDraw(const SimUiFrame& frame);
     void drawTelemetry(const SimUiFrame& frame);
     void drawCamera(const SimUiFrame& frame, OrbitCamera& camera, SimUiActions& actions);
+    void drawInput(const SimUiFrame& frame);
     void drawAbout();
     void drawShortcuts();
 

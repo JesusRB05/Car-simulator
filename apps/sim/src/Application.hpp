@@ -18,6 +18,8 @@
 #include "audio/AudioEngine.hpp"
 #include "core/Clock.hpp"
 #include "core/Config.hpp"
+#include "input/Profiles.hpp"
+#include "input/WheelManager.hpp"
 #include "modding/ModManager.hpp"
 #include "net/NetworkSystem.hpp"
 #include "physics/PhysicsWorld.hpp"
@@ -40,6 +42,7 @@
 #include "vfs/VirtualFileSystem.hpp"
 
 #include "OrbitCamera.hpp"
+#include "session/SessionState.hpp"
 
 #include <volk.h>
 
@@ -47,6 +50,8 @@ namespace sim::app {
 
 class ImGuiLayer;
 class SimUi;
+class SessionUI;
+class GarageScene;
 
 namespace drive {
 class DriveScene;
@@ -125,7 +130,10 @@ private:
     void updateScene(const SimSnapshot& interpolated);
     void updateDemoCamera(const glm::vec3& target);
     void handleCameraKeys();
+    void handleGarageCamera();
     void drawUi();
+    void drawSessionUi();
+    void startSession();
     void loadScene(const std::string& name);
     void frameScene();
     void drawDebugOverlay(rhi::CommandList& commandList);
@@ -149,6 +157,11 @@ private:
 
     std::unique_ptr<vfs::VirtualFileSystem> vfs_;
     std::unique_ptr<core::Config> config_;
+    // Wheel / pedal / shifter stack: the profiles are persisted in the user
+    // config, and the manager (fed by input_) resolves the analog controls and
+    // drives force feedback.
+    std::unique_ptr<input::ProfileStore> inputProfiles_;
+    std::unique_ptr<input::WheelManager> wheel_;
     std::unique_ptr<modding::ModManager> mods_;
     std::unique_ptr<scripting::LuaSandbox> lua_;
     std::unique_ptr<scripting::ScriptHost> scripts_;
@@ -208,6 +221,13 @@ private:
     // Windowed-mode ImGui interface (menus, panels, shortcuts).
     std::unique_ptr<SimUi> ui_;
     double lastGpuMs_ = 0.0;
+
+    // Pre-session flow: the menu screens, the car/track catalogs' state and the
+    // 3D showroom rendered behind the menus. While screen_ is not Driving the
+    // simulation is paused and the garage scene drives the frame instead.
+    std::unique_ptr<SessionUI> sessionUi_;
+    std::unique_ptr<GarageScene> garage_;
+    SessionState session_;
 
     // Snapshot save/restore is requested by the UI thread and executed on the
     // physics thread so it never races the simulation.

@@ -23,6 +23,10 @@
 #include "core/Log.hpp"
 #include "core/Version.hpp"
 #include "drive/DriveScene.hpp"
+#include "session/CarCatalog.hpp"
+#include "session/GarageScene.hpp"
+#include "session/SessionUI.hpp"
+#include "session/TrackCatalog.hpp"
 
 namespace sim::app {
 namespace {
@@ -120,6 +124,12 @@ bool Application::initialise() {
 
     config_ = std::make_unique<core::Config>(rootDirectory_ / "config.toml");
     config_->load();
+    session_.load(*config_);
+
+    inputProfiles_ = std::make_unique<input::ProfileStore>(*config_);
+    wheel_ = std::make_unique<input::WheelManager>(*input_, input::CompatibilityDatabase::instance(), *inputProfiles_);
+    wheel_->ffb().settings() = inputProfiles_->loadFfbSettings();
+    wheel_->ffb().settings().caps = {};
 
     modding::ModManager::Paths modPaths;
     modPaths.baseContent = rootDirectory_ / "content" / "base";
@@ -194,6 +204,16 @@ bool Application::initialise() {
     groundMesh_ = render::Mesh::makeGroundPlane(*device_, 200.0f);
     scene_.setDirectionalLight({-0.4f, -1.0f, -0.35f}, {1.0f, 0.98f, 0.95f});
 
+    sessionUi_ = std::make_unique<SessionUI>();
+    garage_ = std::make_unique<GarageScene>(*device_);
+    if (const CarSpec* car = CarCatalog::instance().find(session_.selection.carId)) {
+        garage_->setCar(*car);
+    }
+    // A scene requested on the command line skips the menus and drives at once.
+    if (!startupScene_.empty()) {
+        session_.screen = GameScreen::Driving;
+    }
+
     startPhysicsThread();
     return true;
 }
@@ -218,6 +238,8 @@ void Application::shutdown() {
     imgui_.reset();
     debugDraw_.reset();
     drive_.reset();
+    garage_.reset();
+    sessionUi_.reset();
     renderer_.reset();
     frame_.reset();
     gpuTimer_.reset();
@@ -230,6 +252,16 @@ void Application::shutdown() {
 
     net_.reset();
     mods_.reset();
+    if (wheel_ != nullptr) {
+        wheel_->stopForceFeedback();
+        wheel_->storeProfiles();
+        wheel_.reset();
+    }
+    inputProfiles_.reset();
+    if (config_ != nullptr) {
+        session_.save(*config_);
+        config_->save();
+    }
     config_.reset();
     vfs_.reset();
     input_.reset();
@@ -328,6 +360,7 @@ void Application::physicsLoop() {
 
 void Application::pumpInput() {
     input_->refresh();
+    wheel_->update(frameDelta_);
 
     double throttle = 0.0;
     double brake = 0.0;
@@ -348,27 +381,33 @@ void Application::pumpInput() {
     }
     handbrake = keyDown(input_.get(), SDL_SCANCODE_SPACE);
 
-    for (const platform::InputDevice& device : input_->devices()) {
-        if (!device.isGamepad || device.axes.size() < 2) {
-            continue;
+    // The keyboard is the fallback; any connected wheel, pedal set or gamepad
+    // contributes on top of it (largest throttle/brake wins, the wheel owns the
+    // steering once it moves past its deadzone).
+    const input::Controls& device = wheel_->controls();
+    if (device.hasDrivingDevice) {
+        if (std::abs(device.steer) > 0.02) {
+            steer = device.steer;
         }
-        const double axisSteer = static_cast<double>(device.axes[0]);
-        const double axisThrottle = static_cast<double>(-device.axes[1]);
-        if (std::abs(axisSteer) > 0.08) {
-            steer -= axisSteer;
-        }
-        if (axisThrottle > 0.05) {
-            throttle = std::max(throttle, axisThrottle);
-        } else if (axisThrottle < -0.05) {
-            brake = std::max(brake, -axisThrottle);
-        }
-        break;
+        throttle = std::max(throttle, device.throttle);
+        brake = std::max(brake, device.brake);
+        handbrake = handbrake || device.handbrake > 0.5;
     }
 
     inputThrottle_.store(std::clamp(throttle, 0.0, 1.0), std::memory_order_relaxed);
     inputBrake_.store(std::clamp(brake, 0.0, 1.0), std::memory_order_relaxed);
     inputSteer_.store(std::clamp(steer, -1.0, 1.0), std::memory_order_relaxed);
     inputHandbrake_.store(handbrake, std::memory_order_relaxed);
+
+    // Force feedback from the last physics snapshot: a basic self-aligning
+    // torque that grows with speed and steering angle. The richer model
+    // (understeer/oversteer, kerbs, impacts) is a documented follow-up.
+    input::FfbInput ffb;
+    const double speedFactor = std::clamp(std::abs(current_.speed) / 45.0, 0.0, 1.0);
+    const double normalizedSteer = std::clamp(current_.steer / 0.5, -1.0, 1.0);
+    ffb.speed = speedFactor;
+    ffb.steeringTorque = std::clamp(normalizedSteer * speedFactor, -1.0, 1.0);
+    wheel_->setFfbInput(ffb);
 }
 
 void Application::gatherSnapshots(SimSnapshot& interpolated) {
@@ -413,6 +452,13 @@ void Application::stepDriveScene(double delta) {
         keys.left = keyDown(input_.get(), SDL_SCANCODE_A) || keyDown(input_.get(), SDL_SCANCODE_LEFT);
         keys.right = keyDown(input_.get(), SDL_SCANCODE_D) || keyDown(input_.get(), SDL_SCANCODE_RIGHT);
         keys.handbrake = keyDown(input_.get(), SDL_SCANCODE_SPACE);
+    }
+    const input::Controls& device = wheel_->controls();
+    if (device.hasDrivingDevice) {
+        keys.throttleAnalog = device.throttle;
+        keys.brakeAnalog = device.brake;
+        keys.steerAnalog = device.steer;
+        keys.handbrakeAnalog = device.handbrake;
     }
     drive_->setKeys(keys);
     drive_->advance(delta); // the fixed 1 ms step is internal; no pause / time scale
@@ -475,6 +521,28 @@ void Application::loadScene(const std::string& name) {
     sceneCamera_.fromCamera(scene_.camera(), center);
 }
 
+void Application::startSession() {
+    session_.screen = GameScreen::Driving;
+    // Only one circuit and one car exist today, so every track id maps to the
+    // same "drive" scene; the catalog is ready for more.
+    loadScene("drive");
+}
+
+void Application::handleGarageCamera() {
+    if (garage_ == nullptr) {
+        return;
+    }
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.WantCaptureMouse || io.WantTextInput) {
+        return;
+    }
+    OrbitCamera& camera = garage_->camera();
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Right) || ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        camera.orbit(io.MouseDelta.x, io.MouseDelta.y);
+    }
+    camera.zoom(io.MouseWheel);
+}
+
 void Application::frameScene() {
     glm::vec3 center(0.0f);
     float radius = 1.0f;
@@ -487,6 +555,12 @@ void Application::updateScene(const SimSnapshot& interpolated) {
     const float aspect = swapchain_->extent().height > 0 ? static_cast<float>(swapchain_->extent().width) /
                                                                static_cast<float>(swapchain_->extent().height)
                                                          : 16.0f / 9.0f;
+
+    // Menu screens: the simulation is paused and the showroom fills the frame.
+    if (session_.screen != GameScreen::Driving && garage_ != nullptr) {
+        garage_->buildScene(scene_, aspect);
+        return;
+    }
 
     if (driveActive()) {
         drive_->buildScene(scene_, aspect, frameDelta_);
@@ -621,6 +695,11 @@ void Application::handleCameraKeys() {
 }
 
 void Application::drawUi() {
+    if (session_.screen != GameScreen::Driving) {
+        drawSessionUi();
+        return;
+    }
+
     SimUiFrame frame;
     frame.activeScene = sceneName_;
     frame.driveActive = driveActive();
@@ -637,6 +716,7 @@ void Application::drawUi() {
     frame.fps = telemetry_->fps();
     frame.nowSeconds = wallNow();
     frame.viewportHeight = static_cast<float>(swapchain_->extent().height);
+    frame.wheel = wheel_.get();
 
     const SimUiActions actions = ui_->draw(frame, sceneCamera_);
     if (driveActive()) {
@@ -719,42 +799,17 @@ void Application::drawUi() {
         }
         ImGui::End();
     }
+}
 
-    if (panels.input) {
-        if (ImGui::Begin("Input", &panels.input)) {
-            ImGui::Text("Devices: %zu", input_->joystickCount());
-            for (std::size_t index = 0; index < input_->devices().size(); ++index) {
-                const platform::InputDevice& device = input_->devices()[index];
-                ImGui::PushID(static_cast<int>(index));
-                ImGui::BulletText("%s%s", device.name.c_str(),
-                                  device.isGamepad          ? " (gamepad)"
-                                  : device.axes.size() >= 4 ? " (wheel/pedals)"
-                                                            : " (joystick)");
-                if (ImGui::TreeNode("Details")) {
-                    for (std::size_t axis = 0; axis < device.axes.size(); ++axis) {
-                        ImGui::Text("Axis %zu", axis);
-                        ImGui::SameLine();
-                        ImGui::ProgressBar((device.axes[axis] + 1.0f) * 0.5f, ImVec2(-1.0f, 0.0f));
-                    }
-                    ImGui::Text("Buttons (%zu)", device.buttons.size());
-                    for (std::size_t button = 0; button < device.buttons.size(); ++button) {
-                        ImGui::SameLine();
-                        const bool pressed = device.buttons[button];
-                        ImGui::TextColored(pressed ? ImVec4(0.3f, 1.0f, 0.3f, 1.0f) : ImVec4(0.4f, 0.4f, 0.4f, 1.0f),
-                                           "%zu", button);
-                    }
-                    ImGui::TreePop();
-                }
-                ImGui::PopID();
-            }
-            if (input_->devices().empty()) {
-                ImGui::TextUnformatted("No wheels, pedals or gamepads connected.");
-            }
-            ImGui::Separator();
-            ImGui::Text("Network: %.*s", static_cast<int>(net_->status().size()), net_->status().data());
-            ImGui::Text("Plugins: %zu", plugins_->plugins().size());
-        }
-        ImGui::End();
+void Application::drawSessionUi() {
+    const SessionUI::Action action = sessionUi_->draw(session_, wheel_.get());
+    if (sessionUi_->consumeWizardFinished()) {
+        session_.save(*config_);
+    }
+    if (action == SessionUI::Action::Quit) {
+        window_->requestClose();
+    } else if (action == SessionUI::Action::StartDrive) {
+        startSession();
     }
 }
 
@@ -829,7 +884,16 @@ int Application::run() {
         }
 
         pumpInput();
-        handleCameraKeys();
+        if (session_.screen == GameScreen::Driving) {
+            handleCameraKeys();
+            // Escape returns to the main menu (unless a text field wants it).
+            if (!ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Escape, false)) {
+                session_.screen = GameScreen::MainMenu;
+                loadScene("");
+            }
+        } else {
+            handleGarageCamera();
+        }
         scripts_->callOnUpdate(delta);
         plugins_->update(delta);
         net_->update(delta);
@@ -837,7 +901,9 @@ int Application::run() {
 
         SimSnapshot interpolated;
         gatherSnapshots(interpolated);
-        stepScenePhysics(delta);
+        if (session_.screen == GameScreen::Driving) {
+            stepScenePhysics(delta);
+        }
         updateScene(interpolated);
 
         const bool resized = window_->wasResized() || swapchain_->framebufferResized();

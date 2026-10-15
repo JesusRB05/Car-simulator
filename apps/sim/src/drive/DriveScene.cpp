@@ -185,10 +185,11 @@ void DriveScene::cycleCamera() {
 
 void DriveScene::setKeys(const DriveKeys& keys) {
     VehicleInput input;
-    input.throttle = keys.throttle ? 1.0 : 0.0;
-    input.brake = keys.brake ? 1.0 : 0.0;
-    input.steer = (keys.left ? 1.0 : 0.0) - (keys.right ? 1.0 : 0.0);
-    input.handbrake = keys.handbrake;
+    input.throttle = std::max(keys.throttle ? 1.0 : 0.0, keys.throttleAnalog);
+    input.brake = std::max(keys.brake ? 1.0 : 0.0, keys.brakeAnalog);
+    const double steerDigital = (keys.left ? 1.0 : 0.0) - (keys.right ? 1.0 : 0.0);
+    input.steer = std::abs(keys.steerAnalog) > 0.02 ? keys.steerAnalog : steerDigital;
+    input.handbrake = keys.handbrake || keys.handbrakeAnalog > 0.5;
     car_->setInput(input);
 }
 
