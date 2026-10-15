@@ -11,6 +11,10 @@ add_executable(sim_tests
     test_vehicle.cpp
     test_drive.cpp
     test_manoeuvres.cpp
+    test_performance.cpp
+    test_dynamics.cpp
+    test_crash.cpp
+    test_input.cpp
     # The drive scene lives in the app; its simulation half is render-free and
     # tested directly.
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
@@ -21,6 +25,7 @@ target_include_directories(sim_tests PRIVATE . ${CMAKE_SOURCE_DIR}/apps/sim/src)
 target_link_libraries(sim_tests
     PRIVATE
         sim::core
+        sim::input
         sim::modding
         sim::physics
         sim::render
