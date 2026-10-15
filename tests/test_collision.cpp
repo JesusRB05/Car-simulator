@@ -294,6 +294,73 @@ TEST_CASE("broadphase is ordered and ignores non-dynamic pairs") {
     CHECK(pairs[0].bodyB == 1);
 }
 
+TEST_CASE("the cached static broadphase still tracks moving dynamics") {
+    PhysicsWorld world;
+
+    RigidBody& ground = world.createBody();
+    ground.shape = Shape::box(Vec3(5.0, 0.5, 5.0));
+    ground.setType(BodyType::Static);
+    ground.setMass(0.0);
+    ground.position = Vec3(0.0, -0.5, 0.0);
+    ground.collisionEnabled = true;
+    ground.updateCache();
+
+    RigidBody& box = world.createBody();
+    box.shape = Shape::box(Vec3(0.5));
+    box.setMass(1.0);
+    box.collisionEnabled = true;
+    box.position = Vec3(0.0, 3.0, 0.0);
+    box.updateCache();
+
+    // Well above the ground: no overlapping pair, and the tree built here is
+    // reused (the static set does not change) by the calls below.
+    CHECK(broadphase(world).empty());
+
+    // Lowering the dynamic box overlaps the cached ground tree without a rebuild.
+    box.position = Vec3(0.0, 0.5, 0.0);
+    box.updateCache();
+    std::vector<BodyPair> pairs = broadphase(world);
+    REQUIRE(pairs.size() == 1);
+    CHECK(pairs[0].bodyA == 0);
+    CHECK(pairs[0].bodyB == 1);
+
+    // Raising it again drops the pair, still reusing the cached tree.
+    box.position = Vec3(0.0, 3.0, 0.0);
+    box.updateCache();
+    CHECK(broadphase(world).empty());
+}
+
+TEST_CASE("moving a static body needs an explicit broadphase invalidation") {
+    PhysicsWorld world;
+
+    RigidBody& wall = world.createBody();
+    wall.shape = Shape::box(Vec3(0.5));
+    wall.setType(BodyType::Static);
+    wall.setMass(0.0);
+    wall.collisionEnabled = true;
+    wall.position = Vec3(50.0, 0.0, 0.0);
+    wall.updateCache();
+
+    RigidBody& box = world.createBody();
+    box.shape = Shape::box(Vec3(0.5));
+    box.setMass(1.0);
+    box.collisionEnabled = true;
+    box.position = Vec3(0.0);
+    box.updateCache();
+
+    CHECK(broadphase(world).empty());
+
+    // Static bodies are assumed not to move; after an out-of-band move the caller
+    // must invalidate the cache, then the pair appears.
+    wall.position = Vec3(0.0);
+    wall.updateCache();
+    world.invalidateBroadphase();
+    const std::vector<BodyPair> pairs = broadphase(world);
+    REQUIRE(pairs.size() == 1);
+    CHECK(pairs[0].bodyA == 0);
+    CHECK(pairs[0].bodyB == 1);
+}
+
 TEST_CASE("a dynamic box comes to rest on static ground without tunnelling") {
     PhysicsWorld world;
 

@@ -117,6 +117,28 @@ void AabbTree::collideNodes(int nodeA, int nodeB, const std::vector<Aabb>& boxes
     }
 }
 
+void AabbTree::queryNode(int node, const Aabb& box, std::vector<std::size_t>& out) const {
+    const Node& current = nodes_[node];
+    if (!current.bounds.overlaps(box)) {
+        return;
+    }
+    if (current.left < 0) {
+        for (std::size_t i = current.begin; i < current.end; ++i) {
+            out.push_back(order_[i]);
+        }
+        return;
+    }
+    queryNode(current.left, box, out);
+    queryNode(current.right, box, out);
+}
+
+void AabbTree::query(const Aabb& box, std::vector<std::size_t>& out) const {
+    if (nodes_.empty()) {
+        return;
+    }
+    queryNode(0, box, out);
+}
+
 std::vector<BodyPair> AabbTree::overlappingPairs(const std::vector<Aabb>& boxes) const {
     std::vector<BodyPair> pairs;
     if (nodes_.empty()) {

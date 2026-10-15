@@ -378,11 +378,18 @@ RigidBody& PhysicsWorld::createBody() {
     bodies_.emplace_back();
     RigidBody& created = bodies_.back();
     created.updateCache();
+    broadphaseCache_.valid = false;
     return created;
 }
 
 void PhysicsWorld::step(Real dt) {
     for (RigidBody& body : bodies_) {
+        // Static geometry never moves and never integrates, so its cached world
+        // transform and its (unused) accumulators are inert: refreshing them for
+        // every wall, kerb and prop each step is pure overhead.
+        if (body.isStatic()) {
+            continue;
+        }
         body.updateCache();
         body.clearAccumulators();
     }
@@ -468,37 +475,39 @@ void PhysicsWorld::wakeBodies(const std::vector<ContactManifold>& manifolds) {
 
     // A body is "active" when it is a moving dynamic body, or a sleeping one
     // that has just been woken in this pass; only active bodies wake their
-    // neighbours, so a fully resting stack stays asleep.
-    std::unordered_map<const RigidBody*, std::size_t> index;
-    index.reserve(bodies_.size());
-    std::vector<char> active(bodies_.size(), 0);
-    for (std::size_t i = 0; i < bodies_.size(); ++i) {
-        index.emplace(&bodies_[i], i);
-        const RigidBody& body = bodies_[i];
-        if (body.isDynamic() && !body.sleeping &&
-            (glm::length(body.linearVelocity) > sleepLinearThreshold ||
-             glm::length(body.angularVelocity) > sleepAngularThreshold)) {
-            active[i] = 1;
+    // neighbours, so a fully resting stack stays asleep. Only the bodies that
+    // take part in a manifold, joint or force element are considered, so a scene
+    // with hundreds of static props does not build a map over all of them.
+    std::unordered_map<const RigidBody*, char> active;
+    const auto isActive = [&](const RigidBody* body) -> char {
+        if (body == nullptr) {
+            return 0;
         }
-    }
+        const auto found = active.find(body);
+        if (found != active.end()) {
+            return found->second;
+        }
+        const char value = (body->isDynamic() && !body->sleeping &&
+                            (glm::length(body->linearVelocity) > sleepLinearThreshold ||
+                             glm::length(body->angularVelocity) > sleepAngularThreshold))
+                               ? 1
+                               : 0;
+        active.emplace(body, value);
+        return value;
+    };
 
     const auto consider = [&](RigidBody* a, RigidBody* b, bool& changed) {
         if (a == nullptr || b == nullptr) {
             return;
         }
-        const auto ia = index.find(a);
-        const auto ib = index.find(b);
-        if (ia == index.end() || ib == index.end()) {
-            return;
-        }
-        if (active[ia->second] && b->isDynamic() && b->sleeping) {
+        if (isActive(a) != 0 && b->isDynamic() && b->sleeping) {
             b->wake();
-            active[ib->second] = 1;
+            active[b] = 1;
             changed = true;
         }
-        if (active[ib->second] && a->isDynamic() && a->sleeping) {
+        if (isActive(b) != 0 && a->isDynamic() && a->sleeping) {
             a->wake();
-            active[ia->second] = 1;
+            active[a] = 1;
             changed = true;
         }
     };
@@ -813,6 +822,7 @@ void PhysicsWorld::restoreSnapshot(const WorldSnapshot& snapshot) {
     contactKeys_.clear();
     time_ = snapshot.time;
     accumulator_ = 0.0;
+    broadphaseCache_.valid = false;
 }
 
 } // namespace sim::physics

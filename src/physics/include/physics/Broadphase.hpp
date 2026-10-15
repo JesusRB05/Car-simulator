@@ -28,6 +28,11 @@ public:
     // `boxes` must be the same array passed to build().
     std::vector<BodyPair> overlappingPairs(const std::vector<Aabb>& boxes) const;
 
+    // Appends the body index of every leaf whose cached AABB overlaps `box`. Used
+    // to test a handful of moving bodies against a tree of static geometry that
+    // was built once, without rebuilding it every step.
+    void query(const Aabb& box, std::vector<std::size_t>& out) const;
+
     bool empty() const { return nodes_.empty(); }
 
 private:
@@ -42,6 +47,7 @@ private:
 
     int buildNode(const std::vector<Aabb>& boxes, std::size_t begin, std::size_t end);
     void collideNodes(int nodeA, int nodeB, const std::vector<Aabb>& boxes, std::vector<BodyPair>& out) const;
+    void queryNode(int node, const Aabb& box, std::vector<std::size_t>& out) const;
 
     std::vector<Node> nodes_;
     std::vector<std::size_t> order_; // body indices, permuted by the build

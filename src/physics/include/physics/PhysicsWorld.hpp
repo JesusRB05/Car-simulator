@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "physics/Broadphase.hpp"
 #include "physics/Collision.hpp"
 #include "physics/Constraint.hpp"
 #include "physics/ForceElements.hpp"
@@ -110,6 +111,11 @@ public:
     RigidBody& body(std::size_t index) { return bodies_[index]; }
     const RigidBody& body(std::size_t index) const { return bodies_[index]; }
 
+    // Marks the cached static broadphase acceleration stale. The world calls this
+    // itself when it changes its body set; call it after moving, reshaping or
+    // retyping a body from outside. The tree rebuilds lazily on the next step.
+    void invalidateBroadphase() const { broadphaseCache_.valid = false; }
+
     template<typename T, typename... Args>
     T& createConstraint(RigidBody& bodyA, RigidBody& bodyB, Args&&... args) {
         auto constraint = std::make_unique<T>(std::forward<Args>(args)...);
@@ -183,6 +189,20 @@ private:
     std::unordered_map<std::uint64_t, ContactImpulseCache> contactCache_;
     Real accumulator_ = 0.0;
     double time_ = 0.0;
+
+    // Cached broadphase acceleration for static geometry. Static bodies never
+    // move, so their AABB tree is built once and only the dynamic bodies are
+    // queried against it each step; rebuilding the whole tree every step was the
+    // dominant cost of a scene with hundreds of static props. Rebuilt lazily when
+    // the body count changes.
+    struct BroadphaseCache {
+        AabbTree tree;
+        std::size_t builtBodyCount = 0;
+        bool valid = false;
+    };
+    mutable BroadphaseCache broadphaseCache_;
+
+    friend std::vector<BodyPair> broadphase(const PhysicsWorld& world, Real velocityMarginDt);
 };
 
 } // namespace sim::physics

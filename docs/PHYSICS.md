@@ -222,10 +222,15 @@ constraints and force elements. It exposes `createBody()`,
 ### Collisions and contacts (`physics/Collision.hpp`)
 
 Shape-vs-shape detection is the "detection half" of Phase 1: a deterministic
-brute-force broadphase (AABB overlap, pairs ordered by `(bodyA, bodyB)`) feeds
-analytic narrowphase routines for **sphere–sphere, sphere–box, box–box (SAT with
-face clipping and edge–edge) and sphere–cylinder**, the generic **GJK/EPA**
-convex path for `Convex` hulls (P1.2) and the `Heightfield` surface (P1.3). Each
+broadphase feeds analytic narrowphase routines for **sphere–sphere, sphere–box,
+box–box (SAT with face clipping and edge–edge) and sphere–cylinder**, the generic
+**GJK/EPA** convex path for `Convex` hulls (P1.2) and the `Heightfield` surface
+(P1.3). The broadphase builds an AABB tree **once** over the static bodies (they
+never move) and, each step, queries it with the re-boxed dynamic bodies and
+brute-forces the dynamic-vs-dynamic pairs; the candidate pairs are ordered by
+`(bodyA, bodyB)`. The cached tree is rebuilt lazily when the body count changes
+and can be invalidated with `PhysicsWorld::invalidateBroadphase()` after an
+out-of-band change to a body's transform, shape or type. Each
 `ContactManifold` carries
 up to `kMaxContactPoints = 4` points; `normal` points from A to B and
 `penetration` is the non-negative overlap depth.

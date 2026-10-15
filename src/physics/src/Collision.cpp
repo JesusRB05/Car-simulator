@@ -781,35 +781,83 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
 
 std::vector<BodyPair> broadphase(const PhysicsWorld& world, Real velocityMarginDt) {
     const std::size_t count = world.bodyCount();
-    std::vector<Aabb> boxes(count);
-    std::vector<std::size_t> collidable;
+    PhysicsWorld::BroadphaseCache& cache = world.broadphaseCache_;
+
+    // Static geometry never moves, so its tree is built once and reused: a scene
+    // with hundreds of walls and props would otherwise rebuild the whole tree
+    // every step. Only the handful of dynamic bodies is re-boxed each call.
+    if (!cache.valid || cache.builtBodyCount != count) {
+        // `boxes` is indexed by body index (a leaf stores boxes[order_[i]]), so it
+        // spans every body even though only the static ones are inserted.
+        std::vector<Aabb> staticBoxes(count);
+        std::vector<std::size_t> staticIndices;
+        staticIndices.reserve(count);
+        for (std::size_t i = 0; i < count; ++i) {
+            const RigidBody& body = world.body(i);
+            if (body.collisionEnabled && body.isStatic()) {
+                staticIndices.push_back(i);
+                staticBoxes[i] = computeAabb(body);
+            }
+        }
+        cache.tree.build(staticBoxes, staticIndices);
+        cache.builtBodyCount = count;
+        cache.valid = true;
+    }
+
+    std::vector<BodyPair> pairs;
+    std::vector<std::size_t> dynamicIndices;
+    std::vector<Aabb> dynamicBoxes;
     for (std::size_t i = 0; i < count; ++i) {
         const RigidBody& body = world.body(i);
-        boxes[i] = computeAabb(body);
+        if (!body.collisionEnabled || body.isStatic()) {
+            continue;
+        }
+        Aabb box = computeAabb(body);
         if (velocityMarginDt > 0.0) {
             const Real speed =
                 glm::length(body.linearVelocity) + glm::length(body.angularVelocity) * boundingRadius(body);
             if (speed > 0.0) {
                 const Vec3 inflation(speed * velocityMarginDt);
-                boxes[i].min -= inflation;
-                boxes[i].max += inflation;
+                box.min -= inflation;
+                box.max += inflation;
             }
         }
-        if (body.collisionEnabled) {
-            collidable.push_back(i);
+        dynamicIndices.push_back(i);
+        dynamicBoxes.push_back(box);
+    }
+
+    // Dynamic vs static: query the cached tree. Dynamic vs dynamic: brute force
+    // over the (few) moving bodies. This reproduces the full self-collision pair
+    // set, since two static bodies never form a contact anyway.
+    std::vector<std::size_t> hits;
+    for (std::size_t d = 0; d < dynamicIndices.size(); ++d) {
+        hits.clear();
+        cache.tree.query(dynamicBoxes[d], hits);
+        for (const std::size_t staticIndex : hits) {
+            const std::size_t bodyA = std::min(dynamicIndices[d], staticIndex);
+            const std::size_t bodyB = std::max(dynamicIndices[d], staticIndex);
+            pairs.push_back(BodyPair{bodyA, bodyB});
+        }
+        for (std::size_t e = d + 1; e < dynamicIndices.size(); ++e) {
+            if (!dynamicBoxes[d].overlaps(dynamicBoxes[e])) {
+                continue;
+            }
+            const std::size_t bodyA = std::min(dynamicIndices[d], dynamicIndices[e]);
+            const std::size_t bodyB = std::max(dynamicIndices[d], dynamicIndices[e]);
+            pairs.push_back(BodyPair{bodyA, bodyB});
         }
     }
 
-    AabbTree tree;
-    tree.build(boxes, collidable);
-    std::vector<BodyPair> pairs = tree.overlappingPairs(boxes);
-
-    // A pair is only a candidate when at least one body is dynamic: two static
-    // bodies never need a contact (matching the brute-force reference).
-    pairs.erase(std::remove_if(pairs.begin(), pairs.end(),
-                               [&](const BodyPair& pair) {
-                                   return !world.body(pair.bodyA).isDynamic() && !world.body(pair.bodyB).isDynamic();
-                               }),
+    std::sort(pairs.begin(), pairs.end(), [](const BodyPair& lhs, const BodyPair& rhs) {
+        if (lhs.bodyA != rhs.bodyA) {
+            return lhs.bodyA < rhs.bodyA;
+        }
+        return lhs.bodyB < rhs.bodyB;
+    });
+    pairs.erase(std::unique(pairs.begin(), pairs.end(),
+                            [](const BodyPair& lhs, const BodyPair& rhs) {
+                                return lhs.bodyA == rhs.bodyA && lhs.bodyB == rhs.bodyB;
+                            }),
                 pairs.end());
     return pairs;
 }
