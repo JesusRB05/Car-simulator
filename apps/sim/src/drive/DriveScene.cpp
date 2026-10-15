@@ -222,7 +222,21 @@ void DriveScene::simulate(double seconds) {
 void DriveScene::updateLapTimer() {
     const Vec3& position = car_->chassis().position;
     const Track::Projection projection = track_.project(position.x, position.z);
-    lastSurface_ = track_.sample(position.x, position.z).surface;
+
+    // Surface for the HUD, derived from the projection we already have instead of
+    // a second full track sample (which would re-project and re-evaluate the
+    // terrain) every physics step.
+    lastSurface_ = Surface::Grass;
+    if (projection.found) {
+        const TrackSample& sample = track_.samples()[projection.segment];
+        const double offset = std::abs(projection.lateral);
+        if (offset <= sample.halfWidth) {
+            lastSurface_ = Surface::Asphalt;
+        } else if (offset <= sample.halfWidth + track_.kerbWidth() && sample.kerb) {
+            lastSurface_ = Surface::Kerb;
+        }
+    }
+
     if (!projection.found) {
         return;
     }

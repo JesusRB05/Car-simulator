@@ -373,24 +373,35 @@ Track::Projection Track::project(Real x, Real z) const {
 
 GroundSample Track::sample(Real x, Real z) const {
     GroundSample result;
-    result.height = terrainHeight(x, z);
-    result.normal = terrainNormal(x, z);
     result.surface = Surface::Grass;
 
     const Projection projection = project(x, z);
+    const TrackSample* surfaceSample = nullptr;
     if (projection.found) {
         const TrackSample& sample = samples_[projection.segment];
         const Real offset = std::abs(projection.lateral);
         if (offset <= sample.halfWidth) {
             result.surface = Surface::Asphalt;
-            // The asphalt is draped over the terrain: its height follows the
-            // terrain under each point (so the terrain never pokes through on a
-            // lateral slope), and the banking leans it across the width.
-            result.height = terrainHeight(x, z) + bankingLift(sample, projection.lateral);
-            result.normal = roadNormal(sample, projection.lateral);
+            surfaceSample = &sample;
         } else if (offset <= sample.halfWidth + kerbWidth_ && sample.kerb) {
             result.surface = Surface::Kerb;
-            result.height = terrainHeight(x, z) + kKerbLift;
+        }
+    }
+
+    // Compute the height and normal for the surface we actually found. The asphalt
+    // is draped over the terrain (its height follows the terrain under each point,
+    // so the terrain never pokes through on a lateral slope) and leans with the
+    // banking; grass and kerbs use the bare terrain (a kerb is just lifted).
+    // Evaluating only the branch we need avoids the discarded terrain samples the
+    // old unconditional pre-computation computed on every call.
+    if (result.surface == Surface::Asphalt) {
+        result.height = terrainHeight(x, z) + bankingLift(*surfaceSample, projection.lateral);
+        result.normal = roadNormal(*surfaceSample, projection.lateral);
+    } else {
+        result.height = terrainHeight(x, z);
+        result.normal = terrainNormal(x, z);
+        if (result.surface == Surface::Kerb) {
+            result.height += kKerbLift;
         }
     }
 
