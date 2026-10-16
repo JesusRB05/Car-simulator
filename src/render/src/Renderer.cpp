@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "core/Log.hpp"
+#include "render/Frustum.hpp"
 #include "render/Uniforms.hpp"
 
 namespace sim::render {
@@ -120,8 +121,19 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
                             static_cast<float>(depthExtent_.height));
     commandList.setScissor(0, 0, depthExtent_.width, depthExtent_.height);
 
+    // Everything the camera cannot see is skipped before any command is built;
+    // the volume comes from the same view-projection the shaders use, so a
+    // conservative test cannot disagree with what would actually rasterise.
+    const Frustum frustum(scene.camera().viewProjection());
+
     for (const Drawable& drawable : scene.drawables()) {
         if (!drawable.mesh) {
+            continue;
+        }
+
+        const Aabb world =
+            transformBounds(Aabb{drawable.mesh->boundsMin(), drawable.mesh->boundsMax()}, drawable.transform);
+        if (!frustum.contains(world)) {
             continue;
         }
 

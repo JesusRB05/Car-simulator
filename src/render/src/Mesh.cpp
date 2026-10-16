@@ -18,12 +18,28 @@ rhi::BufferUsage indexUsage() {
 
 } // namespace
 
+Aabb meshBounds(const std::vector<Vertex>& vertices) {
+    if (vertices.empty()) {
+        return Aabb{glm::vec3(0.0f), glm::vec3(0.0f)};
+    }
+    Aabb bounds{vertices.front().position, vertices.front().position};
+    for (const Vertex& vertex : vertices) {
+        bounds.lo = glm::min(bounds.lo, vertex.position);
+        bounds.hi = glm::max(bounds.hi, vertex.position);
+    }
+    return bounds;
+}
+
 Mesh::Mesh(rhi::Device& device, const std::vector<Vertex>& vertices, const std::vector<std::uint32_t>& indices)
     : vertexBuffer_(device, vertices.data(), vertices.size() * sizeof(Vertex), vertexUsage(),
                     rhi::MemoryUsage::CpuToGpu),
       indexBuffer_(device, indices.data(), indices.size() * sizeof(std::uint32_t), indexUsage(),
                    rhi::MemoryUsage::CpuToGpu),
-      indexCount_(static_cast<std::uint32_t>(indices.size())) {}
+      indexCount_(static_cast<std::uint32_t>(indices.size())) {
+    const Aabb bounds = meshBounds(vertices);
+    boundsMin_ = bounds.lo;
+    boundsMax_ = bounds.hi;
+}
 
 MeshData cubeData() {
     const glm::vec3 faceNormals[6] = {{0, 0, 1}, {0, 0, -1}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}};

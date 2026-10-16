@@ -8,6 +8,7 @@
 
 #include <glm/glm.hpp>
 
+#include "render/Frustum.hpp"
 #include "rhi/Device.hpp"
 #include "rhi/Resources.hpp"
 
@@ -32,6 +33,10 @@ MeshData sphereData();
 MeshData cylinderData();
 MeshData groundPlaneData(float halfSize);
 
+// Local-space bounds of a vertex list. Device-free as well: the culling volume
+// the renderer uses comes from here, so a wrong bound would hide geometry.
+Aabb meshBounds(const std::vector<Vertex>& vertices);
+
 // A CPU-authored mesh uploaded into immutable vertex and index buffers.
 class Mesh {
 public:
@@ -46,6 +51,12 @@ public:
     const rhi::Buffer& indexBuffer() const { return indexBuffer_; }
     std::uint32_t indexCount() const { return indexCount_; }
 
+    // Local-space bounds of the vertices, computed once on upload. The renderer
+    // transforms them into a culling volume without touching the buffer; an empty
+    // mesh keeps a zero-size box at the origin (it draws nothing either way).
+    const glm::vec3& boundsMin() const { return boundsMin_; }
+    const glm::vec3& boundsMax() const { return boundsMax_; }
+
     static std::shared_ptr<Mesh> makeCube(rhi::Device& device);
     static std::shared_ptr<Mesh> makeSphere(rhi::Device& device);
     static std::shared_ptr<Mesh> makeCylinder(rhi::Device& device);
@@ -55,6 +66,8 @@ private:
     rhi::Buffer vertexBuffer_;
     rhi::Buffer indexBuffer_;
     std::uint32_t indexCount_ = 0;
+    glm::vec3 boundsMin_{0.0f};
+    glm::vec3 boundsMax_{0.0f};
 };
 
 } // namespace sim::render

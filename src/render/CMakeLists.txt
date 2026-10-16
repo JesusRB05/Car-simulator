@@ -2,6 +2,7 @@
 # Copyright (C) 2026 The Car Simulator contributors
 add_library(sim_render STATIC
     src/Camera.cpp
+    src/Frustum.cpp
     src/Mesh.cpp
     src/Scene.cpp
     src/ShaderCache.cpp
