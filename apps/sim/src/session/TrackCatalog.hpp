@@ -7,6 +7,10 @@
 
 #include <glm/glm.hpp>
 
+namespace sim::vfs {
+class VirtualFileSystem;
+}
+
 namespace sim::app {
 
 // One selectable circuit. Length and the minimap centreline come from the real
@@ -36,20 +40,29 @@ struct TrackSpec {
     std::string availabilityNote;
 };
 
-// The set of circuits the player can pick. Built lazily from the compiled-in
-// tracks; content/base/tracks/*/track.toml is documentation only for now.
+// The set of circuits the player can pick. Populated from the VFS: every
+// `tracks/<id>/track.toml` in the official content and in the enabled mods is
+// loaded (see TrackLoader). If no descriptor loads, the compiled-in Sunset
+// Circuit is kept so the game always has a track.
 class TrackCatalog {
 public:
-    static const TrackCatalog& instance();
+    static TrackCatalog& instance();
+
+    // Rescans the VFS. Called once at start-up after the mods are mounted.
+    void reload(const vfs::VirtualFileSystem& vfs);
 
     const std::vector<TrackSpec>& tracks() const { return tracks_; }
     const TrackSpec* find(const std::string& id) const;
     const TrackSpec& defaultTrack() const { return tracks_.front(); }
 
+    // One entry per track descriptor that was rejected, with the reason.
+    const std::vector<std::string>& errors() const { return errors_; }
+
 private:
     TrackCatalog();
 
     std::vector<TrackSpec> tracks_;
+    std::vector<std::string> errors_;
 };
 
 } // namespace sim::app

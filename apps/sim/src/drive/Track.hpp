@@ -63,6 +63,35 @@ private:
     Real friction_;
 };
 
+// One smooth Gaussian hill of the terrain: h = height * exp(-d^2 / (2 sigma^2)).
+struct TrackHill {
+    Real x = 0.0;
+    Real z = 0.0;
+    Real height = 0.0;
+    Real sigma = 1.0;
+};
+
+// Everything the circuit is built from, so a track can come from content
+// (tracks/<id>/track.toml) instead of the compiled-in default. Units are SI.
+struct TrackDescription {
+    struct ControlPoint {
+        Real x = 0.0;
+        Real z = 0.0;
+    };
+
+    std::vector<ControlPoint> controlPoints; // centreline, in travel order (m)
+    std::vector<TrackHill> hills;            // terrain elevation (m)
+    Real sampleSpacing = 1.0;                // m between resampled centreline points
+    Real nominalHalfWidth = 5.0;             // asphalt half-width (m)
+    Real kerbWidth = 1.0;                    // kerb band beyond the asphalt (m)
+    Real startZ = 40.0;                      // z of the start/finish line (m)
+    bool loop = true;
+};
+
+// The compiled-in Sunset Circuit layout, used when no track is loaded from
+// content. It is also the reference the base content's track.toml reproduces.
+const TrackDescription& defaultTrackDescription();
+
 // One resampled point of the track centreline (roughly every metre).
 struct TrackSample {
     Vec3 position{0.0};           // on the terrain
@@ -84,16 +113,27 @@ struct TrackSample {
 // and the height (banking) in a band around the centreline.
 class Track final : public GroundQuery {
 public:
+    // The compiled-in default circuit.
     Track();
+    // A circuit built from a description (content-driven).
+    explicit Track(const TrackDescription& description);
 
     // --- GroundQuery ------------------------------------------------------
-    Real height(Real x, Real z) const override { return terrainHeight(x, z); }
-    Vec3 normal(Real x, Real z) const override { return terrainNormal(x, z); }
+    Real height(Real x, Real z) const override { return heightAt(x, z); }
+    Vec3 normal(Real x, Real z) const override { return normalAt(x, z); }
     GroundSample sample(Real x, Real z) const override;
 
-    // The smooth terrain shared by the asphalt and the grass.
+    // The smooth terrain of *this* track (its hills), shared by the asphalt and
+    // the grass.
+    Real heightAt(Real x, Real z) const;
+    Vec3 normalAt(Real x, Real z) const;
+
+    // The compiled-in default terrain (the renderer draws the base circuit with
+    // it). A track built from a description uses its own hills through heightAt.
     static Real terrainHeight(Real x, Real z);
     static Vec3 terrainNormal(Real x, Real z);
+
+    const TrackDescription& description() const { return description_; }
 
     // --- Geometry ---------------------------------------------------------
     const std::vector<TrackSample>& samples() const { return samples_; }
@@ -129,6 +169,7 @@ private:
     void buildCentreline();
     void buildGrid();
 
+    TrackDescription description_;
     std::vector<TrackSample> samples_;
     Real length_ = 0.0;
     Real halfWidth_ = 5.0;

@@ -153,6 +153,13 @@ bool Application::initialise() {
     // priority, to make shaders/*.spv resolvable without shadowing content.
     vfs_->mount(exeDir, "/", true);
 
+    // The content catalogs read their descriptors through the VFS, so they see
+    // the official cars/tracks and every enabled mod's. A descriptor that fails
+    // validation is logged and skipped; the compiled-in car and circuit remain
+    // as a fallback.
+    CarCatalog::instance().reload(*vfs_);
+    TrackCatalog::instance().reload(*vfs_);
+
     net_ = std::make_unique<net::NetworkSystem>();
     net_->start(0);
 

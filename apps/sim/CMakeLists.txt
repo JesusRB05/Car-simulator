@@ -13,11 +13,13 @@ add_executable(sim
     src/drive/Obstacles.cpp
     src/drive/Track.cpp
     src/session/CarCatalog.cpp
+    src/session/CarLoader.cpp
     src/session/ControlSetupWizard.cpp
     src/session/GarageScene.cpp
     src/session/SessionState.cpp
     src/session/SessionUI.cpp
-    src/session/TrackCatalog.cpp)
+    src/session/TrackCatalog.cpp
+    src/session/TrackLoader.cpp)
 
 find_package(Stb REQUIRED)
 target_include_directories(sim PRIVATE src ${Stb_INCLUDE_DIR})

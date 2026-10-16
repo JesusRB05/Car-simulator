@@ -1,26 +1,28 @@
 # Sunset Circuit - base track descriptor (CC BY-SA 4.0).
 #
-# The driving demo builds this circuit procedurally in Track.cpp: a closed
-# centripetal Catmull-Rom spline through the control points below, resampled by
-# arc length over one smooth Gaussian hill. Nothing reads this file yet; it
-# records the intended parameters so a future data-driven loader can reproduce
-# the same layout from content.
+# Loaded at start-up by TrackLoader through the VFS and turned into a
+# drive::Track: a closed centripetal Catmull-Rom spline through the control
+# points below, resampled by arc length over a few smooth Gaussian hills. The
+# values reproduce drive::defaultTrackDescription() exactly, so the base circuit
+# is unchanged. All values are SI: metres and seconds.
 
 id = "sunset_circuit"
 name = "Sunset Circuit"
 author = "Car Simulator contributors"
 license = "CC BY-SA 4.0"
-description = "A short closed circuit with a long main straight, a hairpin, a fast sweeper and a chicane, laid over a gentle hill."
+location = "Procedural test loop"
+description = "The base test circuit: a long straight, a right hairpin, a fast sweeper and a chicane draped over a rolling terrain of a few smooth hills. Width and banking change along the lap."
 
 [geometry]
 loop = true
 sample_spacing = 1.0        # metres between resampled centreline points
 half_width = 5.0            # asphalt half-width (metres, each side)
 kerb_width = 1.0            # kerb band beyond the asphalt (metres)
+start_z = 40.0              # z of the start/finish line (metres)
 
 # Centreline control points in the direction of travel (metres). Right-handed
 # world: +X right, +Y up, -Z forward; the car starts on the straight at x = 0
-# heading -Z. The start/finish line sits near z = 40.
+# heading -Z.
 control_points = [
     [0.0, 120.0],    # main straight
     [0.0, 20.0],     # start/finish line around z = 40
@@ -38,11 +40,32 @@ control_points = [
     [8.0, 168.0],
 ]
 
-[terrain]
-# One smooth Gaussian hill gives a gentle elevation change (max grade ~5.5 %).
-hill_centre = [90.0, -60.0]  # [x, z] metres
-hill_height = 5.0            # metres
-hill_sigma = 55.0            # metres
+# A handful of smooth Gaussian hills give the circuit gentle elevation changes
+# (max grade ~6 % each) without ever becoming a hill climb. h = height *
+# exp(-d^2 / (2 sigma^2)).
+[[terrain.hills]]
+x = 90.0                     # under the back straight / sweeper
+z = -60.0
+height = 5.0
+sigma = 55.0
+
+[[terrain.hills]]
+x = 30.0                     # around the hairpin
+z = -176.0
+height = 3.2
+sigma = 40.0
+
+[[terrain.hills]]
+x = 112.0                    # under the chicane
+z = 116.0
+height = 2.8
+sigma = 44.0
+
+[[terrain.hills]]
+x = -40.0                    # beside the main straight
+z = 150.0
+height = 2.2
+sigma = 55.0
 
 [model]
 # Placeholder: the renderer grows a glTF/KTX2 path (cgltf + ktx are available).

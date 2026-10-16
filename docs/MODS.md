@@ -11,8 +11,15 @@ mods/
   my_mod/
     mod.toml            <- required manifest
     scripts/main.lua    <- optional (entry_script)
+    cars/<id>/car.toml  <- optional; adds a car
+    tracks/<id>/track.toml  <- optional; adds a circuit
     ...                 <- any other content (textures, meshes, data)
 ```
+
+A mod can add a **car** or a **track** with a descriptor only: the catalogs scan
+the VFS at start-up and list everything they find, so `cars/<id>/car.toml` and
+`tracks/<id>/track.toml` show up next to the official ones. See
+[CONTENT.md](CONTENT.md) for the schema.
 
 A mod can be a **directory** or a **`.zip`**. The manager scans `mods/`, and
 every entry is a mod candidate. The official content (`content/base`) is, as

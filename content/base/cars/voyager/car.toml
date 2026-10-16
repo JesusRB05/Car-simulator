@@ -1,77 +1,83 @@
 # Voyager - base car descriptor (CC BY-SA 4.0).
 #
-# The driving demo defines this car as CarParams in RaycastCar.hpp: a rear-wheel
-# drive raycast-wheel car. Nothing reads this file yet; it records the intended
-# parameters so a future data-driven loader can build the car from content. All
-# values are SI (metres, kilograms, radians, seconds).
+# Loaded at start-up by CarLoader through the VFS and turned into the physics
+# VehicleSetup that is actually spawned. The values below reproduce
+# vehicle::makeDefaultVehicleSetup() exactly, so the base car is unchanged.
+# All values are SI: metres, kilograms, radians, seconds; speeds are rad/s.
 
 id = "voyager"
 name = "Voyager"
 author = "Car Simulator contributors"
 license = "CC BY-SA 4.0"
-description = "A rear-wheel-drive raycast-wheel test car: a 1200 kg chassis on four virtual wheels."
+category = "Sports car / RWD"
+description = "The base rear-wheel-drive test car: a ~1250 kg chassis on four virtual wheels with a 6-speed sequential gearbox and an open differential."
+color = [0.10, 0.35, 0.80]
 
 [chassis]
-mass = 1200.0
-inertia = [1900.0, 2100.0, 500.0]   # principal moments: pitch (X), yaw (Y), roll (Z)
-half_extents = [0.88, 0.35, 2.15]   # visual / collision box half-size
+mass = 1250.0
+inertia = [1900.0, 2100.0, 500.0]    # principal moments: pitch (X), yaw (Y), roll (Z)
+half_extents = [0.88, 0.35, 2.15]    # visual / collision box half-size
 
 [geometry]
-front_axle_z = -1.25
+front_axle_z = -1.25                 # body -Z is forward
 rear_axle_z = 1.35
 half_track = 0.775
+mount_y = 0.0                        # strut top mount above the CoM
+rest_length = 0.25                   # strut length at the design ride height
 
 [suspension]
-rest_length = 0.25
-spring_stiffness = 35000.0
+spring_stiffness_front = 38000.0
+spring_stiffness_rear = 34000.0
 damper_bump = 2800.0
 damper_rebound = 3600.0
-max_compression = 0.19
+bump_stop_length = 0.06
 bump_stop_stiffness = 200000.0
-anti_roll_front = 12000.0
-anti_roll_rear = 6000.0
+bump_stop_damping = 800.0
+bump_stop_exponent = 2.0
 
 [wheels]
 radius = 0.32
-half_width = 0.11
-inertia = 1.2
-peak_slip_ratio = 0.12
-peak_slip_angle = 0.15
-tyre_shape = 1.5
-substeps = 10
+inertia = 1.2                        # wheel + tyre + brake disc
+
+[tyres]
+peak_friction_longitudinal = 1.4
+peak_friction_lateral = 1.4
+nominal_load = 4000.0
 
 [engine]
-idle_rpm = 900.0
-max_rpm = 7000.0
-torque_curve_rpm = [1000.0, 2000.0, 3000.0, 4500.0, 6000.0, 7000.0]
-torque_curve_nm = [170.0, 215.0, 240.0, 250.0, 230.0, 190.0]
-engine_brake_torque = 45.0
+idle_speed = 90.0                    # rad/s
+rev_limit = 700.0                    # rad/s
+torque_curve_speed = [100.0, 200.0, 300.0, 450.0, 600.0, 700.0]  # rad/s
+torque_curve_torque = [170.0, 215.0, 240.0, 250.0, 230.0, 190.0] # N*m, wide-open throttle
+friction_constant = 10.0             # engine braking, N*m
+friction_linear = 0.05
 
 [drivetrain]
-# Rear-wheel drive, open differential.
 gear_ratios = [3.20, 2.15, 1.55, 1.20, 0.97, 0.80]
 reverse_ratio = 3.30
 final_drive = 3.60
-efficiency = 0.90
-upshift_rpm = 6300.0
-downshift_rpm = 2600.0
-shift_time = 0.25
-traction_control = true
+efficiency = 0.92
+upshift_speed = 650.0                # rad/s
+downshift_speed = 250.0
 
 [brakes]
-max_brake_torque = 3600.0
-brake_bias = 0.70
-handbrake_torque = 2500.0
+max_brake_pressure = 1.40e7          # Pa at full pedal
+brake_bias = 0.70                    # front fraction under braking
+handbrake_pressure = 3.0e6
+pad_friction = 0.40
+piston_area = 0.002
+effective_radius = 0.13
 
 [steering]
-max_steer_angle = 0.60
+max_steer_angle = 0.55               # rad at a standstill
 min_steer_angle = 0.10
 steer_speed_scale = 14.0
-steer_rate = 3.0
+steer_input_rate = 3.0
 steer_return_rate = 5.0
 
 [aero]
-drag_factor = 0.39
-
-[model]
-mesh = "model/body.gltf"
+drag_coefficient = 0.30
+lift_coefficient = 0.0               # + = downforce
+frontal_area = 2.1
+centre_of_pressure = [0.0, 0.4, 0.0]
+air_density = 1.225

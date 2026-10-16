@@ -16,58 +16,19 @@ struct Point2 {
     Real z = 0.0;
 };
 
-// Control points of the closed circuit in the direction of travel. The car
-// starts on the long straight along x = 0, heading -Z.
-constexpr Point2 kControlPoints[] = {
-    {0.0, 120.0},   // main straight
-    {0.0, 20.0},    //   start/finish line around z = 40
-    {0.0, -90.0},   //   end of the straight, braking zone
-    {6.0, -165.0},  // hairpin entry (right)
-    {28.0, -192.0}, //   hairpin apex
-    {52.0, -170.0}, //   hairpin exit
-    {55.0, -95.0},  // back straight over the hill
-    {105.0, -25.0}, // fast sweeper
-    {122.0, 55.0},  //   sweeper exit
-    {98.0, 100.0},  // chicane (left)
-    {124.0, 128.0}, //   chicane (right)
-    {96.0, 160.0},  //   chicane exit
-    {48.0, 196.0},  // long left onto the main straight
-    {8.0, 168.0},
-};
-constexpr std::size_t kControlCount = sizeof(kControlPoints) / sizeof(kControlPoints[0]);
-
-// A handful of smooth Gaussian hills give the circuit gentle elevation changes
-// (max grade ~6 % each) without ever becoming a hill climb. They are well
-// separated, so their slopes only add slightly where they overlap.
-struct Hill {
-    Real x = 0.0;
-    Real z = 0.0;
-    Real height = 0.0;
-    Real sigma = 1.0;
-};
-constexpr Hill kHills[] = {
-    {90.0, -60.0, 5.0, 55.0},  // under the back straight / sweeper
-    {30.0, -176.0, 3.2, 40.0}, // around the hairpin
-    {112.0, 116.0, 2.8, 44.0}, // under the chicane
-    {-40.0, 150.0, 2.2, 55.0}, // beside the main straight
-};
-
-constexpr Real kStartZ = 40.0;
 constexpr Real kStartBehind = 6.0;
-constexpr Real kSampleSpacing = 1.0;
 
-// Track-width and banking shaping. `kNominalHalfWidth` is what halfWidth()
-// reports (and what the tests and the obstacle layout assume); the per-sample
-// asphalt leans on it.
-constexpr Real kNominalHalfWidth = 5.0;
-constexpr Real kWidenMax = 0.8;     // extra half-width at the start/finish box
-constexpr Real kWidenSigma = 40.0;  // metres, spread of the widening pulse
-constexpr Real kNarrowMax = 0.9;    // most a corner narrows the asphalt
-constexpr Real kNarrowScale = 36.0; // metres per rad of curvature
-constexpr Real kBankGain = 2.4;     // radians of bank per rad of heading change / m
-constexpr Real kBankMax = 0.061;    // ~3.5 degrees of maximum cross-slope
-constexpr Real kMinHalfWidth = 4.2;
-constexpr Real kMaxHalfWidth = 6.0;
+// Track-width and banking shaping. The description's `nominalHalfWidth` is what
+// halfWidth() reports (and what the tests and the obstacle layout assume); the
+// per-sample asphalt leans on it.
+constexpr Real kWidenMax = 0.8;          // extra half-width at the start/finish box
+constexpr Real kWidenSigma = 40.0;       // metres, spread of the widening pulse
+constexpr Real kNarrowMax = 0.9;         // most a corner narrows the asphalt
+constexpr Real kNarrowScale = 36.0;      // metres per rad of curvature
+constexpr Real kBankGain = 2.4;          // radians of bank per rad of heading change / m
+constexpr Real kBankMax = 0.061;         // ~3.5 degrees of maximum cross-slope
+constexpr Real kMinHalfWidthDelta = 0.8; // most the asphalt narrows below the nominal
+constexpr Real kMaxHalfWidthDelta = 1.0; // most the asphalt widens above the nominal
 constexpr int kSmoothRadius = 4;
 constexpr Real kKerbLift = 0.04; // kerb top above the terrain (metres)
 
@@ -83,10 +44,35 @@ Real bankingLift(const TrackSample& sample, Real lateral) {
     return (direction * clamped + sample.halfWidth) * std::abs(std::tan(sample.banking));
 }
 
-Point2 controlPoint(std::ptrdiff_t index) {
-    const std::ptrdiff_t count = static_cast<std::ptrdiff_t>(kControlCount);
+Point2 controlPoint(const std::vector<TrackDescription::ControlPoint>& points, std::ptrdiff_t index) {
+    const std::ptrdiff_t count = static_cast<std::ptrdiff_t>(points.size());
     const std::ptrdiff_t wrapped = ((index % count) + count) % count;
-    return kControlPoints[static_cast<std::size_t>(wrapped)];
+    const auto& point = points[static_cast<std::size_t>(wrapped)];
+    return {point.x, point.z};
+}
+
+Real terrainHeightOf(const std::vector<TrackHill>& hills, Real x, Real z) {
+    Real height = 0.0;
+    for (const TrackHill& hill : hills) {
+        const Real dx = x - hill.x;
+        const Real dz = z - hill.z;
+        height += hill.height * std::exp(-(dx * dx + dz * dz) / (2.0 * hill.sigma * hill.sigma));
+    }
+    return height;
+}
+
+Vec3 terrainNormalOf(const std::vector<TrackHill>& hills, Real x, Real z) {
+    Real gradientX = 0.0;
+    Real gradientZ = 0.0;
+    for (const TrackHill& hill : hills) {
+        const Real dx = x - hill.x;
+        const Real dz = z - hill.z;
+        const Real h = hill.height * std::exp(-(dx * dx + dz * dz) / (2.0 * hill.sigma * hill.sigma));
+        const Real inverseSigma2 = 1.0 / (hill.sigma * hill.sigma);
+        gradientX += -h * dx * inverseSigma2;
+        gradientZ += -h * dz * inverseSigma2;
+    }
+    return glm::normalize(Vec3(-gradientX, 1.0, -gradientZ));
 }
 
 Point2 lerp2(const Point2& a, const Point2& b, Real wa, Real wb) {
@@ -143,46 +129,87 @@ const char* surfaceName(Surface surface) {
     return "?";
 }
 
-Track::Track() {
+const TrackDescription& defaultTrackDescription() {
+    static const TrackDescription description = [] {
+        TrackDescription d;
+        // Centreline control points in the direction of travel. The car starts
+        // on the long straight along x = 0, heading -Z.
+        d.controlPoints = {
+            {0.0, 120.0},   // main straight
+            {0.0, 20.0},    //   start/finish line around z = 40
+            {0.0, -90.0},   //   end of the straight, braking zone
+            {6.0, -165.0},  // hairpin entry (right)
+            {28.0, -192.0}, //   hairpin apex
+            {52.0, -170.0}, //   hairpin exit
+            {55.0, -95.0},  // back straight over the hill
+            {105.0, -25.0}, // fast sweeper
+            {122.0, 55.0},  //   sweeper exit
+            {98.0, 100.0},  // chicane (left)
+            {124.0, 128.0}, //   chicane (right)
+            {96.0, 160.0},  //   chicane exit
+            {48.0, 196.0},  // long left onto the main straight
+            {8.0, 168.0},
+        };
+        // A handful of smooth Gaussian hills give the circuit gentle elevation
+        // changes (max grade ~6 % each) without ever becoming a hill climb.
+        d.hills = {
+            {90.0, -60.0, 5.0, 55.0},  // under the back straight / sweeper
+            {30.0, -176.0, 3.2, 40.0}, // around the hairpin
+            {112.0, 116.0, 2.8, 44.0}, // under the chicane
+            {-40.0, 150.0, 2.2, 55.0}, // beside the main straight
+        };
+        d.sampleSpacing = 1.0;
+        d.nominalHalfWidth = 5.0;
+        d.kerbWidth = 1.0;
+        d.startZ = 40.0;
+        d.loop = true;
+        return d;
+    }();
+    return description;
+}
+
+Track::Track() : Track(defaultTrackDescription()) {}
+
+Track::Track(const TrackDescription& description) : description_(description) {
+    if (description_.controlPoints.size() < 3) {
+        // A degenerate description cannot form a loop: fall back to the default
+        // so the track is still usable.
+        description_ = defaultTrackDescription();
+    }
+    halfWidth_ = description_.nominalHalfWidth;
+    kerbWidth_ = description_.kerbWidth;
     buildCentreline();
     buildGrid();
 }
 
 Real Track::terrainHeight(Real x, Real z) {
-    Real height = 0.0;
-    for (const Hill& hill : kHills) {
-        const Real dx = x - hill.x;
-        const Real dz = z - hill.z;
-        height += hill.height * std::exp(-(dx * dx + dz * dz) / (2.0 * hill.sigma * hill.sigma));
-    }
-    return height;
+    return terrainHeightOf(defaultTrackDescription().hills, x, z);
 }
 
 Vec3 Track::terrainNormal(Real x, Real z) {
-    Real gradientX = 0.0;
-    Real gradientZ = 0.0;
-    for (const Hill& hill : kHills) {
-        const Real dx = x - hill.x;
-        const Real dz = z - hill.z;
-        const Real h = hill.height * std::exp(-(dx * dx + dz * dz) / (2.0 * hill.sigma * hill.sigma));
-        const Real inverseSigma2 = 1.0 / (hill.sigma * hill.sigma);
-        gradientX += -h * dx * inverseSigma2;
-        gradientZ += -h * dz * inverseSigma2;
-    }
-    return glm::normalize(Vec3(-gradientX, 1.0, -gradientZ));
+    return terrainNormalOf(defaultTrackDescription().hills, x, z);
+}
+
+Real Track::heightAt(Real x, Real z) const {
+    return terrainHeightOf(description_.hills, x, z);
+}
+
+Vec3 Track::normalAt(Real x, Real z) const {
+    return terrainNormalOf(description_.hills, x, z);
 }
 
 void Track::buildCentreline() {
     // Dense polyline through the spline, then resampled by arc length.
     constexpr int kSubdivisions = 200;
+    const std::vector<TrackDescription::ControlPoint>& controlPoints = description_.controlPoints;
     std::vector<Point2> dense;
-    dense.reserve(kControlCount * kSubdivisions + 1);
-    for (std::size_t i = 0; i < kControlCount; ++i) {
+    dense.reserve(controlPoints.size() * kSubdivisions + 1);
+    for (std::size_t i = 0; i < controlPoints.size(); ++i) {
         const std::ptrdiff_t index = static_cast<std::ptrdiff_t>(i);
-        const Point2 p0 = controlPoint(index - 1);
-        const Point2 p1 = controlPoint(index);
-        const Point2 p2 = controlPoint(index + 1);
-        const Point2 p3 = controlPoint(index + 2);
+        const Point2 p0 = controlPoint(controlPoints, index - 1);
+        const Point2 p1 = controlPoint(controlPoints, index);
+        const Point2 p2 = controlPoint(controlPoints, index + 1);
+        const Point2 p3 = controlPoint(controlPoints, index + 2);
         for (int k = 0; k < kSubdivisions; ++k) {
             dense.push_back(catmullRom(p0, p1, p2, p3, static_cast<Real>(k) / kSubdivisions));
         }
@@ -197,7 +224,8 @@ void Track::buildCentreline() {
     }
     length_ = cumulative.back();
 
-    const std::size_t count = static_cast<std::size_t>(std::max(16.0, std::round(length_ / kSampleSpacing)));
+    const std::size_t count =
+        static_cast<std::size_t>(std::max(16.0, std::round(length_ / std::max(description_.sampleSpacing, 1e-3))));
     const Real spacing = length_ / static_cast<Real>(count);
     samples_.resize(count);
     std::size_t cursor = 0;
@@ -210,7 +238,7 @@ void Track::buildCentreline() {
         const Real t = std::clamp((s - cumulative[cursor]) / segmentLength, 0.0, 1.0);
         const Real x = dense[cursor].x + (dense[cursor + 1].x - dense[cursor].x) * t;
         const Real z = dense[cursor].z + (dense[cursor + 1].z - dense[cursor].z) * t;
-        samples_[i].position = Vec3(x, terrainHeight(x, z), z);
+        samples_[i].position = Vec3(x, heightAt(x, z), z);
         samples_[i].distance = s;
     }
 
@@ -248,7 +276,7 @@ void Track::buildCentreline() {
     Real best = std::numeric_limits<Real>::max();
     for (std::size_t i = 0; i < count; ++i) {
         const Real dx = samples_[i].position.x;
-        const Real dz = samples_[i].position.z - kStartZ;
+        const Real dz = samples_[i].position.z - description_.startZ;
         const Real d = dx * dx + dz * dz;
         if (d < best) {
             best = d;
@@ -260,7 +288,9 @@ void Track::buildCentreline() {
     // road widens a little around the start/finish box and narrows into the
     // corners; the banking leans the outside edge up, capped so the car never
     // drives up a wall. Both are box-blurred so the ribbon has no kinks.
-    std::vector<Real> width(count, kNominalHalfWidth);
+    const Real minHalfWidth = std::max(description_.nominalHalfWidth - kMinHalfWidthDelta, 1.0);
+    const Real maxHalfWidth = description_.nominalHalfWidth + kMaxHalfWidthDelta;
+    std::vector<Real> width(count, description_.nominalHalfWidth);
     std::vector<Real> banking(count, 0.0);
     const auto wrapIndex = [count](std::ptrdiff_t index) {
         const std::ptrdiff_t n = static_cast<std::ptrdiff_t>(count);
@@ -272,7 +302,7 @@ void Track::buildCentreline() {
         const Real distance = static_cast<Real>(wrapped) * spacing;
         const Real widen = kWidenMax * std::exp(-(distance * distance) / (2.0 * kWidenSigma * kWidenSigma));
         const Real narrow = std::min(std::abs(samples_[i].curvature) * kNarrowScale, kNarrowMax);
-        width[i] = std::clamp(kNominalHalfWidth + widen - narrow, kMinHalfWidth, kMaxHalfWidth);
+        width[i] = std::clamp(description_.nominalHalfWidth + widen - narrow, minHalfWidth, maxHalfWidth);
         banking[i] = std::clamp(samples_[i].curvature * kBankGain, -kBankMax, kBankMax);
     }
     const auto smooth = [&](std::vector<Real>& values) {
@@ -393,11 +423,11 @@ GroundSample Track::sample(Real x, Real z) const {
     // Evaluating only the branch we need avoids the discarded terrain samples the
     // old unconditional pre-computation computed on every call.
     if (result.surface == Surface::Asphalt) {
-        result.height = terrainHeight(x, z) + bankingLift(*surfaceSample, projection.lateral);
+        result.height = heightAt(x, z) + bankingLift(*surfaceSample, projection.lateral);
         result.normal = roadNormal(*surfaceSample, projection.lateral);
     } else {
-        result.height = terrainHeight(x, z);
-        result.normal = terrainNormal(x, z);
+        result.height = heightAt(x, z);
+        result.normal = normalAt(x, z);
         if (result.surface == Surface::Kerb) {
             result.height += kKerbLift;
         }
@@ -423,12 +453,12 @@ GroundSample Track::sample(Real x, Real z) const {
 Vec3 Track::roadPoint(const TrackSample& sample, Real lateral, Real raise) const {
     const Real x = sample.position.x + sample.right.x * lateral;
     const Real z = sample.position.z + sample.right.z * lateral;
-    return Vec3(x, terrainHeight(x, z) + bankingLift(sample, lateral) + raise, z);
+    return Vec3(x, heightAt(x, z) + bankingLift(sample, lateral) + raise, z);
 }
 
 Vec3 Track::roadNormal(const TrackSample& sample, Real lateral) const {
     const Vec3 point = roadPoint(sample, lateral, 0.0);
-    const Vec3 terrain = terrainNormal(point.x, point.z);
+    const Vec3 terrain = normalAt(point.x, point.z);
     Real gradientX = -terrain.x / terrain.y;
     Real gradientZ = -terrain.z / terrain.y;
     const Real slope = std::tan(sample.banking);

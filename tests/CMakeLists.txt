@@ -17,12 +17,20 @@ add_executable(sim_tests
     test_input.cpp
     test_plugins.cpp
     test_vfs.cpp
-    # The drive scene lives in the app; its simulation half is render-free and
-    # tested directly.
+    test_content.cpp
+    # The drive scene and the content catalogs live in the app; their
+    # simulation half is render-free and tested directly.
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
-    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp)
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/session/CarLoader.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/session/TrackLoader.cpp)
 
 target_include_directories(sim_tests PRIVATE . ${CMAKE_SOURCE_DIR}/apps/sim/src)
+
+# The content tests mount the real content/ and mods/ trees, so they need to
+# know where the repository root is at build time.
+file(TO_CMAKE_PATH "${CMAKE_SOURCE_DIR}" _sim_source_dir)
+target_compile_definitions(sim_tests PRIVATE SIM_SOURCE_DIR="${_sim_source_dir}")
 
 target_link_libraries(sim_tests
     PRIVATE

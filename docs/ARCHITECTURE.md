@@ -56,6 +56,7 @@ main()
        │    ├─ VirtualFileSystem
        │    ├─ ModManager::reload()      (mounts content and mods)
        │    ├─ mount the executable directory (shaders) underneath
+       │    ├─ CarCatalog/TrackCatalog::reload()  (read cars/ and tracks/ descriptors)
        │    ├─ LuaSandbox + ScriptHost, PluginLoader
        │    ├─ Vulkan surface + Device + Swapchain + Frame
        │    ├─ Renderer, ImGuiLayer, Telemetry, AudioEngine, NetworkSystem

@@ -1,0 +1,84 @@
+# Hatchback - example data-only mod car (CC BY-SA 4.0).
+#
+# A second car shipped as pure content: a light, short-wheelbase, modestly
+# powered rear-wheel-drive hatchback. It shows that a mod can add a car with
+# nothing but a car.toml, loaded through the VFS next to the official Voyager.
+# All values are SI: metres, kilograms, radians, seconds; speeds are rad/s.
+# (The vehicle model is rear-wheel drive only, so this car is RWD too.)
+
+id = "hatchback"
+name = "Hatchback"
+author = "Example Mod"
+license = "CC BY-SA 4.0"
+category = "Compact hatchback / RWD"
+description = "A data-only mod car: a ~980 kg rear-wheel-drive hatchback with a short wheelbase, 5-speed gearbox and modest power."
+color = [0.15, 0.65, 0.35]
+
+[chassis]
+mass = 980.0
+inertia = [1150.0, 1300.0, 330.0]
+half_extents = [0.80, 0.36, 1.80]
+
+[geometry]
+front_axle_z = -1.10
+rear_axle_z = 1.15
+half_track = 0.72
+mount_y = 0.0
+rest_length = 0.24
+
+[suspension]
+spring_stiffness_front = 30000.0
+spring_stiffness_rear = 28000.0
+damper_bump = 2400.0
+damper_rebound = 3200.0
+bump_stop_length = 0.06
+bump_stop_stiffness = 180000.0
+bump_stop_damping = 700.0
+bump_stop_exponent = 2.0
+
+[wheels]
+radius = 0.30
+inertia = 1.0
+
+[tyres]
+peak_friction_longitudinal = 1.35
+peak_friction_lateral = 1.35
+nominal_load = 3400.0
+
+[engine]
+idle_speed = 95.0
+rev_limit = 650.0
+torque_curve_speed = [100.0, 200.0, 300.0, 450.0, 600.0, 650.0]
+torque_curve_torque = [150.0, 190.0, 205.0, 200.0, 175.0, 155.0]
+friction_constant = 9.0
+friction_linear = 0.05
+
+[drivetrain]
+gear_ratios = [3.20, 2.10, 1.50, 1.15, 0.90]
+reverse_ratio = 3.20
+final_drive = 3.60
+efficiency = 0.92
+upshift_speed = 600.0
+downshift_speed = 230.0
+
+[brakes]
+max_brake_pressure = 1.10e7
+brake_bias = 0.68
+handbrake_pressure = 3.0e6
+pad_friction = 0.40
+piston_area = 0.002
+effective_radius = 0.13
+
+[steering]
+max_steer_angle = 0.55
+min_steer_angle = 0.10
+steer_speed_scale = 14.0
+steer_input_rate = 3.0
+steer_return_rate = 5.0
+
+[aero]
+drag_coefficient = 0.33
+lift_coefficient = 0.0
+frontal_area = 2.0
+centre_of_pressure = [0.0, 0.35, 0.0]
+air_density = 1.225

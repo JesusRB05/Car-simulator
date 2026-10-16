@@ -9,6 +9,10 @@
 
 #include "vehicle/VehicleModel.hpp"
 
+namespace sim::vfs {
+class VirtualFileSystem;
+}
+
 namespace sim::app {
 
 // One selectable car. The setup is the actual vehicle the physics spawns; the
@@ -45,22 +49,30 @@ struct CarSpec {
     double wheelRadiusM = 0.0;
 };
 
-// The set of cars the player can pick. Built lazily from the compiled-in
-// vehicles; there is no data-driven loader yet (content/base/cars/*/car.toml is
-// documentation only), so this is the single source of truth.
+// The set of cars the player can pick. Populated from the VFS: every
+// `cars/<id>/car.toml` in the official content and in the enabled mods is
+// loaded (see CarLoader). If no descriptor loads, the compiled-in Voyager is
+// kept so the game always has a car to drive.
 class CarCatalog {
 public:
-    static const CarCatalog& instance();
+    static CarCatalog& instance();
+
+    // Rescans the VFS. Called once at start-up after the mods are mounted.
+    void reload(const vfs::VirtualFileSystem& vfs);
 
     const std::vector<CarSpec>& cars() const { return cars_; }
     const CarSpec* find(const std::string& id) const;
     // The car used when a saved selection is missing or points at a gone car.
     const CarSpec& defaultCar() const { return cars_.front(); }
 
+    // One entry per car descriptor that was rejected, with the reason.
+    const std::vector<std::string>& errors() const { return errors_; }
+
 private:
     CarCatalog();
 
     std::vector<CarSpec> cars_;
+    std::vector<std::string> errors_;
 };
 
 } // namespace sim::app
