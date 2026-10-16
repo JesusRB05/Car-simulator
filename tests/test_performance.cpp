@@ -285,11 +285,17 @@ TEST_CASE("performance: a dry stop is grip-limited and the distance scales with 
 TEST_CASE("performance: steady-state cornering reaches a realistic lateral acceleration") {
     const Corner low = skidpad(1.0, 8.0, 0.6, 0.2);
     const Corner high = skidpad(1.0, 18.0, 0.35, 0.35);
+    const Real reference = peakLateralMu(); // peak lateral grip from the tyre, in g
     MESSAGE("cornering: low " << low.speed << " m/s, " << low.lateralG << " g, R " << low.radius << " m | high "
-                              << high.speed << " m/s, " << high.lateralG << " g, R " << high.radius << " m");
-    CHECK(low.lateralG > 0.4);
-    CHECK(low.lateralG < 1.6);
-    CHECK(high.lateralG > 0.5);
-    CHECK(high.lateralG < 1.6);
+                              << high.speed << " m/s, " << high.lateralG << " g, R " << high.radius << " m (peak "
+                              << reference << " g)");
+    // The high-speed steady turn runs close to the tyre's lateral limit; the
+    // partial throttle spends part of the friction circle on drive, so it lands
+    // between 70% and 100% of the peak lateral friction from the tyre parameters.
+    CHECK(high.lateralG > reference * 0.70);
+    CHECK(high.lateralG < reference * 1.00);
+    // The tight, slow turn develops real lateral load but stays well under it.
+    CHECK(low.lateralG > reference * 0.30);
+    CHECK(low.lateralG < high.lateralG);
     CHECK(high.speed > low.speed);
 }
