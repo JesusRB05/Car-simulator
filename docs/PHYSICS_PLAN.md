@@ -721,6 +721,13 @@ with zero-order hold, so their behaviour is deterministic and testable:
 They implement `IVehicleElectronics`, are optional per vehicle, and must be
 **disabled** in the disciplines where they do not exist.
 
+Implementation started (P3.5): `vehicle/Electronics.hpp`
+(`ElectronicControlUnit`) combines the three as one unit, sampled once per fixed
+step, that trims the throttle and adds a per-wheel brake torque. The app attaches
+one to both the *driving* car and the drive circuit and enables the three from
+the persisted session setting (`assists.abs/tcs/esc`); a `VehicleModel` without a
+unit leaves the driver's request untouched.
+
 ---
 
 ## 8. Surfaces and environment

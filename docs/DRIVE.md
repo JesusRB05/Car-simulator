@@ -1,8 +1,10 @@
 # Drive scene: keyboard car on a test circuit
 
-The `drive` scene lets you drive a raycast-wheel car around a procedural test
-circuit to try the physics engine. There is no general collision detection yet,
-so the wheels query an analytic ground instead of colliding with meshes.
+The `drive` scene drives the assembled [`VehicleModel`](PHYSICS_PLAN.md) (the
+default *Voyager* setup) around a procedural test circuit to exercise the whole
+vehicle stack. The wheels still query an analytic ground instead of colliding
+with the terrain mesh, but the chassis is a real rigid body, so it does collide
+with the barrier walls and the run-off test yard.
 
 ```bat
 build\windows-msvc-release\bin\sim.exe --scene drive
@@ -51,47 +53,59 @@ All of it runs in its own `PhysicsWorld` on the main thread with the fixed
 
 - `Track`: centripetal Catmull-Rom spline through 14 control points (main
   straight, right hairpin, back straight over a hill, fast sweeper, chicane,
-  long left), resampled every ~1 m. The terrain is one smooth Gaussian hill
-  (5 m high, max grade ~5.5 %), so `height(x, z)` and `normal(x, z)` are exact.
-  `sample(x, z)` also returns the surface: asphalt (10 m wide, mu 1.0), kerbs
-  (1 m, mu 0.9, only where the corner radius is under 160 m) and grass
-  (mu 0.6, higher rolling resistance). Track projection uses a uniform grid.
-- `RaycastCar`: a `ForceElement` attached to one chassis `RigidBody`. The world
-  calls `apply()` once per step; it raycasts the four suspensions, adds spring,
-  damper, bump-stop and anti-roll forces along the ground normal, runs the tyre
-  model and integrates the wheel spin, engine and gearbox state with the fixed
-  step it was created with.
+  long left), resampled every ~1 m. The terrain is a sum of four smooth Gaussian
+  hills (2.2-5.0 m high, max grade ~6 %), so `height(x, z)` and `normal(x, z)`
+  are exact. `sample(x, z)` also returns the surface: asphalt (nominal 10 m wide,
+  mu 1.0, widened a little at the start/finish box and narrowed into the
+  corners, with the outside edge banked up by up to ~3.5 deg), kerbs (1 m,
+  mu 0.9, only where the corner radius is under 160 m) and grass (mu 0.6, higher
+  rolling resistance). Track projection uses a uniform grid.
+- `Obstacles`: barrier walls lining both sides of the circuit (thin red/white
+  armco on the straights, taller concrete blocks in the corners) plus a run-off
+  collision yard beside the start straight (concrete blocks with a gap to drive
+  through, tyre stacks, a cone slalom, a ramp and a rotated deflector). Every
+  obstacle is a static, collision-enabled body and doubles as its own render
+  description.
+- `VehicleModel`: the assembled car (engine, clutch, gearbox, differential,
+  brakes, Ackermann steering, aero and the Magic Formula tyres on one rigid
+  chassis in the world; see the [technical plan](PHYSICS_PLAN.md)). The scene
+  attaches the driver aids (`ElectronicControlUnit`, ABS/TCS/ESC); the app
+  enables them from the session setting every frame (all three on by default).
 - `DriveScene`: rendering (terrain grid, asphalt ribbon, kerbs, start line and
-  gantry, the car), chase/cockpit/orbit cameras, the ImGui HUD and the debug
-  overlay.
+  gantry, barrier walls, the car), chase/cockpit/orbit cameras, the ImGui HUD,
+  the lap timer and the debug overlay.
 
-## Car parameters (`CarParams`)
+## Car parameters
+
+The demo car is the `VehicleSetup` defaults plus `makeDefaultVehicleSetup()`
+(`src/vehicle/src/VehicleModel.cpp`): the same car the *driving* scene drives.
 
 | | |
 | --- | --- |
-| Mass, inertia (pitch/yaw/roll) | 1200 kg; 1900 / 2100 / 500 kg m^2 |
-| Wheelbase, track | 2.60 m (CoM 1.25 m behind the front axle), 1.55 m |
-| CoM height at rest | ~0.49 m |
-| Springs | 35 kN/m, 0.25 m free length, bump stop beyond 0.19 m |
+| Mass, inertia (pitch/yaw/roll) | 1250 kg; 1900 / 2100 / 500 kg m^2 |
+| Wheelbase, track | 2.60 m (front axle z = -1.25 m, rear z = +1.35 m), 1.55 m |
+| Springs | 38 kN/m front, 34 kN/m rear, 0.25 m rest length, progressive bump stops |
 | Dampers | 2.8 kN s/m bump, 3.6 kN s/m rebound |
-| Anti-roll bars | 12 kN/m front, 6 kN/m rear |
 | Wheels | radius 0.32 m, inertia 1.2 kg m^2 |
-| Tyres | combined-slip magic formula (C = 1.5), peak at 12 % slip ratio and 0.15 rad slip angle, friction circle in normalised slip |
-| Engine | 250 N m peak at 4500 rpm, 900-7000 rpm, engine braking |
-| Gearbox | automatic, 6 gears (3.20 ... 0.80), final drive 3.6, 0.25 s shifts at 6300 / 2600 rpm, reverse 3.3 |
-| Drive | rear-wheel drive, open differential, simple traction control |
-| Brakes | 3600 N m total, 70 % front; handbrake 2500 N m per rear wheel |
-| Steering | 0.60 rad at standstill, limit / (1 + v / 14 m/s), floor 0.10 rad, Ackermann |
-| Drag | 0.39 * \|v\| v |
+| Tyres | Magic Formula 6.x combined slip (slip-vector ellipse) on the default coefficients |
+| Engine | 250 N m peak at 450 rad/s, idle 90 rad/s, rev limit 700 rad/s |
+| Gearbox | automatic, 6 gears (3.20 ... 0.80), final drive 3.60, reverse 3.30, ~0.25 s shifts at 650 / 250 rad/s |
+| Drive | rear-wheel drive, open differential |
+| Brakes | 3600 N m total, 62 % front; handbrake on the rear |
+| Steering | 0.55 rad at standstill, limit / (1 + v / 14 m/s), floor 0.10 rad, Ackermann |
+| Drag | 0.5 * rho * 0.30 * 2.1 * v^2 (about 0.39 v^2 at 1.225 kg/m^3) |
 
-The autopilot test laps the circuit in about 67 s with a 110 km/h top speed;
-0-100 km/h takes roughly 6 s.
+The autopilot test laps the circuit in about 69 s with a ~103 km/h top speed,
+and a standing 0-100 km/h launch takes roughly 10 s.
 
 ## HUD and debug overlay
 
 The **Drive** window shows speed, gear, rpm, throttle/brake, steering angle,
-surface under the car, lap timer (current, last, best) and a per-wheel table
-(load, slip ratio, slip angle, Fx, Fy, compression, surface).
+surface under the car, the driver-aid state (ABS/TCS/ESC shown as *off*, *on* or
+*active* in green when the aid is intervening, plus the throttle the traction
+and stability control let through), the lap timer (current, last, best) and a
+per-wheel table (load, slip ratio, slip angle, Fx, Fy, compression, drive
+torque, brake torque, the aids' brake-torque adjustment and surface).
 
 The overlay draws each suspension ray (green in contact, grey in the air), the
 contact points (yellow crosses), the tyre force (orange, 1 m per 2.5 kN), the
@@ -99,18 +113,13 @@ normal load (blue) and the chassis velocity (white).
 
 ## Known limitations
 
-- Only the wheels touch the ground. The chassis has no collision: on its roof
-  or side it falls through the terrain (press R).
-- The ground is a smooth analytic height function; kerbs are flat paint and
-  there are no bumps, walls or other cars.
-- Raycast wheels: the contact is a single point under the strut, there is no
-  tyre radius or carcass on slopes, and no relaxation length (the slip
-  denominators are clamped at 1 m/s instead, so a parked car on a slope creeps
-  very slowly even with the brake held).
-- Wheel spin is substepped 10x inside the 1 ms step; the chassis sees the mean
-  tyre force of the substeps.
-- Drivetrain: open differential with equal torque split, simplified clutch
-  (slips up to 3000 rpm), no engine inertia, no ABS.
-- Steering is a direct wheel angle, no self-aligning torque or force feedback.
-- The car will be ported onto the `IVehicleModel` interface later; the
-  existing vehicle on the physics thread is unaffected by this scene.
+- Only the wheels touch the ground: they query the analytic surface, not a
+  collider. The chassis box collides with the barrier walls and the test yard,
+  but there are no other cars and no ground bumps.
+- The wheel contact is a single point under the strut, with no tyre radius or
+  carcass on slopes and no relaxation length (the slip denominators are clamped
+  at 1 m/s instead).
+- The driver aids are attached here for the *Voyager* setup only; the per-car
+  aid configuration of [Section 7.8](PHYSICS_PLAN.md) is not read from data yet.
+- Steering is a direct wheel angle and the circuit sends no force feedback; the
+  app's `input` stack drives the wheel separately.

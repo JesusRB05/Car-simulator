@@ -18,7 +18,7 @@ showroom of the selected car. It is a small state machine (`GameScreen` in
 
 | Screen          | What it does                                                            |
 |-----------------|-------------------------------------------------------------------------|
-| Main menu       | Start session, choose car / track, configure controls, reduced-motion toggle, quit. Shows the saved car and track. |
+| Main menu       | Start session, choose car / track, configure controls, reduced-motion toggle and the driver-aid toggles (ABS/TCS/ESC), quit. Shows the saved car and track. |
 | Choose your car | The car list with the derived specs (power, torque, mass, drivetrain, gearbox, wheelbase) and the 3D preview. |
 | Choose your track | The circuit list with a 2D minimap drawn from the real centreline, its length and width, plus the game mode, weather and time-of-day. |
 | Session         | The recap (car, track, mode, weather, time, controls) and the **Drive** button. |
@@ -39,7 +39,8 @@ and one circuit (*Sunset Circuit*) exist today; the flow is built for more.
 Game mode (only *Practice*), weather and time of day are listed but **disabled**
 and labelled as not simulated, rather than faked. The car, track, mode, weather,
 time and the "controls configured" flag persist in `config.toml` under
-`session.*` (and `ui.reduced_motion`).
+`session.*` (and `ui.reduced_motion`); the driver aids persist under
+`assists.abs`, `assists.tcs` and `assists.esc`.
 
 ### Control setup wizard
 
@@ -93,6 +94,9 @@ frame rate.
   and the orbit target, yaw, pitch and distance. Inspection scenes start from
   their curated camera and then orbit around a target on its line of sight.
 - **Vehicle**, **Mods**: the previous driving and mod panels, hidden by default.
+  The **Vehicle** panel carries the driver-aid checkboxes (ABS/TCS/ESC, the same
+  persisted setting as the main menu) and shows which aid intervened on the last
+  step plus the throttle the traction and stability control let through.
 - **Input**: the wheel / pedal / gamepad stack (see `docs/INPUT.md`). Hidden by
   default. It lists the connected devices with their identified model and
   verification tier, lets you pick the primary device (or *Auto-select*), remaps

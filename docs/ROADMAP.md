@@ -91,9 +91,9 @@ manoeuvres and the numbered work packages are in the
 |---|---|
 | Rigid-body core | Done: fixed step, deterministic, soft and rigid joints with an exact island block solve, 1:1000 mass-ratio tests, energy and angular-momentum tests |
 | Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, a generic GJK/EPA convex path, a heightfield terrain surface, a static triangle-mesh soup, AABB-tree broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, speculative contacts and optional sub-stepping against tunnelling, sleep-capable and deterministic. Still missing: a per-primitive (BVH) mid-phase for triangle meshes. The raycast-wheel car still uses an analytic ground |
-| Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a Magic Formula `MagicFormulaTire` (pure slip, both combined-slip forms, self-aligning, overturning and rolling-resistance moments, camber thrust with its horizontal and vertical shifts, `.tir` scaling factors, `.tir` parser), a `TireVertical` spring-damper, a `TireRelaxation` transient filter, a `TireBristle` standstill model, an implicit `WheelSpin` step and a `DoubleWishbone` hardpoint closure solver (camber, toe, motion ratio), plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
+| Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a Magic Formula `MagicFormulaTire` (pure slip, both combined-slip forms, self-aligning, overturning and rolling-resistance moments, camber thrust with its horizontal and vertical shifts, `.tir` scaling factors, `.tir` parser), a `TireVertical` spring-damper, a `TireRelaxation` transient filter, a `TireBristle` standstill model, an implicit `WheelSpin` step and a `DoubleWishbone` hardpoint closure solver (camber, toe, motion ratio), plus the assembled `VehicleModel` (P2.13) and the `Electronics` ABS/TCS/ESC unit |
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
-| App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit, and a pre-session flow (main menu, car / track selection with a 3D garage preview, a controls setup wizard, a session recap) |
+| App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit, a pre-session flow (main menu, car / track selection with a 3D garage preview, a controls setup wizard, a session recap) and persisted driver aids (ABS/TCS/ESC) applied to the car |
 | Input | In progress: `sim::input` (SDL-free) over an SDL3 backend - compatibility database (VID:PID, vendor families, name heuristics), per-axis calibration, live remapping, multi-device merge, hot-plug, TOML-persisted profiles and a force-feedback controller. Force feedback currently sends rumble and LED only; DirectInput constant-force and spring/damper/friction conditions are a Windows-only follow-up. Profiles are not yet verified on real hardware |
 | Mods | Sandboxed Lua (JIT disabled, instruction budget), mod VFS with priorities, native plugin API skeleton |
 | CI | Defined (format, Linux, Windows, gpu-linux); runs on push once the repository has CI enabled |
@@ -230,7 +230,13 @@ and work packages P2.1-P2.13 are in the [technical plan](PHYSICS_PLAN.md#4-tyre-
   hook (Section 7.8) as one combined ABS, TCS and ESC unit: per-wheel brake
   release, a throttle cut on driven-wheel slip and an outer-front brake plus
   throttle trim from the yaw-rate error; a `VehicleModel` may hold one and it is
-  inert when none is attached.
+  inert when none is attached. The app now attaches one to both the *driving*
+  car and the circuit car: the session state persists an ABS/TCS/ESC switch each
+  (`assists.abs/tcs/esc`, all on by default), the main menu and the Vehicle panel
+  edit them, the physics thread applies the derived mask once per frame and the
+  HUD reports which aid intervened. The aids trim the pedal only, so a cut lasts
+  exactly as long as the controller asks for it instead of being rate-limited by
+  the pedal ramp.
 
 ### Phase 3 - Validation, tooling and force feedback (L) - closes ALPHA 0.1
 The manoeuvre suite and its oracles (braking, steady-state circle, step steer, skidpad,
