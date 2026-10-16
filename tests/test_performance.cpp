@@ -200,9 +200,8 @@ TEST_CASE("performance: top speed is finite and drag limited") {
 TEST_CASE("performance: the quarter mile is a plausible street-car number") {
     const Quarter high = quarterMile(1.0);
     const Quarter low = quarterMile(0.4);
-    MESSAGE("quarter mile: grip 1.0 -> " << high.time << " s @ " << high.trap * 3.6
-                                         << " km/h, grip 0.4 -> " << low.time << " s @ " << low.trap * 3.6
-                                         << " km/h");
+    MESSAGE("quarter mile: grip 1.0 -> " << high.time << " s @ " << high.trap * 3.6 << " km/h, grip 0.4 -> " << low.time
+                                         << " s @ " << low.trap * 3.6 << " km/h");
     CHECK(high.time > 8.0);
     CHECK(high.time < 25.0);
     CHECK(high.trap > 15.0);
@@ -246,9 +245,8 @@ TEST_CASE("performance: high grip braking is brake-limited, low grip is grip-lim
 TEST_CASE("performance: steady-state cornering reaches a realistic lateral acceleration") {
     const Corner low = skidpad(1.0, 8.0, 0.6, 0.2);
     const Corner high = skidpad(1.0, 18.0, 0.35, 0.35);
-    MESSAGE("cornering: low " << low.speed << " m/s, " << low.lateralG << " g, R " << low.radius
-                              << " m | high " << high.speed << " m/s, " << high.lateralG << " g, R " << high.radius
-                              << " m");
+    MESSAGE("cornering: low " << low.speed << " m/s, " << low.lateralG << " g, R " << low.radius << " m | high "
+                              << high.speed << " m/s, " << high.lateralG << " g, R " << high.radius << " m");
     CHECK(low.lateralG > 0.4);
     CHECK(low.lateralG < 1.6);
     CHECK(high.lateralG > 0.5);

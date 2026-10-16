@@ -46,10 +46,10 @@ struct Hill {
     Real sigma = 1.0;
 };
 constexpr Hill kHills[] = {
-    {90.0, -60.0, 5.0, 55.0},   // under the back straight / sweeper
-    {30.0, -176.0, 3.2, 40.0},  // around the hairpin
-    {112.0, 116.0, 2.8, 44.0},  // under the chicane
-    {-40.0, 150.0, 2.2, 55.0},  // beside the main straight
+    {90.0, -60.0, 5.0, 55.0},  // under the back straight / sweeper
+    {30.0, -176.0, 3.2, 40.0}, // around the hairpin
+    {112.0, 116.0, 2.8, 44.0}, // under the chicane
+    {-40.0, 150.0, 2.2, 55.0}, // beside the main straight
 };
 
 constexpr Real kStartZ = 40.0;
@@ -60,12 +60,12 @@ constexpr Real kSampleSpacing = 1.0;
 // reports (and what the tests and the obstacle layout assume); the per-sample
 // asphalt leans on it.
 constexpr Real kNominalHalfWidth = 5.0;
-constexpr Real kWidenMax = 0.8;    // extra half-width at the start/finish box
-constexpr Real kWidenSigma = 40.0; // metres, spread of the widening pulse
-constexpr Real kNarrowMax = 0.9;   // most a corner narrows the asphalt
+constexpr Real kWidenMax = 0.8;     // extra half-width at the start/finish box
+constexpr Real kWidenSigma = 40.0;  // metres, spread of the widening pulse
+constexpr Real kNarrowMax = 0.9;    // most a corner narrows the asphalt
 constexpr Real kNarrowScale = 36.0; // metres per rad of curvature
-constexpr Real kBankGain = 2.4;    // radians of bank per rad of heading change / m
-constexpr Real kBankMax = 0.061;   // ~3.5 degrees of maximum cross-slope
+constexpr Real kBankGain = 2.4;     // radians of bank per rad of heading change / m
+constexpr Real kBankMax = 0.061;    // ~3.5 degrees of maximum cross-slope
 constexpr Real kMinHalfWidth = 4.2;
 constexpr Real kMaxHalfWidth = 6.0;
 constexpr int kSmoothRadius = 4;
@@ -82,7 +82,6 @@ Real bankingLift(const TrackSample& sample, Real lateral) {
     const Real direction = sample.banking > 0.0 ? 1.0 : -1.0;
     return (direction * clamped + sample.halfWidth) * std::abs(std::tan(sample.banking));
 }
-
 
 Point2 controlPoint(std::ptrdiff_t index) {
     const std::ptrdiff_t count = static_cast<std::ptrdiff_t>(kControlCount);
@@ -268,8 +267,7 @@ void Track::buildCentreline() {
         return static_cast<std::size_t>(((index % n) + n) % n);
     };
     for (std::size_t i = 0; i < count; ++i) {
-        const std::ptrdiff_t diff =
-            static_cast<std::ptrdiff_t>(i) - static_cast<std::ptrdiff_t>(startIndex_);
+        const std::ptrdiff_t diff = static_cast<std::ptrdiff_t>(i) - static_cast<std::ptrdiff_t>(startIndex_);
         const std::ptrdiff_t wrapped = std::min(std::abs(diff), static_cast<std::ptrdiff_t>(count) - std::abs(diff));
         const Real distance = static_cast<Real>(wrapped) * spacing;
         const Real widen = kWidenMax * std::exp(-(distance * distance) / (2.0 * kWidenSigma * kWidenSigma));
