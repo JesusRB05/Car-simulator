@@ -262,6 +262,15 @@ void VehicleModel::updateTransmission(Real dt) {
     if (throttle_ > 0.0) {
         engagement = std::max(engagement, std::min(throttle_ * 0.5, 0.5));
     }
+    // A driver braking presses the clutch (or the converter stalls): decoupling
+    // the engine stops the idle controller from creeping the car through the
+    // brakes and keeps the reflected engine inertia out of the driven wheel-spin
+    // solve, so the rear brakes transmit their full torque instead of spending it
+    // spinning the engine down. It also removes the overlap while the throttle
+    // pedal is still ramping closed behind the brake.
+    if (brake_ > 0.05) {
+        engagement = 0.0;
+    }
     clutchEngagement_ = (ratio == 0.0) ? 0.0 : engagement;
 
     Real inputTorque = 0.0;
@@ -556,11 +565,18 @@ VehicleSetup makeDefaultVehicleSetup() {
     setup.finalDrive = 3.60;
     setup.differential.type = DifferentialType::Open;
 
-    setup.brakeBias.frontFraction = 0.62;
+    // Brake sizing (PHYSICS_PLAN Section 7.6). A wheel locks when its brake
+    // torque exceeds mu_x Fz R; with the 0.485 m CoM height the dynamic load
+    // transfer at 1 g puts ~4350 N on a front wheel and ~1780 N on a rear one, so
+    // locking at the dry peak needs ~1950 N*m front and ~800 N*m rear. The front
+    // fraction is the dynamic front share under braking (0.70), not the static
+    // 0.52, so both axles reach the lock point together instead of the rear
+    // locking early; the master pressure then gives a comfortable margin over the
+    // grip limit (T_total = 2 mu_p A_p R_eff p = 5800 N*m at 1.4e7 Pa, ~1.5 g of
+    // equivalent force) so a dry stop is grip-limited, not brake-limited.
+    setup.brakeBias.frontFraction = 0.70;
     setup.brakeBias.handbrakePressure = 3.0e6;
-    // Master pressure that yields the documented 3600 N*m of total brake torque
-    // (DRIVE.md): T = 2 mu_p A_p R_eff p, so p = 3600 / (2 * 0.40 * 0.002 * 0.13).
-    setup.maxBrakePressure = 8.65e6;
+    setup.maxBrakePressure = 1.40e7;
 
     setup.centreOfPressure = Vec3(0.0, 0.4, 0.0);
     setup.dragCoefficient = 0.30;

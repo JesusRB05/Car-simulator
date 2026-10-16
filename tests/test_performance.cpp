@@ -7,6 +7,7 @@
 
 #include "physics/PhysicsWorld.hpp"
 #include "vehicle/GroundQuery.hpp"
+#include "vehicle/MagicFormulaTire.hpp"
 #include "vehicle/VehicleModel.hpp"
 
 using namespace sim::vehicle;
@@ -16,6 +17,35 @@ namespace {
 
 constexpr Real kDt = 1.0 / 1000.0;
 constexpr Real kG = 9.80665;
+
+// Reference friction the car's own tyre can still develop, instead of hard-coded
+// tolerances. A fully braked wheel locks and slides at slip ratio -1, so the
+// deceleration ceiling without ABS is mu_x(-1) g; the friction bound caps it at
+// friction * mu_peak on a low-grip surface. Both come from the tyre parameters.
+Real lockedWheelMu() {
+    const MagicFormulaCoefficients coefficients = makeDefaultVehicleSetup().tyre;
+    MagicFormulaTire tyre(coefficients);
+    TireState state;
+    state.slipRatio = -1.0;
+    state.normalLoad = coefficients.nominalLoad;
+    state.frictionCoefficient = 1.0;
+    return -tyre.computeForces(state).longitudinal / state.normalLoad;
+}
+
+Real peakLateralMu() {
+    return makeDefaultVehicleSetup().tyre.pDy1;
+}
+
+// The surface friction scales the whole tyre curve, so the locked-wheel friction
+// on a surface of `friction` is just `friction` times the dry value.
+Real gripLimitedMu(Real friction) {
+    return friction * lockedWheelMu();
+}
+
+// Reference stopping distance: v^2 / (2 mu g) for the grip-limited deceleration.
+Real referenceStop(Real friction, Real entry) {
+    return entry * entry / (2.0 * gripLimitedMu(friction) * kG);
+}
 
 // A car on an infinite flat asphalt plane of a given grip. The ground outlives
 // the model because it is a member declared before the model is spawned.
@@ -210,36 +240,42 @@ TEST_CASE("performance: the quarter mile is a plausible street-car number") {
 }
 
 TEST_CASE("performance: braking distance grows with entry speed (v^2 law)") {
+    const Real reference = lockedWheelMu() * kG;
     constexpr std::array<Real, 6> speeds{10.0, 15.0, 20.0, 25.0, 30.0, 35.0};
     Real previous = 0.0;
     for (const Real speed : speeds) {
         const Real distance = stoppingDistance(1.0, speed);
         const Real deceleration = speed * speed / (2.0 * distance);
-        MESSAGE("brake " << speed << " m/s -> " << distance << " m (a = " << deceleration << " m/s^2)");
+        MESSAGE("brake " << speed << " m/s -> " << distance << " m (a = " << deceleration << " m/s^2, ref " << reference
+                         << ")");
         CHECK(distance > 0.0);
         CHECK(distance > previous);
-        CHECK(deceleration > 3.0);
-        CHECK(deceleration < 12.0);
+        // A dry stop is grip-limited, so the mean deceleration is the tyre's
+        // locked-wheel friction times g, within a 15% band (the small spread with
+        // speed is the aerodynamic drag and the brake-application transient).
+        CHECK(deceleration > reference * 0.85);
+        CHECK(deceleration < reference * 1.15);
         previous = distance;
     }
 }
 
-TEST_CASE("performance: high grip braking is brake-limited, low grip is grip-limited") {
+TEST_CASE("performance: a dry stop is grip-limited and the distance scales with grip") {
     const Real dry = stoppingDistance(1.0, 25.0);
     const Real damp = stoppingDistance(0.6, 25.0);
     const Real slippery = stoppingDistance(0.4, 25.0);
     const Real ice = stoppingDistance(0.3, 25.0);
-    MESSAGE("brake from 25 m/s: grip 1.0 -> " << dry << " m, 0.6 -> " << damp << " m, 0.4 -> " << slippery
-                                              << " m, 0.3 -> " << ice << " m");
-    // Above the tyre limit the brakes are the binding constraint, so the
-    // distance barely moves between dry asphalt and a grip of 0.6.
-    CHECK(damp > dry * 0.95);
-    CHECK(damp < dry * 1.10);
-    // Below that the tyres bind and the distance climbs.
-    CHECK(slippery > dry * 1.10);
+    MESSAGE("brake from 25 m/s: grip 1.0 -> " << dry << " m (ref " << referenceStop(1.0, 25.0) << "), 0.6 -> " << damp
+                                              << " m, 0.4 -> " << slippery << " m, 0.3 -> " << ice << " m");
+    // The brakes are sized to lock the wheels on dry asphalt, so the dry stop is
+    // limited by the tyre, not the brakes: it lands within 15% of the reference
+    // v^2 / (2 mu g).
+    const Real dryReference = referenceStop(1.0, 25.0);
+    CHECK(dry > dryReference * 0.85);
+    CHECK(dry < dryReference * 1.15);
+    // And the distance climbs monotonically as the surface gets more slippery.
+    CHECK(damp > dry);
+    CHECK(slippery > damp);
     CHECK(ice > slippery);
-    // And even the dry stop is a plausible number for a 1250 kg car.
-    CHECK(dry < 120.0);
 }
 
 TEST_CASE("performance: steady-state cornering reaches a realistic lateral acceleration") {
