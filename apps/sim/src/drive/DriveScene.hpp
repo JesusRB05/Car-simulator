@@ -12,6 +12,7 @@
 #include "drive/Track.hpp"
 #include "drive/TrackGroundQuery.hpp"
 #include "physics/PhysicsWorld.hpp"
+#include "vehicle/Electronics.hpp"
 #include "vehicle/VehicleModel.hpp"
 
 namespace sim::rhi {
@@ -88,8 +89,14 @@ public:
     // Places the camera exactly on its target (no smoothing) on the next build.
     void snapCamera() { cameraSnap_ = true; }
 
-    void drawHud() const;
+    void drawHud();
     void drawDebug(render::DebugDraw& draw) const;
+
+    // Driver aids (ABS/TCS/ESC) of the car in this scene. The unit is attached
+    // to the model here; the app pushes the user's setting every frame, so this
+    // scene has a single source of truth (the session state).
+    void setAidsEnabled(bool abs, bool tcs, bool esc);
+    const vehicle::ElectronicControlUnit& aids() const { return aids_; }
 
     const vehicle::VehicleModel& car() const { return *car_; }
     const Track& track() const { return track_; }
@@ -110,10 +117,15 @@ private:
 
     Track track_;
     TrackGroundQuery ground_{track_};
+    // The driver aids (ABS/TCS/ESC) attached to the car built into world_.
+    // Declared before the world so it outlives the model that borrows it.
+    vehicle::ElectronicControlUnit aids_{};
+    bool absEnabled_ = true;
+    bool tcsEnabled_ = true;
+    bool escEnabled_ = true;
     physics::PhysicsWorld world_;
     vehicle::VehicleModel* car_ = nullptr;
     double remainder_ = 0.0;
-
     std::vector<Obstacle> obstacles_;
     std::vector<ObstacleBatch> obstacleBatches_;
 

@@ -44,6 +44,13 @@ struct SessionState {
     bool controlsConfigured = false;
     bool reducedMotion = false; // accessibility: shorter/no transitions
 
+    // Driver aids (ABS, traction and stability control). On by default; the
+    // physics thread reads them through the app's aid mask and the Electronic
+    // Control Unit attached to the car honours them.
+    bool abs = true;
+    bool tcs = true;
+    bool esc = true;
+
     // Loads/creates the persisted fields (missing keys keep the defaults).
     void load(const core::Config& config);
     // Writes the persisted fields into the in-memory config document; the app

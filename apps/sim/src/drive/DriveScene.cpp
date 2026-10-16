@@ -159,6 +159,11 @@ std::string formatLap(double seconds) {
 DriveScene::DriveScene(rhi::Device& device) {
     world_.fixedStep = 1.0 / 1000.0;
     car_ = &VehicleModel::spawn(world_, vehicle::makeDefaultVehicleSetup(), ground_);
+    // Driver aids (ABS/TCS/ESC) are attached to the car here and enabled by the
+    // app from the session setting (all three are on by default). The unit is
+    // sampled by the model every fixed step.
+    car_->setElectronics(&aids_);
+    setAidsEnabled(true, true, true);
     buildMeshes(device);
     buildObstacles(device);
     reset();
@@ -191,6 +196,16 @@ void DriveScene::setKeys(const DriveKeys& keys) {
     input.steer = std::abs(keys.steerAnalog) > 0.02 ? keys.steerAnalog : steerDigital;
     input.handbrake = keys.handbrake || keys.handbrakeAnalog > 0.5;
     car_->setInput(input);
+}
+
+void DriveScene::setAidsEnabled(bool abs, bool tcs, bool esc) {
+    if (abs == absEnabled_ && tcs == tcsEnabled_ && esc == escEnabled_) {
+        return;
+    }
+    absEnabled_ = abs;
+    tcsEnabled_ = tcs;
+    escEnabled_ = esc;
+    aids_.setEnabled(absEnabled_, tcsEnabled_, escEnabled_);
 }
 
 void DriveScene::orbitInput(float deltaX, float deltaY, float wheel) {
@@ -585,7 +600,7 @@ void DriveScene::updateCamera(float aspect, double frameDelta, render::Scene& sc
     camera.lookAt(chaseEye_, chaseTarget_, glm::vec3(0.0f, 1.0f, 0.0f));
 }
 
-void DriveScene::drawHud() const {
+void DriveScene::drawHud() {
     const VehicleModel& car = *car_;
     ImGui::SetNextWindowPos(ImVec2(290.0f, 40.0f), ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2(400.0f, 0.0f), ImGuiCond_FirstUseEver);
@@ -612,6 +627,24 @@ void DriveScene::drawHud() const {
     ImGui::SameLine(80.0f);
     ImGui::ProgressBar(static_cast<float>(car.brake()), ImVec2(-1.0f, 0.0f), car.input().handbrake ? "handbrake" : "");
     ImGui::Text("Steer %.1f deg   Surface: %s", car.steerAngle() * 57.29578, surfaceName(lastSurface_));
+
+    // Driver aids: the ElectronicControlUnit attached to the car, sampled every
+    // fixed step. The switches live in the main menu / Vehicle panel; this is
+    // the live state (green when the aid is intervening right now).
+    const auto aidStatus = [](bool enabled, bool active, const char* name) {
+        const char* state = !enabled ? "off" : (active ? "active" : "on");
+        const ImVec4 color = !enabled ? ImVec4(0.55f, 0.55f, 0.55f, 1.0f)
+                             : active ? ImVec4(0.40f, 0.90f, 0.45f, 1.0f)
+                                      : ImVec4(0.75f, 0.75f, 0.75f, 1.0f);
+        ImGui::TextColored(color, "%s %s", name, state);
+    };
+    aidStatus(absEnabled_, aids_.absActive(), "ABS");
+    ImGui::SameLine();
+    aidStatus(tcsEnabled_, aids_.tcsActive(), "TCS");
+    ImGui::SameLine();
+    aidStatus(escEnabled_, aids_.escActive(), "ESC");
+    ImGui::SameLine();
+    ImGui::TextDisabled("throttle x%.2f", aids_.throttleScale());
 
     ImGui::Separator();
     const double current = lapStarted_ ? world_.time() - lapStartTime_ : 0.0;
@@ -643,6 +676,18 @@ void DriveScene::drawHud() const {
         row("Fy N", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.lateralForce); });
         row("Drive Nm", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.driveTorque); });
         row("Brake Nm", [](const VehicleCorner& c) { ImGui::Text("%+.0f", c.brakeTorque); });
+        {
+            // The aids' brake-torque adjustment is indexed by the same wheel
+            // order as the corners, so it needs the index, not the corner.
+            const auto& modulation = car.brakeModulation().torqueDelta;
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextUnformatted("Aids Nm");
+            for (std::size_t i = 0; i < car.corners().size(); ++i) {
+                ImGui::TableSetColumnIndex(static_cast<int>(i + 1));
+                ImGui::Text("%+.0f", modulation[i]);
+            }
+        }
         row("Surface", [this](const VehicleCorner& c) {
             ImGui::TextUnformatted(c.contact ? surfaceName(track_.sample(c.contactPoint.x, c.contactPoint.z).surface)
                                              : "air");

@@ -37,6 +37,7 @@
 #include "scripting/LuaSandbox.hpp"
 #include "scripting/ScriptHost.hpp"
 #include "telemetry/Telemetry.hpp"
+#include "vehicle/Electronics.hpp"
 #include "vehicle/GroundQuery.hpp"
 #include "vehicle/VehicleModel.hpp"
 #include "vfs/VirtualFileSystem.hpp"
@@ -47,6 +48,14 @@
 #include <volk.h>
 
 namespace sim::app {
+
+// Driver aids bit mask, shared by the persisted session state, the UI and the
+// physics thread (which reads it once per frame and enables the aids on the
+// ElectronicControlUnit).
+inline constexpr unsigned kAidAbs = 1u << 0;
+inline constexpr unsigned kAidTcs = 1u << 1;
+inline constexpr unsigned kAidEsc = 1u << 2;
+inline constexpr unsigned kAllAids = kAidAbs | kAidTcs | kAidEsc;
 
 class ImGuiLayer;
 class SimUi;
@@ -69,6 +78,12 @@ struct SimSnapshot {
     double rpm = 0.0;
     double steer = 0.0;
     std::array<double, 4> wheelSpin{0.0, 0.0, 0.0, 0.0};
+    // Driver aids: which ones intervened on the last step, and the throttle the
+    // traction/stability control let through.
+    bool absActive = false;
+    bool tcsActive = false;
+    bool escActive = false;
+    double aidsThrottleScale = 1.0;
     // Totals over every dynamic body, filled on the physics thread so the energy
     // panel never touches live simulation state.
     double kineticEnergy = 0.0;
@@ -125,6 +140,7 @@ private:
     void physicsLoop();
 
     void pumpInput();
+    void applySessionAids();
     void gatherSnapshots(SimSnapshot& interpolated);
     void stepScenePhysics(double delta);
     void updateScene(const SimSnapshot& interpolated);
@@ -238,6 +254,9 @@ private:
     physics::WorldSnapshot savedWorld_;
 
     // Simulation.
+    // Driver aids (ABS/TCS/ESC) attached to vehicle_. Declared before the world
+    // so the unit outlives the model that borrows it.
+    vehicle::ElectronicControlUnit electronics_;
     physics::PhysicsWorld world_;
     vehicle::FlatGroundQuery vehicleGround_;   // the flat demo ground
     vehicle::VehicleModel* vehicle_ = nullptr; // the assembled car, owned by world_
@@ -251,6 +270,9 @@ private:
     std::atomic<bool> inputHandbrake_{false};
     std::atomic<double> physicsTimeMs_{0.0};
     std::atomic<int> physicsSteps_{0};
+    // Enabled driver aids, as a bit mask of kAid* bits. Written by the UI
+    // thread, read once per frame by the physics thread.
+    std::atomic<unsigned> aidsMask_{kAllAids};
 
     // Render-side interpolation state.
     SimSnapshot previous_{};

@@ -32,6 +32,9 @@ void SessionState::load(const core::Config& config) {
     selection.timeOfDayId = config.getString("session.time_of_day", selection.timeOfDayId);
     controlsConfigured = config.getBool("session.controls_configured", controlsConfigured);
     reducedMotion = config.getBool("ui.reduced_motion", reducedMotion);
+    abs = config.getBool("assists.abs", abs);
+    tcs = config.getBool("assists.tcs", tcs);
+    esc = config.getBool("assists.esc", esc);
 }
 
 void SessionState::save(core::Config& config) const {
@@ -42,6 +45,9 @@ void SessionState::save(core::Config& config) const {
     config.setString("session.time_of_day", selection.timeOfDayId);
     config.setBool("session.controls_configured", controlsConfigured);
     config.setBool("ui.reduced_motion", reducedMotion);
+    config.setBool("assists.abs", abs);
+    config.setBool("assists.tcs", tcs);
+    config.setBool("assists.esc", esc);
 }
 
 } // namespace sim::app

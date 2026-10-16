@@ -126,6 +126,10 @@ bool Application::initialise() {
     config_->load();
     session_.load(*config_);
 
+    // Driver aids start from the persisted session state (all three on by
+    // default); the physics thread applies the mask to the car's control unit.
+    applySessionAids();
+
     inputProfiles_ = std::make_unique<input::ProfileStore>(*config_);
     wheel_ = std::make_unique<input::WheelManager>(*input_, input::CompatibilityDatabase::instance(), *inputProfiles_);
     wheel_->ffb().settings() = inputProfiles_->loadFfbSettings();
@@ -150,6 +154,8 @@ bool Application::initialise() {
     physicsClock_.setFixedDt(fixedDt);
     world_.fixedStep = fixedDt;
     vehicle_ = &vehicle::VehicleModel::spawn(world_, vehicle::makeDefaultVehicleSetup(), vehicleGround_);
+    // The car's driver aids: attach the unit and honour the persisted mask.
+    vehicle_->setElectronics(&electronics_);
     for (std::size_t i = 0; i < wheelOffsets_.size() && i < vehicle_->corners().size(); ++i) {
         const physics::Vec3 local = vehicle_->corners()[i].localMount;
         wheelOffsets_[i] =
@@ -314,6 +320,11 @@ void Application::physicsLoop() {
         const core::StepResult result = physicsClock_.advance(frameDelta);
 
         if (result.steps > 0) {
+            // Apply the driver-aid switches before stepping; the unit is then
+            // sampled by the model once per fixed step.
+            const unsigned aids = aidsMask_.load(std::memory_order_relaxed);
+            electronics_.setEnabled((aids & kAidAbs) != 0u, (aids & kAidTcs) != 0u, (aids & kAidEsc) != 0u);
+
             vehicle::VehicleInput input;
             input.throttle = inputThrottle_.load(std::memory_order_relaxed);
             input.brake = inputBrake_.load(std::memory_order_relaxed);
@@ -339,6 +350,10 @@ void Application::physicsLoop() {
             snapshot.speed = vehicle_->forwardSpeed();
             snapshot.rpm = vehicle_->engineSpeed() * 9.549296585513721; // rad/s -> rpm
             snapshot.steer = vehicle_->steerAngle();
+            snapshot.absActive = electronics_.absActive();
+            snapshot.tcsActive = electronics_.tcsActive();
+            snapshot.escActive = electronics_.escActive();
+            snapshot.aidsThrottleScale = electronics_.throttleScale();
             for (std::size_t i = 0; i < snapshot.wheelSpin.size(); ++i) {
                 snapshot.wheelSpin[i] = vehicle_->corners()[i].spinAngle;
             }
@@ -410,6 +425,14 @@ void Application::pumpInput() {
     wheel_->setFfbInput(ffb);
 }
 
+void Application::applySessionAids() {
+    unsigned aids = 0;
+    aids |= session_.abs ? kAidAbs : 0u;
+    aids |= session_.tcs ? kAidTcs : 0u;
+    aids |= session_.esc ? kAidEsc : 0u;
+    aidsMask_.store(aids, std::memory_order_relaxed);
+}
+
 void Application::gatherSnapshots(SimSnapshot& interpolated) {
     SimSnapshot snapshot;
     while (snapshots_.pop(snapshot)) {
@@ -443,6 +466,11 @@ void Application::gatherSnapshots(SimSnapshot& interpolated) {
 }
 
 void Application::stepDriveScene(double delta) {
+    // The circuit's car holds the shared control unit; the aid setting is the
+    // same session state the menu and the Vehicle panel edit.
+    const unsigned aids = aidsMask_.load(std::memory_order_relaxed);
+    drive_->setAidsEnabled((aids & kAidAbs) != 0u, (aids & kAidTcs) != 0u, (aids & kAidEsc) != 0u);
+
     // The drive keys take priority over the UI shortcuts; ImGui widgets that
     // want the keyboard (text fields) still win.
     drive::DriveKeys keys;
@@ -695,6 +723,9 @@ void Application::handleCameraKeys() {
 }
 
 void Application::drawUi() {
+    // The driver aids are edited in the main menu and in the Vehicle panel; the
+    // physics thread only ever sees the derived mask.
+    applySessionAids();
     if (session_.screen != GameScreen::Driving) {
         drawSessionUi();
         return;
@@ -761,6 +792,27 @@ void Application::drawUi() {
             ImGui::Text("Physics thread: %.3f ms / %d steps", telemetry_->physicsTimeMs(), telemetry_->physicsSteps());
             ImGui::Text("Bodies: %d  Kinetic: %.2f J  Potential: %.2f J", current_.bodyCount, current_.kineticEnergy,
                         current_.potentialEnergy);
+
+            ImGui::Separator();
+            ImGui::TextUnformatted("Driver aids (ABS / TCS / ESC)");
+            // The same persisted setting the main menu edits; the mask the
+            // physics thread reads is derived from it every frame.
+            ImGui::Checkbox("ABS", &session_.abs);
+            ImGui::SameLine();
+            ImGui::Checkbox("TCS", &session_.tcs);
+            ImGui::SameLine();
+            ImGui::Checkbox("ESC", &session_.esc);
+            ImGui::SameLine();
+            ImGui::TextDisabled("throttle x%.2f", current_.aidsThrottleScale);
+            const auto aidState = [](bool active, const char* name) {
+                ImGui::TextColored(active ? ImVec4(0.40f, 0.90f, 0.45f, 1.0f) : ImVec4(0.55f, 0.55f, 0.55f, 1.0f),
+                                   "%s%s", name, active ? " active" : "");
+            };
+            aidState(current_.absActive, "ABS");
+            ImGui::SameLine();
+            aidState(current_.tcsActive, "TCS");
+            ImGui::SameLine();
+            aidState(current_.escActive, "ESC");
 
             ImGui::Separator();
             const char* modeNames[] = {"Chase", "Orbit", "Free"};

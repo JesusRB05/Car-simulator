@@ -190,6 +190,14 @@ void SessionUI::drawMainMenu(SessionState& state, bool haveWheel, Action& action
     }
     ImGui::EndDisabled();
     ImGui::Checkbox("Reduced motion", &state.reducedMotion);
+    ImGui::TextDisabled("Driver aids");
+    ImGui::Checkbox("ABS", &state.abs);
+    ImGui::SameLine();
+    ImGui::Checkbox("TCS", &state.tcs);
+    ImGui::SameLine();
+    ImGui::Checkbox("ESC", &state.esc);
+    ImGui::SetItemTooltip(
+        "Anti-lock brakes, traction and stability control. Brake hard or launch the car to feel them work.");
     ImGui::Dummy(ImVec2(0.0f, 6.0f));
     if (ImGui::Button("Quit", button)) {
         action = Action::Quit;
@@ -438,6 +446,14 @@ void SessionUI::drawSummary(SessionState& state, bool haveWheel, Action& action)
         } else {
             ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.3f, 1.0f), "keyboard only");
         }
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextDisabled("Driver aids");
+        ImGui::TableSetColumnIndex(1);
+        char aids[64];
+        std::snprintf(aids, sizeof(aids), "%s %s %s", state.abs ? "ABS" : "-", state.tcs ? "TCS" : "-",
+                      state.esc ? "ESC" : "-");
+        ImGui::TextUnformatted(aids);
         ImGui::EndTable();
     }
 
