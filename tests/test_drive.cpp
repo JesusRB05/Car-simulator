@@ -11,6 +11,7 @@
 #include "drive/Track.hpp"
 #include "drive/TrackGroundQuery.hpp"
 #include "physics/PhysicsWorld.hpp"
+#include "vehicle/Electronics.hpp"
 #include "vehicle/GroundQuery.hpp"
 #include "vehicle/VehicleModel.hpp"
 
@@ -46,6 +47,102 @@ std::uint64_t scriptedRun(const Track& track, double& finalSpeed) {
     }
     finalSpeed = car.forwardSpeed();
     return world.stateHash();
+}
+
+// A standing-start launch on the circuit, with or without the driver aids
+// attached exactly like the drive scene attaches them.
+struct LaunchRun {
+    double timeTo100 = 0.0;      // s; zero when the run never got there
+    double peakDrivenSlip = 0.0; // worst |kappa| on a driven wheel (rear)
+    bool reached100 = false;
+    bool tcsActive = false; // traction control intervened at some point
+    bool finite = true;
+};
+
+LaunchRun launchOnTrack(const Track& track, sim::vehicle::ElectronicControlUnit* aids) {
+    PhysicsWorld world;
+    TrackGroundQuery ground(track);
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), ground);
+    if (aids != nullptr) {
+        car.setElectronics(aids);
+    }
+    car.reset(track.startPosition(), track.startHeading());
+
+    LaunchRun run;
+    sim::vehicle::VehicleInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+    for (int i = 0; i < 30000; ++i) {
+        car.step(world.fixedStep); // the model advances the world
+        if (!car.chassis().isFiniteState()) {
+            run.finite = false;
+            break;
+        }
+        for (const sim::vehicle::VehicleCorner& corner : car.corners()) {
+            if (corner.driven) {
+                run.peakDrivenSlip = std::max(run.peakDrivenSlip, std::abs(corner.slipRatio));
+            }
+        }
+        run.tcsActive = run.tcsActive || (aids != nullptr && aids->tcsActive());
+        if (car.forwardSpeed() >= 100.0 / 3.6) {
+            run.timeTo100 = world.time();
+            run.reached100 = true;
+            break;
+        }
+    }
+    return run;
+}
+
+// A maximum-effort stop from 25 m/s on the grass verge beside the start line.
+// Grass (mu 0.6) is where the brake torque out-grips the tyres, so it is the
+// case the anti-lock brakes exist for, driven through the same ground query the
+// drive scene uses.
+struct StopRun {
+    double entrySpeed = 0.0;
+    double distance = 0.0;
+    int lockedSamples = 0; // wheel-steps with a locked wheel
+    bool absActive = false;
+    bool stayedOnGrass = false;
+};
+
+StopRun grassStop(const Track& track, sim::vehicle::ElectronicControlUnit* aids) {
+    const Vec3 startLine = track.samples()[track.startIndex()].position;
+    const Vec3 onGrass(startLine.x + 25.0, startLine.y, startLine.z);
+
+    PhysicsWorld world;
+    TrackGroundQuery ground(track);
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), ground);
+    if (aids != nullptr) {
+        car.setElectronics(aids);
+    }
+    car.reset(onGrass, track.startHeading());
+
+    StopRun run;
+    sim::vehicle::VehicleInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+    for (int i = 0; i < 30000 && car.forwardSpeed() < 25.0; ++i) {
+        car.step(world.fixedStep);
+    }
+    run.entrySpeed = car.forwardSpeed();
+
+    sim::vehicle::VehicleInput brake;
+    brake.brake = 1.0;
+    car.setInput(brake);
+    const Vec3 stopped = car.position();
+    for (int i = 0; i < 20000 && car.forwardSpeed() > 0.3; ++i) {
+        car.step(world.fixedStep);
+        for (const sim::vehicle::VehicleCorner& corner : car.corners()) {
+            run.lockedSamples += corner.spinWheel.locked ? 1 : 0;
+        }
+        run.absActive = run.absActive || (aids != nullptr && aids->absActive());
+    }
+    const Vec3 d = car.position() - stopped;
+    run.distance = std::sqrt(d.x * d.x + d.z * d.z);
+    run.stayedOnGrass = track.sample(car.position().x, car.position().z).surface == Surface::Grass;
+    return run;
 }
 
 } // namespace
@@ -203,6 +300,52 @@ TEST_CASE("drive: two identical scripted runs produce the same state hash") {
     CHECK(a == b);
     CHECK(speedA == speedB);
     CHECK(std::isfinite(speedA));
+}
+
+TEST_CASE("drive: the driver aids keep the circuit car under control") {
+    const Track track;
+    const TrackSample& startLine = track.samples()[track.startIndex()];
+    REQUIRE(track.sample(startLine.position.x + 25.0, startLine.position.z).surface == Surface::Grass);
+
+    // The configuration the drive scene attaches: one unit with all three aids.
+    sim::vehicle::ElectronicControlUnit assistedAids;
+    assistedAids.setEnabled(true, true, true);
+
+    // --- Standing launch on the asphalt -----------------------------------
+    const LaunchRun assisted = launchOnTrack(track, &assistedAids);
+    const LaunchRun unaided = launchOnTrack(track, nullptr);
+
+    REQUIRE(assisted.finite);
+    REQUIRE(unaided.finite);
+    REQUIRE(assisted.reached100);
+    REQUIRE(unaided.reached100);
+    MESSAGE("launch 0-100 km/h: assisted " << assisted.timeTo100 << " s (peak |kappa| " << assisted.peakDrivenSlip
+                                           << "), unaided " << unaided.timeTo100 << " s (peak |kappa| "
+                                           << unaided.peakDrivenSlip << ")");
+
+    CHECK(assisted.tcsActive); // the aid actually stepped in
+    // Traction control may not cost the launch: the pedal is only trimmed, so
+    // the car stays within a few per cent of the unaided time.
+    CHECK(assisted.timeTo100 <= unaided.timeTo100 * 1.05);
+
+    // --- Maximum-effort stop on the grass (mu 0.6) ------------------------
+    sim::vehicle::ElectronicControlUnit stopAids;
+    stopAids.setEnabled(true, true, true);
+    const StopRun withAbs = grassStop(track, &stopAids);
+    const StopRun withoutAbs = grassStop(track, nullptr);
+
+    MESSAGE("grass stop from " << withAbs.entrySpeed << " m/s: with ABS " << withAbs.distance << " m ("
+                               << withAbs.lockedSamples << " locked wheel-steps), without " << withoutAbs.distance
+                               << " m (" << withoutAbs.lockedSamples << " locked wheel-steps)");
+
+    REQUIRE(withAbs.entrySpeed > 20.0);
+    REQUIRE(withoutAbs.entrySpeed > 20.0);
+    CHECK(withAbs.stayedOnGrass);
+    CHECK(withoutAbs.stayedOnGrass);
+    CHECK(withoutAbs.lockedSamples > 1000);                      // the raw car locks its wheels
+    CHECK(withAbs.lockedSamples < withoutAbs.lockedSamples / 4); // ABS releases them
+    CHECK(withAbs.absActive);
+    CHECK(withAbs.distance < withoutAbs.distance * 1.1); // and does not make it much worse
 }
 
 TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rolling over") {
