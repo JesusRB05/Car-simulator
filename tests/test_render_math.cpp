@@ -47,7 +47,6 @@ TEST_CASE("glm column-major memory matches the shader column_major layout") {
 TEST_CASE("a known world point projects to the expected pixel (column-major mul)") {
     constexpr int kWidth = 640;
     constexpr int kHeight = 360;
-    constexpr double kPi = 3.14159265358979323846;
     constexpr double kTanHalf = 0.4142135623730950; // tan(22.5 deg) = sqrt(2) - 1
     const float aspect = static_cast<float>(kWidth) / static_cast<float>(kHeight);
 

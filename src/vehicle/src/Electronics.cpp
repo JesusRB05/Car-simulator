@@ -56,7 +56,6 @@ void ElectronicControlUnit::update(const ElectronicsSensors& sensors, Real) {
     }
 
     // --- Stability control: brake the outer front wheel on excess yaw --------
-    const StabilityControlConfig& esc = config_.stability;
     if (escEnabled_ && speed >= config_.stability.minimumSpeed && config_.stability.wheelbase > 0.0) {
         const Real denominator = config_.stability.wheelbase + config_.stability.understeerGradient * speed * speed;
         if (denominator > 0.0) {

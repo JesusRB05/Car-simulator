@@ -280,9 +280,11 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
         const Real sy = (tanPeak != 0.0) ? tanAlpha / tanPeak : 0.0;
         const Real s = std::sqrt(sx * sx + sy * sy);
         if (s > 0.0) {
-            const Real muX = c.pDx1 + c.pDx2 * dfz;
-            const Real muY = c.pDy1 + c.pDy2 * dfz;
-            const Real dmu = std::max(muX, muY) * fz;
+            // The ellipse uses the uncambered peaks: the camber reduction is
+            // already folded into the pure-slip forces and the friction bound.
+            const Real ellipseMuX = c.pDx1 + c.pDx2 * dfz;
+            const Real ellipseMuY = c.pDy1 + c.pDy2 * dfz;
+            const Real dmu = std::max(ellipseMuX, ellipseMuY) * fz;
             // Resultant shape constant chosen so the peak sits at s = 1.
             const Real cs = 1.5;
             const Real bs = std::tan(0.5 * kPi / cs);
