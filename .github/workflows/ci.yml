@@ -115,7 +115,8 @@ jobs:
         run: ctest --preset linux-${{ matrix.compiler }}-${{ matrix.build_type }}
 
       # Cross-platform determinism: the GCC Release build publishes the physics
-      # state hash that the `determinism` job compares against Windows.
+      # state hashes (joints, contacts and a full car manoeuvre) that the
+      # `determinism` job compares against Windows.
       - name: Determinism probe
         if: matrix.build_type == 'release' && matrix.compiler == 'gcc'
         run: ./build/linux-gcc-release/bin/sim_determinism | tee statehash.txt
@@ -184,8 +185,9 @@ jobs:
       - name: Test
         run: ctest --test-dir build/windows-msvc-${{ matrix.build_type }} --output-on-failure
 
-      # Cross-platform determinism: publish the physics state hash that the
-      # `determinism` job compares against Linux.
+      # Cross-platform determinism: publish the physics state hashes (joints,
+      # contacts and a full car manoeuvre) that the `determinism` job compares
+      # against Linux.
       - name: Determinism probe (Release)
         if: matrix.build_type == 'release'
         shell: pwsh
@@ -215,10 +217,10 @@ jobs:
           set -euo pipefail
           cat hashes/statehash-linux/statehash.txt hashes/statehash-windows/statehash.txt
           if ! diff -u hashes/statehash-linux/statehash.txt hashes/statehash-windows/statehash.txt; then
-            echo "::error::physics state hash differs between Windows and Linux"
+            echo "::error::physics or car-manoeuvre state hash differs between Windows and Linux"
             exit 1
           fi
-          echo "Windows and Linux physics state hashes match."
+          echo "Windows and Linux physics and car-manoeuvre state hashes match."
 
   gpu-linux:
     name: Linux headless GPU (lavapipe)

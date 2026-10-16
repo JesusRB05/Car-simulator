@@ -40,12 +40,12 @@ add_test(NAME sim_tests COMMAND sim_tests)
 # Generous timeout: the Lua sandbox tests must never hang on a runaway script.
 set_tests_properties(sim_tests PROPERTIES TIMEOUT 300)
 
-# Standalone determinism probe: prints the `stateHash` of a fixed joint scene and
-# of a fixed contact scene after a fixed number of steps. CI compares the two
-# lines between Windows and Linux to pin cross-platform bit-for-bit
-# reproducibility (joints and collisions).
+# Standalone determinism probe: prints the `stateHash` of a fixed joint scene, of
+# a fixed contact scene and of a full car manoeuvre after a fixed number of
+# steps. CI compares the lines between Windows and Linux to pin cross-platform
+# bit-for-bit reproducibility (joints, collisions and the assembled vehicle).
 add_executable(sim_determinism determinism.cpp)
-target_link_libraries(sim_determinism PRIVATE sim::physics)
+target_link_libraries(sim_determinism PRIVATE sim::physics sim::vehicle)
 sim_configure_target(sim_determinism)
 add_test(NAME sim_determinism COMMAND sim_determinism)
 

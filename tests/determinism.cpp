@@ -8,14 +8,18 @@
 #include <cinttypes>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 
 #include "physics/ForceElements.hpp"
 #include "physics/Joints.hpp"
 #include "physics/Math.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "physics/RigidBody.hpp"
+#include "vehicle/GroundQuery.hpp"
+#include "vehicle/VehicleModel.hpp"
 
 using namespace sim::physics;
+using namespace sim::vehicle;
 
 namespace {
 
@@ -85,6 +89,54 @@ void buildDeterministicScene(PhysicsWorld& world) {
     spring.damping = 0.5;
 }
 
+std::uint64_t mixBits(std::uint64_t hash, double value) {
+    std::uint64_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    hash ^= bits;
+    hash *= 1099511628211ULL;
+    return hash;
+}
+
+// A full car manoeuvre: launch to 8 m/s, brake to a stop and pull away again.
+// This is the "Manoeuvre: the car pulls away again after braking to a stop" case
+// from tests/test_manoeuvres.cpp; hashing its end state pins the assembled
+// vehicle (drivetrain, clutch, tyres, brakes), not just the raw physics world.
+Real runManoeuvre(std::uint64_t& hash) {
+    PhysicsWorld world;
+    FlatGroundQuery ground(0.0, 1.0);
+    VehicleModel& car = VehicleModel::spawn(world, makeDefaultVehicleSetup(), ground);
+
+    VehicleInput go;
+    go.throttle = 1.0;
+    car.setInput(go);
+    for (int i = 0; i < 60000 && car.forwardSpeed() < 8.0; ++i) {
+        car.step(kDt);
+    }
+
+    VehicleInput brake;
+    brake.brake = 1.0;
+    car.setInput(brake);
+    for (int i = 0; i < 2500; ++i) {
+        car.step(kDt);
+    }
+
+    VehicleInput again;
+    again.throttle = 1.0;
+    car.setInput(again);
+    for (int i = 0; i < 2500; ++i) {
+        car.step(kDt);
+    }
+
+    hash = world.stateHash();
+    for (const VehicleCorner& corner : car.corners()) {
+        hash = mixBits(hash, corner.spinWheel.spin);
+        hash = mixBits(hash, corner.slipRatio);
+    }
+    hash = mixBits(hash, car.engineSpeed());
+    hash = mixBits(hash, static_cast<double>(car.gear()));
+    return car.forwardSpeed();
+}
+
 } // namespace
 
 int main() {
@@ -101,5 +153,9 @@ int main() {
         contacts.step(kDt);
     }
     std::printf("contact_hash=%016" PRIx64 "\n", contacts.stateHash());
+
+    std::uint64_t manoeuvre = 0;
+    const Real speed = runManoeuvre(manoeuvre);
+    std::printf("manoeuvre_hash=%016" PRIx64 " speed=%.9f\n", manoeuvre, speed);
     return 0;
 }
