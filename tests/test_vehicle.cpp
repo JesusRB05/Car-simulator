@@ -1611,9 +1611,12 @@ TEST_CASE("ElectronicControlUnit: ESC brakes the outer front wheel when the car 
 }
 
 TEST_CASE("VehicleModel: traction control tames a low-grip launch") {
-    const auto run = [](bool tcsEnabled, Real& peakSlip, bool& engaged) {
+    // mu 0.3 (wet or icy) is where the clutch-limited launch torque actually
+    // out-grips the rear tyres; at mu 0.6 both runs are clutch-limited and the
+    // controller barely has anything to do.
+    const auto run = [](bool tcsEnabled, Real& peakSlip, bool& engaged, Real& speed) {
         physics::PhysicsWorld world;
-        FlatGroundQuery ground(0.0, 0.6); // slippery: the rear tyres want to spin
+        FlatGroundQuery ground(0.0, 0.3); // slippery: the rear tyres want to spin
         ElectronicControlUnit ecu;
         ecu.setEnabled(false, tcsEnabled, false);
         VehicleModel& car = VehicleModel::spawn(world, makeDefaultVehicleSetup(), ground);
@@ -1626,26 +1629,32 @@ TEST_CASE("VehicleModel: traction control tames a low-grip launch") {
         for (int i = 0; i < 2000; ++i) {
             car.step(world.fixedStep);
             engaged = engaged || ecu.tcsActive();
-            // Ignore the first instants, before the controller has a sample to act on.
-            if (i < 1000) {
-                continue;
-            }
             for (const VehicleCorner& corner : car.corners()) {
                 if (corner.driven) {
                     peakSlip = std::max(peakSlip, corner.slipRatio);
                 }
             }
         }
+        speed = car.forwardSpeed();
     };
 
     Real peakWithTcs = 0.0;
     Real peakWithout = 0.0;
+    Real speedWith = 0.0;
+    Real speedWithout = 0.0;
     bool engagedWith = false;
     bool engagedWithout = false;
-    run(true, peakWithTcs, engagedWith);
-    run(false, peakWithout, engagedWithout);
+    run(true, peakWithTcs, engagedWith, speedWith);
+    run(false, peakWithout, engagedWithout, speedWithout);
 
     CHECK(engagedWith); // the aid actually stepped in
     CHECK_FALSE(engagedWithout);
-    CHECK(peakWithTcs < peakWithout);
+    // Without the aid the wheels spin far past the grip peak; with it they are
+    // held near the peak, so the tyre force and the launch do not suffer.
+    MESSAGE("mu 0.3 launch after 2 s: with TCS peak |kappa| "
+            << peakWithTcs << ", " << speedWith << " m/s; without peak |kappa| " << peakWithout << ", " << speedWithout
+            << " m/s");
+    CHECK(peakWithout > 1.0);
+    CHECK(peakWithTcs < 0.6);
+    CHECK(speedWith >= speedWithout * 0.9); // the aid costs a little speed, not the launch
 }

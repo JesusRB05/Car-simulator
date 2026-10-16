@@ -205,6 +205,9 @@ public:
     // model and its own state is not owned here.
     void setElectronics(IVehicleElectronics* electronics) { electronics_ = electronics; }
     IVehicleElectronics* electronics() const { return electronics_; }
+    // Per-wheel brake torque the aids added on the last step (N*m; negative
+    // releases pressure). Zero when no unit is attached.
+    const BrakeModulation& brakeModulation() const { return brakeModulation_; }
 
 private:
     void buildCorners();
@@ -228,7 +231,12 @@ private:
     SequentialShift shift_;
 
     VehicleInput input_{};
-    Real throttle_ = 0.0;
+    // The pedals as the driver holds them (ramped at the setup's rate). The
+    // driver aids scale the pedal without destroying it, so a throttle cut can
+    // never be rate-limited by the pedal ramp.
+    Real pedalThrottle_ = 0.0;
+    Real pedalBrake_ = 0.0;
+    Real throttle_ = 0.0; // what the engine gets, i.e. the pedal after the aids
     Real brake_ = 0.0;
     Real steerInput_ = 0.0;
     Real steerAngle_ = 0.0;

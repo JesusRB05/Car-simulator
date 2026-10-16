@@ -225,8 +225,10 @@ void VehicleModel::updateDriver(Real dt) {
         directionTimer_ = 0.0;
     }
 
-    throttle_ = approach(throttle_, std::clamp(input_.throttle, 0.0, 1.0), 4.0 * dt);
-    brake_ = approach(brake_, std::clamp(input_.brake, 0.0, 1.0), 6.0 * dt);
+    pedalThrottle_ = approach(pedalThrottle_, std::clamp(input_.throttle, 0.0, 1.0), setup_.throttleRate * dt);
+    pedalBrake_ = approach(pedalBrake_, std::clamp(input_.brake, 0.0, 1.0), setup_.brakeRate * dt);
+    throttle_ = pedalThrottle_;
+    brake_ = pedalBrake_;
 
     const bool backToCentre = std::abs(input_.steer) < std::abs(steerInput_);
     steerInput_ = approach(steerInput_, std::clamp(input_.steer, -1.0, 1.0),
@@ -372,8 +374,10 @@ void VehicleModel::apply() {
         sensors.lateralAcceleration = glm::dot(body.linearVelocity, right());
 
         electronics_->update(sensors, dt);
-        VehicleInput filtered =
-            electronics_->filterInput(VehicleInput{throttle_, brake_, steerInput_, input_.handbrake});
+        // The aids scale the pedal, not the pedal state: a cut lasts exactly as
+        // long as the controller asks for it, with no re-ramp to recover from.
+        const VehicleInput filtered =
+            electronics_->filterInput(VehicleInput{pedalThrottle_, pedalBrake_, steerInput_, input_.handbrake});
         throttle_ = filtered.throttle;
         brake_ = filtered.brake;
         brakeModulation_ = electronics_->brakeModulation();
