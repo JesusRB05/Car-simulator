@@ -72,6 +72,14 @@ The plugin interface is **plain C** and versioned (`struct_size` + version).
 Structures only grow at the end, so a plugin compiled against one version can
 keep working. This allows plugins in any language that can produce a C ABI.
 
+Native plugins are **opt-in**: nothing in `plugins/` is loaded unless the user
+sets `plugins.enabled = true` and lists the file in `plugins.allow`. Every
+library found is fingerprinted with SHA-256 (logged, and shown in the UI) so the
+user can see exactly which binary is being trusted, and on Windows the loader
+narrows the DLL search path (`SetDefaultDllDirectories` +
+`LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR`) so a plugin's dependencies cannot be
+resolved from the current directory or `PATH`.
+
 ## License: GPLv3 with a linking exception
 
 The engine is **GPL-3.0-or-later** with a **linking exception**, so that

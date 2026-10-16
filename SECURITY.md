@@ -24,5 +24,9 @@ anonymous.
 ## Scope notes
 
 Mods and plugins are third-party code. Native plugins run with the full
-privileges of the simulator, so only install plugins you trust. Weaknesses in
-the Lua sandbox or in the validation of mod manifests and assets are in scope.
+privileges of the simulator, so they are off by default and must be switched on
+and allowlisted by the user (`plugins.enabled` / `plugins.allow` in
+`config.toml`); each library is fingerprinted with SHA-256 when it is found.
+Only install plugins you trust. Weaknesses in the Lua sandbox, in the plugin
+allowlist/hash gate or in the validation of mod manifests and assets are in
+scope.

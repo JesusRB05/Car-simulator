@@ -4,7 +4,8 @@ add_library(sim_core STATIC
     src/Clock.cpp
     src/Config.cpp
     src/JobSystem.cpp
-    src/Log.cpp)
+    src/Log.cpp
+    src/Sha256.cpp)
 add_library(sim::core ALIAS sim_core)
 
 target_include_directories(sim_core PUBLIC include)

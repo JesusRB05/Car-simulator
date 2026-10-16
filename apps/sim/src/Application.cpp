@@ -194,8 +194,15 @@ bool Application::initialise() {
     telemetry_ = std::make_unique<telemetry::Telemetry>(600);
 
     audio_ = std::make_unique<audio::AudioEngine>();
+
+    // Native plugins are opt-in: nothing in `plugins/` is loaded unless the user
+    // sets `plugins.enabled = true` and lists the file in `plugins.allow`. Every
+    // library found is fingerprinted (SHA-256) and logged either way.
+    plugin::PluginLoadOptions pluginOptions;
+    pluginOptions.enabled = config_->getBool("plugins.enabled", false);
+    pluginOptions.allow = config_->getStringArray("plugins.allow");
     plugins_ = std::make_unique<plugin::PluginLoader>(*vfs_);
-    plugins_->loadDirectory(exeDir / "plugins");
+    plugins_->loadDirectory(exeDir / "plugins", pluginOptions);
 
     scripts_ = std::make_unique<scripting::ScriptHost>(*vfs_);
     if (vfs_->exists("scripts/main.lua")) {
@@ -845,6 +852,28 @@ void Application::drawUi() {
             }
             if (report.mods.empty()) {
                 ImGui::TextUnformatted("No mods found.");
+            }
+
+            ImGui::Separator();
+            ImGui::TextUnformatted("Native plugins");
+            ImGui::TextWrapped("Native plugins run with the full permissions of the game. Only load code you trust.");
+            if (!plugins_->enabled()) {
+                ImGui::TextColored({1.0f, 0.75f, 0.25f, 1.0f},
+                                   "Disabled: set plugins.enabled = true and list each trusted file in "
+                                   "plugins.allow in config.toml.");
+            }
+            for (const plugin::PluginRecord& record : plugins_->plugins()) {
+                const char* state = record.state == plugin::PluginState::Loaded    ? "loaded"
+                                    : record.state == plugin::PluginState::Skipped ? "skipped"
+                                                                                   : "failed";
+                ImGui::BulletText("%s [%s]", record.path.filename().string().c_str(), state);
+                ImGui::Text("    sha256 %s", record.sha256.c_str());
+                if (!record.error.empty()) {
+                    ImGui::TextWrapped("    %s", record.error.c_str());
+                }
+            }
+            if (plugins_->plugins().empty()) {
+                ImGui::TextUnformatted("No native plugins found.");
             }
         }
         ImGui::End();

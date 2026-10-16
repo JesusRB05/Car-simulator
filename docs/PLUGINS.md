@@ -64,15 +64,38 @@ goes to `bin/plugins/`.
 
 ## Loading at run time
 
-`PluginLoader` loads one library or a whole directory (walking the files with a
-shared-library extension). It uses `SDL_LoadObject` / `SDL_LoadFunction` /
-`SDL_UnloadObject` for the cross-platform work.
+Native plugins are **opt-in and off by default**. Dropping a library into
+`plugins/` never runs it: the loader only loads a file when the user has both
+switched plugins on and listed that file, in `config.toml`:
 
-- A plugin that fails (does not open, is missing symbols, has an incompatible
-  ABI or `sim_plugin_entry` returns an error) is recorded with its error
-  message and **does not prevent** the rest from loading.
-- `update(dt)` calls every loaded `on_update`.
-- `unloadAll()` calls the `on_shutdown` callbacks and unloads the libraries.
+```toml
+[plugins]
+enabled = true
+allow = ["example_native.dll"]   # file name, or the bare stem
+```
+
+`PluginLoader::loadDirectory(directory, options)` walks the directory for
+shared libraries and **fingerprints every one of them (SHA-256)** before doing
+anything else, so the log always records which binary is about to be trusted:
+
+- With `enabled = false` nothing is loaded and every library is logged as
+  skipped, with its hash. The Mods panel in the UI shows the same warning.
+- With `enabled = true`, only the libraries named in `allow` are loaded; the
+  rest are logged and shown as skipped, with their hashes.
+- A library that is allowed but fails (does not open, is missing symbols, has an
+  incompatible ABI or `sim_plugin_entry` returns an error) is recorded with its
+  error message and **does not prevent** the rest from loading.
+
+`update(dt)` calls every loaded `on_update`; `unloadAll()` calls the
+`on_shutdown` callbacks and unloads the libraries.
+
+On Windows the library is loaded with `LoadLibraryExW` and an explicit search
+mode: `SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS)` narrows the
+process-wide default, and `LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR` makes the plugin's
+own directory the first place its dependencies are looked up. The current
+directory and `PATH` are never searched for a plugin or its dependencies, which
+closes the classic DLL-hijacking vector. Elsewhere the loader uses
+`SDL_LoadObject` / `SDL_LoadFunction` / `SDL_UnloadObject`.
 
 Each plugin has its own logger (`core::Log::forPlugin(name)`), so its messages
 are tagged with the plugin name.
@@ -86,3 +109,6 @@ are tagged with the plugin name.
 4. Fill `out_host` and return `0`.
 5. Build it as a shared library (module) and place it in the `plugins/` folder
    next to the executable.
+6. Switch plugins on and allowlist the file in `config.toml` (see above). Note
+   the SHA-256 the loader logs, so you can confirm you are running the binary
+   you built.
