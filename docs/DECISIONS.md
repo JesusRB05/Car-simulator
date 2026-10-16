@@ -56,7 +56,9 @@ Vulkan 1.3 path.
 Content access always goes through a virtual file system (PhysicsFS). The base
 content and every mod are **all mounted at `/`**; the mount priority decides
 which one wins. This lets mods override files without any special logic in the
-engine.
+engine. Every read has a **per-file size ceiling** (256 MiB by default) so a
+crafted archive cannot make the engine allocate an unbounded decompression
+bomb.
 
 ## Sandboxed scripting (LuaJIT + sol2)
 

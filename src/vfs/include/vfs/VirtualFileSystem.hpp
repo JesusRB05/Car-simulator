@@ -23,11 +23,21 @@ namespace sim::vfs {
 // expected, created after the platform layer and used from the main thread.
 class VirtualFileSystem {
 public:
+    // Default per-file read ceiling. It is generous for real content but stops
+    // a decompression ("zip") bomb: PhysicsFS reports the uncompressed size of
+    // an archive entry before it is read, and a crafted archive can claim
+    // gigabytes, so a read that would exceed the ceiling is refused.
+    static constexpr std::uint64_t kDefaultMaxReadSize = 256ull * 1024ull * 1024ull;
+
     VirtualFileSystem();
     ~VirtualFileSystem();
 
     VirtualFileSystem(const VirtualFileSystem&) = delete;
     VirtualFileSystem& operator=(const VirtualFileSystem&) = delete;
+
+    // Per-file read ceiling in bytes. Zero disables the limit (not recommended).
+    void setMaxReadSize(std::uint64_t bytes) { maxReadSize_ = bytes; }
+    std::uint64_t maxReadSize() const { return maxReadSize_; }
 
     // Mounts a directory or an archive (.zip) at the given virtual mount point.
     // When append is false (default) the new mount takes priority over previous
@@ -63,6 +73,7 @@ public:
 
 private:
     bool initialised_ = false;
+    std::uint64_t maxReadSize_ = kDefaultMaxReadSize;
 };
 
 } // namespace sim::vfs

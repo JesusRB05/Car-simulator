@@ -124,6 +124,12 @@ bool Application::initialise() {
 
     config_ = std::make_unique<core::Config>(rootDirectory_ / "config.toml");
     config_->load();
+
+    // A crafted archive can claim an enormous uncompressed size; cap how far a
+    // single file may expand (256 MiB by default, override with vfs.max_read_bytes).
+    vfs_->setMaxReadSize(static_cast<std::uint64_t>(
+        config_->getInt("vfs.max_read_bytes", static_cast<std::int64_t>(vfs::VirtualFileSystem::kDefaultMaxReadSize))));
+
     session_.load(*config_);
 
     // Driver aids start from the persisted session state (all three on by

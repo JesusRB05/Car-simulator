@@ -4,6 +4,8 @@
 
 #include <physfs.h>
 
+#include <array>
+
 #include "core/Log.hpp"
 
 namespace sim::vfs {
@@ -133,16 +135,46 @@ std::optional<std::vector<std::uint8_t>> VirtualFileSystem::readBinary(std::stri
         return std::nullopt;
     }
 
-    const PHYSFS_sint64 length = PHYSFS_fileLength(file);
-    std::vector<std::uint8_t> buffer(static_cast<std::size_t>(length > 0 ? length : 0));
-    const PHYSFS_sint64 read = PHYSFS_readBytes(file, buffer.data(), static_cast<PHYSFS_uint64>(buffer.size()));
-    PHYSFS_close(file);
+    const auto refuse = [&](std::uint64_t size) {
+        PHYSFS_close(file);
+        core::Log::get("vfs")->error("refusing to read '{}': {} bytes exceeds the {}-byte per-file limit", path, size,
+                                     maxReadSize_);
+        return std::optional<std::vector<std::uint8_t>>{};
+    };
 
-    if (read < 0) {
-        logLastError("PHYSFS_readBytes '" + path + "'");
-        return std::nullopt;
+    // PhysicsFS reports the uncompressed length of an archive entry up front, so
+    // a decompression bomb is caught before any large allocation.
+    const PHYSFS_sint64 length = PHYSFS_fileLength(file);
+    if (maxReadSize_ != 0 && length > 0 && static_cast<std::uint64_t>(length) > maxReadSize_) {
+        return refuse(static_cast<std::uint64_t>(length));
     }
-    buffer.resize(static_cast<std::size_t>(read));
+
+    std::vector<std::uint8_t> buffer;
+    if (length > 0) {
+        buffer.reserve(static_cast<std::size_t>(length));
+    }
+
+    // Read in bounded chunks: the ceiling is enforced even if the reported
+    // length is wrong (a stream, or a lying archive header).
+    std::array<std::uint8_t, 64 * 1024> chunk{};
+    for (;;) {
+        const PHYSFS_sint64 read = PHYSFS_readBytes(file, chunk.data(), static_cast<PHYSFS_uint64>(chunk.size()));
+        if (read < 0) {
+            PHYSFS_close(file);
+            logLastError("PHYSFS_readBytes '" + path + "'");
+            return std::nullopt;
+        }
+        if (read == 0) {
+            break;
+        }
+        const auto count = static_cast<std::size_t>(read);
+        if (maxReadSize_ != 0 && static_cast<std::uint64_t>(buffer.size()) + count > maxReadSize_) {
+            return refuse(static_cast<std::uint64_t>(buffer.size()) + count);
+        }
+        buffer.insert(buffer.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(count));
+    }
+
+    PHYSFS_close(file);
     return buffer;
 }
 

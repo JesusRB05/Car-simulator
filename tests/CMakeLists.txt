@@ -16,6 +16,7 @@ add_executable(sim_tests
     test_crash.cpp
     test_input.cpp
     test_plugins.cpp
+    test_vfs.cpp
     # The drive scene lives in the app; its simulation half is render-free and
     # tested directly.
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp

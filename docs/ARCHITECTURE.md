@@ -116,6 +116,9 @@ fixed-step loop                        every frame:
 - All **game content** (textures, meshes, scripts, sounds) is read through
   `vfs::VirtualFileSystem`. Official content and mods are mounted in the same
   tree; later mounts take precedence.
+- Every read is capped per file (256 MiB by default, `vfs.max_read_bytes`). A
+  crafted archive can claim an enormous uncompressed size, so a file that would
+  expand past the ceiling is refused instead of allocated.
 - The **log** and the configuration file are the only two files touched
   outside the VFS, and they are managed by the application layer.
 
