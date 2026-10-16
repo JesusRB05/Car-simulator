@@ -53,6 +53,7 @@ enum class DriveCamera {
     Chase,
     Cockpit,
     Orbit,
+    Side,
 };
 
 // The keyboard-drivable test scene: a procedural circuit, the assembled
@@ -72,6 +73,10 @@ public:
     void reset();
     void cycleCamera();
     DriveCamera camera() const { return cameraMode_; }
+    // Selects a camera directly (headless captures) and snaps it to its target.
+    void setCamera(DriveCamera mode);
+    // Orbit camera angles (yaw around the car, pitch above it, both radians).
+    void setOrbit(float yaw, float pitch);
 
     void setKeys(const DriveKeys& keys);
     // Mouse look for the orbit camera (pixels, wheel notches).
@@ -82,6 +87,10 @@ public:
     void advance(double wallDelta);
     // Advances exactly `seconds` of simulated time (headless captures).
     void simulate(double seconds);
+    // Drives the car around the circuit under a pure-pursuit autopilot for
+    // `seconds` of simulated time, so a headless capture can show the car
+    // moving and cornering without a driver.
+    void autopilot(double seconds);
 
     // Rebuilds `scene` (track, terrain, car) and positions the camera. The
     // chase camera eases towards its target over `frameDelta` seconds.
@@ -107,6 +116,8 @@ private:
     void buildObstacles(rhi::Device& device);
     void updateLapTimer();
     void updateCamera(float aspect, double frameDelta, render::Scene& scene);
+    // One step of the autopilot: a VehicleInput from the track geometry.
+    vehicle::VehicleInput autopilotInput() const;
 
     // A merged obstacle mesh plus the colour it is drawn with. The hundreds of
     // static blocks collapse into one batch per colour, like the kerbs.

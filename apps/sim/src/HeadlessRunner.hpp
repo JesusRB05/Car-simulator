@@ -41,6 +41,14 @@ struct HeadlessOptions {
     // the scene, exercising the debug pipeline in a headless run.
     bool debugDraw = false;
 
+    // Drive-scene capture. `camera` selects the view (chase, cockpit, orbit or
+    // side); `time` is how many seconds the autopilot drives before the capture
+    // (0 = the car sits on the grid). `yaw`/`pitch` are the orbit angles.
+    std::string camera = "chase";
+    double time = 0.0;
+    float yaw = 0.8f;
+    float pitch = 0.35f;
+
     // Tolerances for the golden comparison.
     double maxDiffPercent = 1.0;
     double minPsnr = 30.0;

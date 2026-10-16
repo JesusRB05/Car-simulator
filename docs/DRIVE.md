@@ -11,13 +11,31 @@ build\windows-msvc-release\bin\sim.exe --scene drive
 ```
 
 It can also be picked at runtime from **Scenes > Driving > drive** (or the
-*Driving* group of the scene browser). A headless
-capture (chase camera after one second of settling) works too:
+*Driving* group of the scene browser). A headless capture works too: by default
+it frames the car on the start line with the chase camera after one second of
+settling, and `--camera` / `--time` let a script take the other views.
 
 ```bat
 sim.exe --headless --frames 2 --scene drive --screenshot drive.png
 sim.exe --headless --frames 2 --scene drive --debug-draw --screenshot drive_debug.png
+
+rem Other views: --camera chase|cockpit|orbit|side, --yaw/--pitch for orbit.
+rem --time drives the car with the built-in autopilot for that many seconds
+rem before the capture (0 = parked on the start/finish line).
+sim.exe --headless --frames 4 --scene drive --camera cockpit --time 10 --screenshot cockpit.png
+sim.exe --headless --frames 4 --scene drive --camera side --time 16 --screenshot side.png
 ```
+
+`tools\capture_readme_shots.bat` regenerates the README screenshots (grid,
+cornering, cockpit and side) with these flags.
+
+## Autopilot
+
+For captures, `--time <seconds>` runs a deterministic pure-pursuit driver: it
+aims at a point a speed-dependent distance ahead on the centreline and picks a
+target speed from the curvature it is about to meet. It needs no input device,
+so a headless run can show the car mid-corner. It is a capture aid, not a racing
+AI: it follows the centreline, so it is slower than a human through the corners.
 
 ## Controls
 
@@ -28,7 +46,7 @@ sim.exe --headless --frames 2 --scene drive --debug-draw --screenshot drive_debu
 | A / D, Left / Right | Steer (smoothed, speed-dependent lock) |
 | Space | Handbrake (rear wheels) |
 | R | Reset the car to the start line (also resets the lap timer) |
-| C | Cycle camera: chase, cockpit, orbit |
+| C | Cycle camera: chase, cockpit, orbit, side |
 | G | Toggle the debug overlay: suspension rays, contacts, tyre forces (on by default; also the *Debug draw* panel checkbox) |
 | Right drag / wheel | Orbit camera yaw/pitch and distance (orbit camera only) |
 

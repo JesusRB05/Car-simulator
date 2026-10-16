@@ -156,6 +156,7 @@ sim --headless --frames N [--scene NAME] [--screenshot path.png]
     [--width W] [--height H] [--resize N] [--validation]
     [--verify-golden|--update-golden] [--golden-dir DIR] [--semantic]
     [--contact-sheet path.png] [--debug-draw]
+    [--camera chase|cockpit|orbit|side] [--time SECONDS] [--yaw RAD] [--pitch RAD]
 ```
 
 - **No window or swapchain**: it creates an `R8G8B8A8Unorm` colour image and a
@@ -177,6 +178,11 @@ sim --headless --frames N [--scene NAME] [--screenshot path.png]
 - **`--debug-draw`**: overlays the ground grid and the world axes through the
   instanced *debug draw* (`render::DebugDraw`); its reference is
   `tests/golden/<driver>/grid_debug.png`.
+- **Drive capture** (`--scene drive`): `--camera chase|cockpit|orbit|side`
+  selects the view, `--yaw`/`--pitch` set the orbit angles, and `--time S`
+  drives the car with the built-in autopilot for `S` seconds before the capture
+  (`0` leaves it parked on the start/finish line). `tools\capture_readme_shots.bat`
+  uses these to regenerate the README screenshots.
 - **Physics scenes** (`drop`, `oscillator`, `pendulum`, `double_pendulum`,
   `chain`, `dzhanibekov`, `gyro`, `masses`): they build a real `PhysicsWorld` and
   integrate it for **1.5 s with the deterministic fixed step** before capturing,

@@ -60,6 +60,21 @@ std::filesystem::path searchForRoot(const std::filesystem::path& exeDir) {
     return exeDir;
 }
 
+// Maps a `--camera` value to a drive-scene camera. Unknown names fall back to
+// the chase camera so a typo never aborts a capture.
+drive::DriveCamera driveCameraFromName(const std::string& name) {
+    if (name == "cockpit") {
+        return drive::DriveCamera::Cockpit;
+    }
+    if (name == "orbit") {
+        return drive::DriveCamera::Orbit;
+    }
+    if (name == "side") {
+        return drive::DriveCamera::Side;
+    }
+    return drive::DriveCamera::Chase;
+}
+
 void submitAndWait(rhi::Device& device, rhi::CommandList& commandList) {
     VkFence fence = VK_NULL_HANDLE;
     VkFenceCreateInfo fenceInfo{};
@@ -591,9 +606,15 @@ int runHeadless(const HeadlessOptions& options) {
         const bool physicsScene = isPhysicsScene(options.scene);
         if (drive::isDriveScene(options.scene)) {
             // The drivable circuit: let the car settle on its springs at the
-            // start line, then frame it with the (snapped) chase camera.
+            // start line, optionally autopilot for `time` seconds (so a capture
+            // can show the car moving or cornering), then frame it.
             driveScene = std::make_unique<drive::DriveScene>(*device);
             driveScene->simulate(1.0);
+            if (options.time > 0.0) {
+                driveScene->autopilot(options.time);
+            }
+            driveScene->setOrbit(options.yaw, options.pitch);
+            driveScene->setCamera(driveCameraFromName(options.camera));
             driveScene->snapCamera();
             const float aspect = static_cast<float>(options.width) / static_cast<float>(std::max(options.height, 1u));
             driveScene->buildScene(scene, aspect, 0.0);

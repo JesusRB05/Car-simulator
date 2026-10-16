@@ -184,7 +184,19 @@ void DriveScene::reset() {
 void DriveScene::cycleCamera() {
     cameraMode_ = cameraMode_ == DriveCamera::Chase     ? DriveCamera::Cockpit
                   : cameraMode_ == DriveCamera::Cockpit ? DriveCamera::Orbit
+                  : cameraMode_ == DriveCamera::Orbit   ? DriveCamera::Side
                                                         : DriveCamera::Chase;
+    cameraSnap_ = true;
+}
+
+void DriveScene::setCamera(DriveCamera mode) {
+    cameraMode_ = mode;
+    cameraSnap_ = true;
+}
+
+void DriveScene::setOrbit(float yaw, float pitch) {
+    orbitYaw_ = yaw;
+    orbitPitch_ = std::clamp(pitch, -0.2f, 1.45f);
     cameraSnap_ = true;
 }
 
@@ -232,6 +244,70 @@ void DriveScene::simulate(double seconds) {
         car_->step(world_.fixedStep);
         updateLapTimer();
     }
+}
+
+void DriveScene::autopilot(double seconds) {
+    const int steps = static_cast<int>(seconds / world_.fixedStep + 0.5);
+    for (int i = 0; i < steps; ++i) {
+        car_->setInput(autopilotInput());
+        car_->step(world_.fixedStep);
+        updateLapTimer();
+    }
+}
+
+// Pure-pursuit driver: aim at a point a speed-dependent distance ahead on the
+// centreline and pick a target speed from the curvature it is about to meet.
+// Good enough for a capture, deterministic (no wall clock) and it never needs a
+// human at the keyboard.
+vehicle::VehicleInput DriveScene::autopilotInput() const {
+    vehicle::VehicleInput input;
+
+    const Vec3& position = car_->chassis().position;
+    const Track::Projection projection = track_.project(position.x, position.z);
+    if (!projection.found) {
+        input.brake = 0.4; // lost the circuit: slow down and let it rejoin
+        return input;
+    }
+
+    const std::vector<TrackSample>& samples = track_.samples();
+    const double spacing = std::max(0.1, static_cast<double>(track_.description().sampleSpacing));
+    const double speed = std::abs(car_->forwardSpeed());
+
+    // Look further ahead the faster we go, so the steering stays calm.
+    const double lookahead = std::clamp(4.0 + 0.9 * speed, 8.0, 40.0);
+    const std::size_t ahead = static_cast<std::size_t>(std::max(1.0, lookahead / spacing));
+
+    // Steer towards the look-ahead point. `steer` is + to the left, so a target
+    // to the car's left must give a positive angle.
+    const Vec3 forwardDir = car_->chassis().localToWorldDirection(Vec3(0.0, 0.0, -1.0));
+    glm::vec3 forward(static_cast<float>(forwardDir.x), 0.0f, static_cast<float>(forwardDir.z));
+    forward = glm::length(forward) > 1e-3f ? glm::normalize(forward) : glm::vec3(0.0f, 0.0f, -1.0f);
+    const TrackSample& aim = samples[(projection.segment + ahead) % samples.size()];
+    const glm::vec3 toTarget(static_cast<float>(aim.position.x - position.x), 0.0f,
+                             static_cast<float>(aim.position.z - position.z));
+    const double cross = static_cast<double>(forward.z) * toTarget.x - static_cast<double>(forward.x) * toTarget.z;
+    const double dot = static_cast<double>(forward.x) * toTarget.x + static_cast<double>(forward.z) * toTarget.z;
+    input.steer = std::clamp(std::atan2(cross, dot) * 2.0, -1.0, 1.0);
+
+    // Target speed from the tightest curvature on the way to the aim point.
+    double maxCurvature = 0.0;
+    for (std::size_t i = 0; i <= ahead; ++i) {
+        maxCurvature = std::max(maxCurvature, std::abs(samples[(projection.segment + i) % samples.size()].curvature));
+    }
+    constexpr double kLateralLimit = 7.0; // m/s^2 the dry tyres can hold
+    double targetSpeed = 45.0;
+    if (maxCurvature > 1e-4) {
+        targetSpeed = std::min(targetSpeed, std::sqrt(kLateralLimit / maxCurvature));
+    }
+    targetSpeed = std::max(targetSpeed, 8.0);
+
+    const double error = targetSpeed - speed;
+    if (error > 0.2) {
+        input.throttle = std::clamp(error / 4.0, 0.0, 1.0);
+    } else if (error < -0.2) {
+        input.brake = std::clamp(-error / 4.0, 0.0, 1.0);
+    }
+    return input;
 }
 
 void DriveScene::updateLapTimer() {
@@ -562,8 +638,8 @@ void DriveScene::updateCamera(float aspect, double frameDelta, render::Scene& sc
     render::Camera& camera = scene.camera();
     if (cameraMode_ == DriveCamera::Cockpit) {
         camera.setPerspective(70.0f, aspect, 0.05f, 3000.0f);
-        const glm::vec3 eye = toVec3(body.localToWorldPoint(Vec3(-0.35, 0.45, 0.10)));
-        const glm::vec3 target = toVec3(body.localToWorldPoint(Vec3(-0.35, 0.20, -10.0)));
+        const glm::vec3 eye = toVec3(body.localToWorldPoint(Vec3(-0.35, 0.50, 0.05)));
+        const glm::vec3 target = toVec3(body.localToWorldPoint(Vec3(-0.35, 0.32, -14.0)));
         camera.lookAt(eye, target, toVec3(body.localToWorldDirection(Vec3(0.0, 1.0, 0.0))));
         cameraSnap_ = true; // re-snap the chase camera when switching back
         return;
@@ -576,6 +652,17 @@ void DriveScene::updateCamera(float aspect, double frameDelta, render::Scene& sc
         const glm::vec3 offset(orbitDistance_ * cp * std::sin(orbitYaw_), orbitDistance_ * std::sin(orbitPitch_),
                                orbitDistance_ * cp * std::cos(orbitYaw_));
         camera.lookAt(focus + offset, focus, glm::vec3(0.0f, 1.0f, 0.0f));
+        cameraSnap_ = true;
+        return;
+    }
+
+    if (cameraMode_ == DriveCamera::Side) {
+        // Broadside tracking shot: off the driver's right, slightly behind and
+        // above, so the car's attitude through a corner reads clearly.
+        const glm::vec3 right = glm::normalize(glm::cross(flatForward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        const glm::vec3 eye = position + right * 7.5f + glm::vec3(0.0f, 2.0f, 0.0f) - flatForward * 1.5f;
+        const glm::vec3 target = position + glm::vec3(0.0f, 0.7f, 0.0f);
+        camera.lookAt(eye, target, glm::vec3(0.0f, 1.0f, 0.0f));
         cameraSnap_ = true;
         return;
     }
@@ -696,7 +783,7 @@ void DriveScene::drawHud() {
     }
 
     ImGui::Separator();
-    const char* cameraNames[] = {"chase", "cockpit", "orbit"};
+    const char* cameraNames[] = {"chase", "cockpit", "orbit", "side"};
     ImGui::Text("Camera: %s   Sim time %.1f s", cameraNames[static_cast<int>(cameraMode_)], world_.time());
     ImGui::TextDisabled("W/Up throttle  S/Down brake/reverse  A/D steer");
     ImGui::TextDisabled("Space handbrake  R reset  C camera  G debug draw");

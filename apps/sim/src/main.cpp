@@ -60,6 +60,18 @@ int main(int argc, char** argv) {
             headless.semantic = true;
         } else if (matches(arg, "--debug-draw")) {
             headless.debugDraw = true;
+        } else if (matches(arg, "--camera") && next != nullptr) {
+            headless.camera = next;
+            ++i;
+        } else if (matches(arg, "--time") && next != nullptr) {
+            headless.time = std::strtod(next, nullptr);
+            ++i;
+        } else if (matches(arg, "--yaw") && next != nullptr) {
+            headless.yaw = static_cast<float>(std::strtod(next, nullptr));
+            ++i;
+        } else if (matches(arg, "--pitch") && next != nullptr) {
+            headless.pitch = static_cast<float>(std::strtod(next, nullptr));
+            ++i;
         } else if (matches(arg, "--contact-sheet") && next != nullptr) {
             headless.contactSheet = next;
             runHeadless = true;
