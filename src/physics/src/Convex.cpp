@@ -86,17 +86,17 @@ struct Simplex {
         }
     }
 
-    void keep(int count, int a, int b = 0, int c = 0) {
-        // Reorders to (a, b, c) then truncates to `count`.
+    void keep(int n, int a, int b = 0, int c = 0) {
+        // Reorders to (a, b, c) then truncates to `n`.
         const Vec3 nw[3] = {w[a], w[b], w[c]};
         const Vec3 na[3] = {pa[a], pa[b], pa[c]};
         const Vec3 nb[3] = {pb[a], pb[b], pb[c]};
-        for (int i = 0; i < count; ++i) {
+        for (int i = 0; i < n; ++i) {
             w[i] = nw[i];
             pa[i] = na[i];
             pb[i] = nb[i];
         }
-        this->count = count;
+        count = n;
     }
 };
 

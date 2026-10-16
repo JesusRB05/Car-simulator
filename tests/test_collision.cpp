@@ -12,6 +12,7 @@
 #include "physics/Math.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "physics/RigidBody.hpp"
+#include "physics/TriangleMesh.hpp"
 
 using namespace sim::physics;
 
@@ -359,6 +360,79 @@ TEST_CASE("moving a static body needs an explicit broadphase invalidation") {
     REQUIRE(pairs.size() == 1);
     CHECK(pairs[0].bodyA == 0);
     CHECK(pairs[0].bodyB == 1);
+}
+
+TEST_CASE("sweep-and-prune matches a brute-force broadphase") {
+    PhysicsWorld world;
+    // A deterministic scatter of overlapping and separated bodies.
+    for (int i = 0; i < 12; ++i) {
+        RigidBody& body = world.createBody();
+        const Real x = 0.4 * static_cast<Real>((i * 7) % 5);
+        const Real y = 0.5 + 0.35 * static_cast<Real>(i % 3);
+        const Real z = 0.4 * static_cast<Real>((i * 3) % 4);
+        if (i % 2 == 0) {
+            body.shape = Shape::sphere(0.5);
+        } else {
+            body.shape = Shape::box(Vec3(0.4));
+        }
+        body.setMass(1.0);
+        body.position = Vec3(x, y, z);
+        body.collisionEnabled = true;
+        body.updateCache();
+    }
+
+    std::vector<BodyPair> reference;
+    for (std::size_t i = 0; i < world.bodyCount(); ++i) {
+        for (std::size_t j = i + 1; j < world.bodyCount(); ++j) {
+            if (!world.body(i).collisionEnabled || !world.body(j).collisionEnabled) {
+                continue;
+            }
+            if (!world.body(i).isDynamic() && !world.body(j).isDynamic()) {
+                continue;
+            }
+            if (computeAabb(world.body(i)).overlaps(computeAabb(world.body(j)))) {
+                reference.push_back(BodyPair{i, j});
+            }
+        }
+    }
+
+    const std::vector<BodyPair> pairs = broadphase(world);
+    REQUIRE(pairs.size() == reference.size());
+    for (std::size_t k = 0; k < pairs.size(); ++k) {
+        CHECK(pairs[k].bodyA == reference[k].bodyA);
+        CHECK(pairs[k].bodyB == reference[k].bodyB);
+    }
+}
+
+TEST_CASE("sub-stepping stops a fast sphere tunnelling a thin wall") {
+    PhysicsWorld world;
+    world.gravity = Vec3(0.0);
+    world.enableSubStepping = true;
+
+    RigidBody& wall = world.createBody();
+    wall.shape = Shape::box(Vec3(0.01, 1.0, 1.0));
+    wall.setType(BodyType::Static);
+    wall.setMass(0.0);
+    wall.collisionEnabled = true;
+    wall.updateCache();
+
+    RigidBody& ball = world.createBody();
+    ball.shape = Shape::sphere(0.05);
+    ball.setMass(1.0);
+    ball.position = Vec3(-0.3, 0.0, 0.0);
+    ball.linearVelocity = Vec3(500.0, 0.0, 0.0);
+    ball.restitution = 0.0;
+    ball.collisionEnabled = true;
+    ball.updateCache();
+
+    // One step moves the ball 0.5 m, far past the 2 cm wall: without
+    // sub-stepping it would jump straight through.
+    for (int i = 0; i < 5; ++i) {
+        world.step(1.0 / 1000.0);
+    }
+
+    CHECK(ball.position.x < 0.06); // never crossed the wall
+    CHECK(std::abs(ball.linearVelocity.x) < 1.0);
 }
 
 TEST_CASE("a dynamic box comes to rest on static ground without tunnelling") {
@@ -1115,6 +1189,61 @@ TEST_CASE("a convex hull behaves like the analytic box") {
 
     // A separated hull produces no contact.
     CHECK(collide(hull, makeBox(Vec3(0.5), Vec3(3.0, 0.0, 0.0)), points, kMaxContactPoints) == 0);
+}
+
+namespace {
+
+std::shared_ptr<const TriangleMesh> unitQuad() {
+    auto mesh = std::make_shared<TriangleMesh>();
+    mesh->vertices = {Vec3(-1.0, 0.0, -1.0), Vec3(1.0, 0.0, -1.0), Vec3(1.0, 0.0, 1.0), Vec3(-1.0, 0.0, 1.0)};
+    // Wound so the outward normal is +Y.
+    mesh->indices = {0, 2, 1, 0, 3, 2};
+    return mesh;
+}
+
+} // namespace
+
+TEST_CASE("a sphere and a box rest on a triangle-mesh plane") {
+    RigidBody ground;
+    ground.shape = Shape::triangleMesh(unitQuad());
+    ground.setType(BodyType::Static);
+    ground.updateCache();
+
+    // AABB matches the quad.
+    const Aabb box = computeAabb(ground);
+    CHECK(box.min == Vec3(-1.0, 0.0, -1.0));
+    CHECK(box.max == Vec3(1.0, 0.0, 1.0));
+
+    RigidBody sphere = makeSphere(0.5, Vec3(0.0, 0.4, 0.0));
+    ContactPoint points[kMaxContactPoints];
+    int count = collide(ground, sphere, points, kMaxContactPoints);
+    REQUIRE(count == 1);
+    CHECK(points[0].penetration == doctest::Approx(0.1));
+    CHECK(points[0].normal == Vec3(0.0, 1.0, 0.0));
+
+    // Flipped order flips the normal.
+    CHECK(collide(sphere, ground, points, kMaxContactPoints) == 1);
+    CHECK(points[0].normal == Vec3(0.0, -1.0, 0.0));
+
+    // A box above the plane rests on its four bottom corners.
+    RigidBody resting = makeBox(Vec3(0.5), Vec3(0.0, 0.4, 0.0));
+    const int boxCount = collide(ground, resting, points, kMaxContactPoints);
+    REQUIRE(boxCount == 4);
+    for (int i = 0; i < boxCount; ++i) {
+        CHECK(points[i].penetration == doctest::Approx(0.1));
+        CHECK(points[i].normal == Vec3(0.0, 1.0, 0.0));
+    }
+}
+
+TEST_CASE("triangle-mesh contacts reject separated shapes") {
+    RigidBody ground;
+    ground.shape = Shape::triangleMesh(unitQuad());
+    ground.setType(BodyType::Static);
+    ground.updateCache();
+
+    ContactPoint points[kMaxContactPoints];
+    CHECK(collide(ground, makeSphere(0.5, Vec3(0.0, 2.0, 0.0)), points, kMaxContactPoints) == 0);
+    CHECK(collide(ground, makeBox(Vec3(0.5), Vec3(0.0, 3.0, 0.0)), points, kMaxContactPoints) == 0);
 }
 
 TEST_CASE("heightfield footprint and bounds follow the grid") {

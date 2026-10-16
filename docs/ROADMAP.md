@@ -90,7 +90,7 @@ manoeuvres and the numbered work packages are in the
 | Area | State |
 |---|---|
 | Rigid-body core | Done: fixed step, deterministic, soft and rigid joints with an exact island block solve, 1:1000 mass-ratio tests, energy and angular-momentum tests |
-| Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, a generic GJK/EPA convex path, a heightfield terrain surface, AABB-tree broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, speculative contacts against tunnelling, sleep-capable and deterministic. Still missing: triangle-mesh soup and a per-primitive (BVH) mid-phase. The raycast-wheel car still uses an analytic ground |
+| Collisions | In progress: exact-convex narrowphase for sphere/box/cylinder, a generic GJK/EPA convex path, a heightfield terrain surface, a static triangle-mesh soup, AABB-tree broadphase, contact manifolds solved as one-sided normal rows plus a Coulomb friction cone with restitution, warm started, speculative contacts and optional sub-stepping against tunnelling, sleep-capable and deterministic. Still missing: a per-primitive (BVH) mid-phase for triangle meshes. The raycast-wheel car still uses an analytic ground |
 | Vehicle | Interfaces (`IVehicleModel`, tyres, suspension, drivetrain, aero, brakes, electronics), a Magic Formula `MagicFormulaTire` (pure slip, both combined-slip forms, self-aligning, overturning and rolling-resistance moments, camber thrust with its horizontal and vertical shifts, `.tir` scaling factors, `.tir` parser), a `TireVertical` spring-damper, a `TireRelaxation` transient filter, a `TireBristle` standstill model, an implicit `WheelSpin` step and a `DoubleWishbone` hardpoint closure solver (camber, toe, motion ratio), plus a temporary `PlaceholderVehicle` and a prototype `RaycastCar` |
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
 | App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit, and a pre-session flow (main menu, car / track selection with a 3D garage preview, a controls setup wizard, a session recap) |
@@ -135,8 +135,8 @@ ground interface, not rigid contacts). Work packages P1.1-P1.6 in the
 - Broadphase (BVH/sweep-and-prune) and narrowphase for sphere, box, cylinder, convex
   hull (SAT or GJK/EPA), triangle mesh and heightfield for terrain. Done: sphere,
   box, cylinder (analytic, multi-point), convex hull via GJK/EPA (generic, single
-  point) and a heightfield terrain surface (sphere/box contacts). Still brute-force
-  broadphase and no triangle-mesh soup.
+  point), a heightfield terrain surface (sphere/box contacts), a static
+  triangle-mesh soup (sphere/box contacts) and a sweep-and-prune broadphase.
 - Contact manifolds with persistent ids, friction (Coulomb cone), restitution,
   warm starting, speculative contacts or sub-stepping against tunnelling. Done:
   friction, restitution, warm starting and speculative contacts (a per-pair
@@ -151,7 +151,8 @@ ground interface, not rigid contacts). Work packages P1.1-P1.6 in the
   momentum; two runs and snapshot/restore stay bit-identical. Done: box stack
   (and sleeping), sphere bounce/restitution, friction (sliding sphere at 5/7),
   the block-on-ramp threshold, the Newton's cradle, the heightfield queries/
-  contacts and the GJK/EPA convex path.
+  contacts, the GJK/EPA convex path, the triangle-mesh contacts, the
+  sweep-and-prune broadphase and sub-stepping against tunnelling.
 - **Exit:** the chassis no longer falls through the ground; the render-test scenes
   can be run as physics scenes.
 

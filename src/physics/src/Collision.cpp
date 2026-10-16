@@ -10,6 +10,7 @@
 #include "physics/Convex.hpp"
 #include "physics/Heightfield.hpp"
 #include "physics/PhysicsWorld.hpp"
+#include "physics/TriangleMesh.hpp"
 
 namespace sim::physics {
 namespace {
@@ -653,9 +654,119 @@ Real boundingRadius(const RigidBody& body) {
         return radius;
     }
     case ShapeType::Heightfield:
+    case ShapeType::Mesh:
         return 0.0;
     }
     return 0.0;
+}
+
+// Sphere (b) against a triangle-mesh body (a); the normal points from the mesh
+// to the sphere.
+int sphereMesh(const RigidBody& meshBody, const RigidBody& sphere, ContactPoint* out) {
+    const TriangleMesh* mesh = meshBody.shape.mesh.get();
+    if (mesh == nullptr || !mesh->valid()) {
+        return 0;
+    }
+    const Vec3 center = sphere.position;
+    const Real radius = sphere.shape.radius;
+    Real bestPenetration = -1.0;
+    Vec3 bestNormal(0.0, 1.0, 0.0);
+    Vec3 bestPoint(center);
+    for (std::size_t t = 0; t < mesh->triangleCount(); ++t) {
+        Vec3 ta;
+        Vec3 tb;
+        Vec3 tc;
+        mesh->triangle(t, ta, tb, tc);
+        const Vec3 a = meshBody.localToWorldPoint(ta);
+        const Vec3 b = meshBody.localToWorldPoint(tb);
+        const Vec3 c = meshBody.localToWorldPoint(tc);
+        const Vec3 q = closestPointOnTriangle(center, a, b, c);
+        const Vec3 delta = center - q;
+        const Real distance = glm::length(delta);
+        if (distance < radius && radius - distance > bestPenetration) {
+            bestPenetration = radius - distance;
+            bestNormal = distance > 1e-12 ? delta / distance : Vec3(0.0, 1.0, 0.0);
+            bestPoint = q;
+        }
+    }
+    if (bestPenetration < 0.0) {
+        return 0;
+    }
+    out[0].normal = bestNormal;
+    out[0].penetration = bestPenetration;
+    out[0].position = bestPoint;
+    return 1;
+}
+
+// Box (b) against a triangle mesh (a). Each corner's nearest triangle, when the
+// corner is behind its outward normal, becomes a contact; the four deepest are
+// kept (as for the heightfield).
+int boxMesh(const RigidBody& meshBody, const RigidBody& box, ContactPoint* out, int maxPoints) {
+    const TriangleMesh* mesh = meshBody.shape.mesh.get();
+    if (mesh == nullptr || !mesh->valid()) {
+        return 0;
+    }
+    const Vec3 he = box.shape.halfExtents;
+    struct Candidate {
+        Real penetration;
+        Vec3 normal;
+        Vec3 point;
+        int corner;
+    };
+    std::vector<Candidate> candidates;
+    int corner = 0;
+    for (int sx = -1; sx <= 1; sx += 2) {
+        for (int sy = -1; sy <= 1; sy += 2) {
+            for (int sz = -1; sz <= 1; sz += 2) {
+                const Vec3 world = box.localToWorldPoint(Vec3(sx * he.x, sy * he.y, sz * he.z));
+                const int index = corner++;
+                Real bestDistanceSquared = kInfinity;
+                Vec3 bestPoint;
+                Vec3 bestNormal(0.0, 1.0, 0.0);
+                for (std::size_t t = 0; t < mesh->triangleCount(); ++t) {
+                    Vec3 ta;
+                    Vec3 tb;
+                    Vec3 tc;
+                    mesh->triangle(t, ta, tb, tc);
+                    const Vec3 a = meshBody.localToWorldPoint(ta);
+                    const Vec3 b = meshBody.localToWorldPoint(tb);
+                    const Vec3 c = meshBody.localToWorldPoint(tc);
+                    const Vec3 q = closestPointOnTriangle(world, a, b, c);
+                    const Real distanceSquared = glm::dot(world - q, world - q);
+                    if (distanceSquared < bestDistanceSquared) {
+                        bestDistanceSquared = distanceSquared;
+                        bestPoint = q;
+                        bestNormal = safeNormalize(glm::cross(b - a, c - a), Vec3(0.0, 1.0, 0.0));
+                    }
+                }
+                if (bestDistanceSquared == kInfinity) {
+                    continue;
+                }
+                const Real penetration = glm::dot(bestPoint - world, bestNormal);
+                if (penetration > 0.0) {
+                    candidates.push_back(Candidate{penetration, bestNormal, world, index});
+                }
+            }
+        }
+    }
+    if (candidates.empty()) {
+        return 0;
+    }
+    std::sort(candidates.begin(), candidates.end(), [](const Candidate& l, const Candidate& r) {
+        if (l.penetration != r.penetration) {
+            return l.penetration > r.penetration;
+        }
+        return l.corner < r.corner;
+    });
+    const int count = std::min<int>(maxPoints, static_cast<int>(candidates.size()));
+    std::sort(candidates.begin(), candidates.begin() + count,
+              [](const Candidate& l, const Candidate& r) { return l.corner < r.corner; });
+    for (int i = 0; i < count; ++i) {
+        out[i].normal = candidates[i].normal;
+        out[i].penetration = candidates[i].penetration;
+        out[i].position = candidates[i].point;
+    }
+    return count;
 }
 
 } // namespace
@@ -680,6 +791,20 @@ Aabb computeAabb(const RigidBody& body) {
         }
         // The field is authored in world space, so the body transform is ignored.
         return Aabb{field->minCorner(), field->maxCorner()};
+    }
+    case ShapeType::Mesh: {
+        const TriangleMesh* mesh = body.shape.mesh.get();
+        if (mesh == nullptr || mesh->vertices.empty()) {
+            return Aabb{body.position, body.position};
+        }
+        Vec3 min = body.localToWorldPoint(mesh->vertices.front());
+        Vec3 max = min;
+        for (const Vec3& v : mesh->vertices) {
+            const Vec3 world = body.localToWorldPoint(v);
+            min = glm::min(min, world);
+            max = glm::max(max, world);
+        }
+        return Aabb{min, max};
     }
     case ShapeType::Box:
     default: {
@@ -755,6 +880,26 @@ int collide(const RigidBody& a, const RigidBody& b, ContactPoint* out, int maxPo
     }
     if (typeA == ShapeType::Box && typeB == ShapeType::Heightfield) {
         const int count = boxHeightfield(b, a, out, maxPoints, margin);
+        for (int i = 0; i < count; ++i) {
+            out[i].normal = -out[i].normal;
+        }
+        return count;
+    }
+    if (typeA == ShapeType::Mesh && typeB == ShapeType::Sphere) {
+        return sphereMesh(a, b, out);
+    }
+    if (typeA == ShapeType::Sphere && typeB == ShapeType::Mesh) {
+        const int count = sphereMesh(b, a, out);
+        for (int i = 0; i < count; ++i) {
+            out[i].normal = -out[i].normal;
+        }
+        return count;
+    }
+    if (typeA == ShapeType::Mesh && typeB == ShapeType::Box) {
+        return boxMesh(a, b, out, maxPoints);
+    }
+    if (typeA == ShapeType::Box && typeB == ShapeType::Mesh) {
+        const int count = boxMesh(b, a, out, maxPoints);
         for (int i = 0; i < count; ++i) {
             out[i].normal = -out[i].normal;
         }

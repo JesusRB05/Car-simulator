@@ -42,9 +42,10 @@ forces; static bodies have zero inverse mass and inverse inertia.
 
 Shapes (`ShapeType`): `Box` (`halfExtents`), `Sphere` (`radius`), `Cylinder`
 (`radius`, `halfHeight` about the local +Y axis), `Convex` (a `vertices` hull in
-the body frame) and `Heightfield` (a shared `Heightfield`, for static terrain;
-see below). `shapeInertia()` returns the principal moments of a uniform solid
-(zero for terrain, the bounding box for a hull).
+the body frame), `Heightfield` (a shared `Heightfield`, for static terrain; see
+below) and `Mesh` (a shared `TriangleMesh`, a static triangle soup; see below).
+`shapeInertia()` returns the principal moments of a uniform solid (zero for
+terrain, the bounding box for a hull or a mesh).
 
 `RigidBody` stores:
 
@@ -225,7 +226,7 @@ Shape-vs-shape detection is the "detection half" of Phase 1: a deterministic
 broadphase feeds analytic narrowphase routines for **sphere–sphere, sphere–box,
 box–box (SAT with face clipping and edge–edge) and sphere–cylinder**, the generic
 **GJK/EPA** convex path for `Convex` hulls (P1.2) and the `Heightfield` surface
-(P1.3). The broadphase builds an AABB tree **once** over the static bodies (they
+and the static `Mesh` triangle soup against spheres and boxes (P1.3). The broadphase builds an AABB tree **once** over the static bodies (they
 never move) and, each step, queries it with the re-boxed dynamic bodies and
 brute-forces the dynamic-vs-dynamic pairs; the candidate pairs are ordered by
 `(bodyA, bodyB)`. The cached tree is rebuilt lazily when the body count changes
@@ -269,6 +270,18 @@ involves a `Convex` hull through this path, which is the general fallback for
 future primitives; the analytic routines above stay for the primitives they
 cover (multi-point manifolds).
 
+### Triangle meshes (`physics/TriangleMesh.hpp`, P1.3)
+
+`TriangleMesh` is a static triangle soup: local `vertices` plus a flat `indices`
+list (three per triangle), placed by an ordinary body pose. Attached with
+`Shape::triangleMesh(mesh)` (`ShapeType::Mesh`, no inertia), it covers arbitrary
+static level geometry that a regular heightfield cannot. The narrowphase is
+**sphere–mesh** (the closest triangle to the centre, brute-force over the soup)
+and **box–mesh** (each corner tested against its closest triangle, keeping the
+four deepest behind the surface, mirroring box–heightfield); outward triangle
+winding sets the inside test. Both argument orders are handled. A BVH to avoid
+the linear scan is future work.
+
 ### Terrain (`physics/Heightfield.hpp`)
 
 `Heightfield` is a regular height grid over the XZ plane (P1.3): samples sit on a
@@ -303,6 +316,19 @@ chain; a fully resting stack has no moving member, so it stays asleep. Applied
 impulses and `RigidBody::wake()` also wake a body. The sleep flag and timer are
 part of `stateHash` and the snapshot, so sleeping is reproducible and restorable.
 `enableSleeping = false` disables it (and wakes everything).
+
+### Sub-stepping (`enableSubStepping`)
+
+A fast body can move past thin geometry in one step and tunnel through it. When
+`enableSubStepping` is set, `step()` measures how far the fastest dynamic body
+would move in the step; if that exceeds `maxSubStepDistance` (2 cm) or half the
+body's own smallest AABB half-size, it splits the step into equal substeps (each
+re-running the whole pipeline) so no body advances further than that per substep,
+capped at `maxSubSteps` (32). The substep count is a pure function of the current
+state, so runs stay reproducible. It is **off by default**: a stiff joint or
+spring can legitimately reach high speed without being anywhere near a contact,
+and sub-stepping such a scene only costs time. Enable it for scenes with
+projectiles or small fast bodies near thin walls.
 
 ### Determinism and snapshots
 
@@ -362,8 +388,11 @@ contact-patch half-length `a = √(R0² − Rl²)`.
 The self-aligning moment is `Mz = −t(α)·Fy`, with the pneumatic trail
 `t(α) = Dt cos(Cz atan(Bz α − Ez(Bz α − atan(Bz α)))) cos α` and
 `Dt = qDz1 + qDz2 dfz`, so the trail vanishes as the tyre saturates — the curve
-that drives force feedback. The overturning/rolling-resistance moments (`Mx`,
-`My`) and transient relaxation still arrive with P2.3/P2.4.
+that drives force feedback. Camber adds a thrust `Kyg γ` with `Kyg = pKyg1 Fz`
+(towards the lean), included in the friction-circle clamp. Rolling resistance is
+`My = −Crr Fz R0 · sign(contactSpeed)`, so it opposes travel and vanishes at a
+standstill. The overturning moment (`Mx`) and transient relaxation still arrive
+with P2.3/P2.4.
 
 ### `PlaceholderVehicle` (TEMPORARY)
 
@@ -423,17 +452,19 @@ Newton's cradle, the heightfield (a brute-force triangle-scan cross-check of
 `sampleHeight`, flat/ramp normals, the footprint, the AABB, a sphere and a box
 against flat terrain, a slope normal and a sphere falling onto terrain), the
 convex support function, GJK separation, EPA depths/normals for spheres, boxes
-and cylinders, a hull behaving like its box and contact determinism across
-repeated runs and snapshot/restore. `test_vehicle.cpp` covers the placeholder's
+and cylinders, a hull behaving like its box, a triangle-mesh plane (its AABB, a
+sphere and a box resting on it, normal flipping with argument order and
+separated shapes rejected) and contact determinism across repeated runs and
+snapshot/restore. `test_vehicle.cpp` covers the placeholder's
 conventions and the
 `MagicFormulaTire` pure-slip curve (origin slope `BCD = K`, peak `μ·Fz`, oddness,
-load sensitivity, the friction-circle bound and the self-aligning moment from the
-pneumatic trail), the `.tir` coefficient parser and the one-sided vertical
-spring-damper with its effective-radius curve.
+load sensitivity, the friction-circle bound, the self-aligning moment from the
+pneumatic trail, camber thrust and rolling resistance), the `.tir` coefficient
+parser and the one-sided vertical spring-damper with its effective-radius curve.
 
 ## Results
 
-Full suite: **78 cases / 7507 assertions, all green** (`sim_tests`, MSVC Release,
+Full suite: **83 cases / 7603 assertions, all green** (`sim_tests`, MSVC Release,
 fixed step `dt = 1/1000 s`). Errors refer to the measurement against the
 analytic value (relative error when both quantities are of the same kind,
 absolute error in metres/radians/J for physical magnitudes).
@@ -479,6 +510,8 @@ absolute error in metres/radians/J for physical magnitudes).
 | MF tyre cornering stiffness | dFy/dα at α=0 | `Kyα` = 41379.3 N/rad | 41379.3 N/rad | < 1e-3 | < 1e-3 | Same property for the lateral curve; `Kyα = pKy1 Fz0 sin(2 arctan(Fz/(pKy2 Fz0)))` |
 | MF tyre peak | max Fx, Fy at Fz0 = 4000 N | μ·Fz0 = 5600 N | 5600 N | < 1 % | < 1 % | The peak equals `D = μ Fz`; load sensitivity reduces `μ` above `Fz0` |
 | MF tyre self-aligning moment | dMz/dα at α=0 | qDz1·Kyα = 4965.5 N·m/rad | 4965.5 N·m/rad | < 1 % | < 1 % | `Mz = −t Fy` with trail `t(0) = qDz1`; the moment is odd and peaks (288.9 N·m) then falls as the trail collapses |
+| MF tyre camber thrust | Fy at γ = 0.05, Fz0 | pKyg1·Fz0·γ = 200 N | 200 N | 0 | exact | `Kyg = pKyg1 Fz`; reversed camber flips the sign |
+| MF tyre rolling resistance | My at Fz0, rolling forward | −Crr·Fz0·R0 = −14.88 N·m | −14.88 N·m | 0 | exact | Opposes travel and is exactly zero at rest |
 | Vertical tyre | Fz at δ = 0.01 m | kz0·δ = 2000 N | 2000 N | 0 | exact | Linear region `kz1 = 0`; a negative deflection or a receding contact clamps to `Fz = 0` |
 | Heightfield sample | \|bilinear − brute-force triangle scan\| | 0 | < 1e-12 | < 1e-12 | < 1e-12 | `sampleHeight` indexes the same triangulation a full scan would find; exact at the lattice nodes |
 | Heightfield normal (flat / slope) | n | (0, 1, 0) / normalize(−a, 1, 0) | exact | 0 | exact | Analytic gradient of the active triangle |
@@ -489,6 +522,9 @@ absolute error in metres/radians/J for physical magnitudes).
 | GJK/EPA, two boxes | depth / normal | 0.4 m / (1, 0, 0) | 0.4 m / (1, 0, 0) | < 1e-6 | < 1e-6 | Face-face Minkowski box: EPA converges to the shallowest face; `pointA − pointB = depth·n` |
 | GJK/EPA, two cylinders | depth / normal | 0.4 m / (1, 0, 0) | 0.4 m / (1, 0, 0) | < 1e-3 | < 1e-3 | Cylinder–cylinder is otherwise unsupported; the generic path fills the gap |
 | GJK overlap / hull | boolean / depth | true / 0.4 m | true / 0.4 m | 0 | < 1e-6 | A hull of a box's eight corners reproduces the analytic box |
+| Sphere on triangle-mesh plane | penetration / n | r − y = 0.1 m / (0, 1, 0) | 0.1 m / (0, 1, 0) | 0 | exact | Closest point on the soup; the normal flips when the argument order does |
+| Box on triangle-mesh plane | contacts / penetration | 4 / 0.1 m | 4 / 0.1 m | 0 | exact | The four bottom corners sit 0.1 m behind the plane along its outward normal |
+| Sub-stepping, fast sphere vs thin wall | final position | < 0.06 m (stopped at the wall) | 0.06 m | — | informative | Without `enableSubStepping` the sphere moves 0.5 m in one step and jumps the 2 cm wall; with it the step is split and the wall is hit |
 | Benchmark (20-link chain) | Performance | — | 0.0207 ms/step (48271 steps/s) | — | informative | 10000 steps in 207.2 ms, soft chain through the island block solve; measured while other builds were running on the machine, so only indicative |
 
 Note on the 1:1000 cases: an earlier version of this table reported a 1:1000

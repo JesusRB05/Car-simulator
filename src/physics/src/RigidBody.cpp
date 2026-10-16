@@ -6,6 +6,8 @@
 #include <array>
 #include <cmath>
 
+#include "physics/TriangleMesh.hpp"
+
 namespace sim::physics {
 namespace {
 
@@ -119,6 +121,13 @@ Shape Shape::convex(std::vector<Vec3> vertices) {
     return shape;
 }
 
+Shape Shape::triangleMesh(std::shared_ptr<const TriangleMesh> mesh) {
+    Shape shape;
+    shape.type = ShapeType::Mesh;
+    shape.mesh = std::move(mesh);
+    return shape;
+}
+
 Vec3 shapeInertia(const Shape& shape, Real mass) {
     if (mass <= 0.0) {
         return Vec3(0.0);
@@ -142,14 +151,22 @@ Vec3 shapeInertia(const Shape& shape, Real mass) {
     }
     case ShapeType::Heightfield:
         return Vec3(0.0);
-    case ShapeType::Convex: {
-        // Approximate a hull by the box matching its local bounding box.
-        if (shape.vertices.empty()) {
+    case ShapeType::Convex:
+    case ShapeType::Mesh: {
+        // Approximate a hull/mesh by the box matching its local bounding box.
+        const std::vector<Vec3>* points = &shape.vertices;
+        if (shape.type == ShapeType::Mesh) {
+            if (shape.mesh == nullptr) {
+                return Vec3(0.0);
+            }
+            points = &shape.mesh->vertices;
+        }
+        if (points->empty()) {
             return Vec3(0.0);
         }
-        Vec3 min = shape.vertices.front();
-        Vec3 max = shape.vertices.front();
-        for (const Vec3& v : shape.vertices) {
+        Vec3 min = points->front();
+        Vec3 max = points->front();
+        for (const Vec3& v : *points) {
             min = glm::min(min, v);
             max = glm::max(max, v);
         }
