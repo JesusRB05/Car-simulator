@@ -34,7 +34,6 @@
 #include "rhi/Frame.hpp"
 #include "rhi/GpuTimer.hpp"
 #include "rhi/Swapchain.hpp"
-#include "scripting/LuaSandbox.hpp"
 #include "scripting/ScriptHost.hpp"
 #include "telemetry/Telemetry.hpp"
 #include "vehicle/Electronics.hpp"
@@ -179,7 +178,6 @@ private:
     std::unique_ptr<input::ProfileStore> inputProfiles_;
     std::unique_ptr<input::WheelManager> wheel_;
     std::unique_ptr<modding::ModManager> mods_;
-    std::unique_ptr<scripting::LuaSandbox> lua_;
     std::unique_ptr<scripting::ScriptHost> scripts_;
     std::unique_ptr<plugin::PluginLoader> plugins_;
     std::unique_ptr<audio::AudioEngine> audio_;

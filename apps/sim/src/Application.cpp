@@ -197,8 +197,7 @@ bool Application::initialise() {
     plugins_ = std::make_unique<plugin::PluginLoader>(*vfs_);
     plugins_->loadDirectory(exeDir / "plugins");
 
-    lua_ = std::make_unique<scripting::LuaSandbox>();
-    scripts_ = std::make_unique<scripting::ScriptHost>(*lua_, *vfs_);
+    scripts_ = std::make_unique<scripting::ScriptHost>(*vfs_);
     if (vfs_->exists("scripts/main.lua")) {
         scripts_->loadScript("base", "scripts/main.lua");
         scripts_->callOnLoad();
@@ -231,7 +230,6 @@ void Application::shutdown() {
         scripts_->clear();
     }
     scripts_.reset();
-    lua_.reset();
     plugins_.reset();
     audio_.reset();
     telemetry_.reset();

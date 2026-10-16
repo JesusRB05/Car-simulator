@@ -62,8 +62,9 @@ engine.
 
 Scripts run in a **sandbox** (no `io`, `os`, `package`, `debug`, `ffi`; no
 `load`/`require`/`dofile`; text only, never bytecode) with an **instruction
-limit**. A misbehaving script or one with an infinite loop cannot bring the
-simulator down.
+limit** and a **memory ceiling**, and **each mod gets its own `lua_State`** so
+one mod cannot tamper with another. A misbehaving script, an infinite loop or a
+`pcall`-wrapped one cannot bring the simulator down.
 
 ## C ABI for plugins
 

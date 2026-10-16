@@ -5,8 +5,10 @@
 #define SOL_ALL_SAFETIES_ON 1
 #include <sol/sol.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -35,6 +37,14 @@ public:
     void setInstructionBudget(std::uint64_t instructions) { budget_ = instructions; }
     std::uint64_t instructionBudget() const { return budget_; }
 
+    // Per-state memory ceiling, enforced by a custom Lua allocator. A single
+    // `string.rep("x", 1e9)` is one instruction, so the instruction budget alone
+    // cannot stop it; the allocator refuses the block and Lua raises "not enough
+    // memory". Zero disables the limit.
+    void setMemoryLimit(std::size_t bytes) { allocator_->limit = bytes; }
+    std::size_t memoryLimit() const { return allocator_->limit; }
+    std::size_t memoryUsed() const { return allocator_->used; }
+
     // Loads and runs a text chunk. Returns false and fills `error` on failure.
     bool run(std::string_view code, std::string_view chunkName, std::string& error);
 
@@ -51,6 +61,18 @@ private:
     struct Budget {
         std::uint64_t limit = 0;
         std::uint64_t used = 0;
+        // Set once the budget is exhausted: the hook then raises on every single
+        // instruction, so `pcall` cannot swallow the error (its own handler
+        // instructions re-enter the hook and re-raise) and it reaches the C
+        // boundary. `while true do pcall(function() while true do end end) end`
+        // therefore aborts instead of spinning forever.
+        bool aborted = false;
+    };
+
+    // Accounting for the custom allocator: the live byte total and the ceiling.
+    struct Allocator {
+        std::size_t used = 0;
+        std::size_t limit = 0;
     };
 
     // Owns the raw Lua state and closes it on destruction. Declared before
@@ -68,8 +90,14 @@ private:
         StateOwner& operator=(const StateOwner&) = delete;
     };
 
+    static void* allocate(void* userdata, void* pointer, std::size_t oldSize, std::size_t newSize);
     static void instructionHook(lua_State* state, lua_Debug* debug);
 
+    // Declared (and constructed) before owner_: lua_newstate calls the allocator
+    // immediately, so the accounting struct must already exist. It is a smart
+    // pointer so that it is destroyed *after* owner_ (which closes the state and
+    // keeps calling the allocator): the ceiling must outlive the Lua state.
+    std::unique_ptr<Allocator> allocator_;
     StateOwner owner_;
     lua_State* state_ = nullptr;
     sol::state_view view_;

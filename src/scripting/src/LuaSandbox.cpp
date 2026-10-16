@@ -6,6 +6,8 @@
 
 #include <luajit.h>
 
+#include <cstdlib>
+
 namespace sim::scripting {
 namespace {
 
@@ -22,7 +24,15 @@ std::string popString(lua_State* state) {
 
 } // namespace
 
-LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(state_) {
+LuaSandbox::LuaSandbox()
+    : allocator_(std::make_unique<Allocator>()),
+      owner_(lua_newstate(&LuaSandbox::allocate, allocator_.get())),
+      state_(owner_.state),
+      view_(state_) {
+    // The allocator exists before lua_newstate runs; the ceiling is applied once
+    // the state is up (the initial allocation is tiny).
+    allocator_->limit = 64u * 1024u * 1024u;
+
     budgetState_ = new Budget();
     lua_pushlightuserdata(state_, const_cast<char*>(&kBudgetKey));
     lua_pushlightuserdata(state_, budgetState_);
@@ -38,9 +48,12 @@ LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(
     // closed.
     view_.open_libraries(sol::lib::base, sol::lib::coroutine, sol::lib::math, sol::lib::string, sol::lib::table);
 
-    // Remove everything that could escape the sandbox or load bytecode.
+    // Remove everything that could escape the sandbox or load bytecode, and the
+    // environment-manipulation helpers (setfenv/getfenv/newproxy) that let a
+    // chunk swap its own environment for another table.
     sol::table globals = view_.globals();
-    for (const char* name : {"load", "loadstring", "loadfile", "dofile", "require", "collectgarbage", "print"}) {
+    for (const char* name : {"load", "loadstring", "loadfile", "dofile", "require", "collectgarbage", "print",
+                             "setfenv", "getfenv", "newproxy"}) {
         globals[name] = sol::nil;
     }
     globals["string"]["dump"] = sol::nil;
@@ -53,9 +66,37 @@ LuaSandbox::LuaSandbox() : owner_(luaL_newstate()), state_(owner_.state), view_(
 }
 
 LuaSandbox::~LuaSandbox() {
-    // The Lua state itself is closed by owner_ after view_ is destroyed.
+    // The Lua state itself is closed by owner_ after view_ is destroyed;
+    // allocator_ (a member declared before owner_) is destroyed last, so the
+    // ceiling is still valid while lua_close calls the allocator.
     delete budgetState_;
     budgetState_ = nullptr;
+}
+
+// Custom allocator that enforces the per-state memory ceiling. Returning nullptr
+// makes Lua raise "not enough memory" instead of reserving gigabytes.
+void* LuaSandbox::allocate(void* userdata, void* pointer, std::size_t oldSize, std::size_t newSize) {
+    auto* allocator = static_cast<Allocator*>(userdata);
+    if (newSize == 0) {
+        std::free(pointer);
+        if (pointer != nullptr && oldSize <= allocator->used) {
+            allocator->used -= oldSize;
+        }
+        return nullptr;
+    }
+
+    const std::size_t current =
+        (pointer != nullptr && oldSize <= allocator->used) ? allocator->used - oldSize : allocator->used;
+    const std::size_t next = current + newSize;
+    if (allocator->limit != 0 && next > allocator->limit) {
+        return nullptr;
+    }
+
+    void* block = std::realloc(pointer, newSize);
+    if (block != nullptr) {
+        allocator->used = next;
+    }
+    return block;
 }
 
 void LuaSandbox::instructionHook(lua_State* state, lua_Debug* /*debug*/) {
@@ -66,8 +107,20 @@ void LuaSandbox::instructionHook(lua_State* state, lua_Debug* /*debug*/) {
     if (budget == nullptr) {
         return;
     }
+
+    // Once the budget is spent, raise on every instruction. `pcall` normally
+    // swallows a hook error and lets the caller loop again, which is how
+    // `while true do pcall(function() while true do end end) end` froze the
+    // host; with the hook firing on every instruction its own error handling
+    // re-enters the hook and re-raises, so the error reaches the C boundary.
+    if (budget->aborted) {
+        luaL_error(state, "script exceeded its instruction budget (%d)", static_cast<int>(budget->limit));
+    }
+
     budget->used += static_cast<std::uint64_t>(kHookCount);
     if (budget->limit != 0 && budget->used >= budget->limit) {
+        budget->aborted = true;
+        lua_sethook(state, &LuaSandbox::instructionHook, LUA_MASKCOUNT, 1);
         luaL_error(state, "script exceeded its instruction budget (%d)", static_cast<int>(budget->limit));
     }
 }
@@ -83,6 +136,7 @@ void LuaSandbox::log(std::string_view message) const {
 bool LuaSandbox::run(std::string_view code, std::string_view chunkName, std::string& error) {
     budgetState_->limit = budget_;
     budgetState_->used = 0;
+    budgetState_->aborted = false;
     lua_sethook(state_, &LuaSandbox::instructionHook, LUA_MASKCOUNT, kHookCount);
 
     // "t" mode rejects precompiled bytecode: only text chunks are accepted.
@@ -109,6 +163,7 @@ bool LuaSandbox::run(std::string_view code, std::string_view chunkName, std::str
 bool LuaSandbox::call(sol::protected_function& function) {
     budgetState_->limit = budget_;
     budgetState_->used = 0;
+    budgetState_->aborted = false;
     lua_sethook(state_, &LuaSandbox::instructionHook, LUA_MASKCOUNT, kHookCount);
 
     sol::protected_function_result result = function();
@@ -125,6 +180,7 @@ bool LuaSandbox::call(sol::protected_function& function) {
 bool LuaSandbox::call(sol::protected_function& function, double argument) {
     budgetState_->limit = budget_;
     budgetState_->used = 0;
+    budgetState_->aborted = false;
     lua_sethook(state_, &LuaSandbox::instructionHook, LUA_MASKCOUNT, kHookCount);
 
     sol::protected_function_result result = function(argument);

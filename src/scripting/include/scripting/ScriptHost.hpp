@@ -2,6 +2,8 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
+#include <cstddef>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -14,8 +16,12 @@ class VirtualFileSystem;
 
 namespace sim::scripting {
 
-// Hosts mod entry scripts inside a shared sandbox. Each loaded script can
-// register two callbacks through the `sim` API:
+// Hosts mod entry scripts, one Lua state per mod. Each mod gets its own
+// LuaSandbox, so a mod cannot read or overwrite another mod's globals through
+// `_G`, `rawset` or a shared `sim` table; the state (and its memory ceiling and
+// instruction budget) is torn down with the mod.
+//
+// Each loaded script can register two callbacks through the `sim` API:
 //
 //   sim.register_on_load(function() ... end)
 //   sim.register_on_update(function(dt) ... end)
@@ -24,35 +30,39 @@ namespace sim::scripting {
 // `sim.read(path)` (reads through the VFS only).
 class ScriptHost {
 public:
-    ScriptHost(LuaSandbox& sandbox, vfs::VirtualFileSystem& vfs);
+    explicit ScriptHost(vfs::VirtualFileSystem& vfs);
 
-    // Loads a Lua file from the VFS and runs it. Returns false on error.
+    // Loads a Lua file from the VFS into a fresh sandbox and runs it. Returns
+    // false on error; the mod stays loaded with whatever it registered.
     bool loadScript(std::string_view modId, std::string_view virtualPath);
 
     void callOnLoad();
     void callOnUpdate(double deltaSeconds);
 
-    // Releases every stored Lua function. Must be called before the sandbox dies.
+    // Releases every mod's sandbox and its stored Lua functions.
     void clear();
 
-    LuaSandbox& sandbox() { return sandbox_; }
+    // The sandbox owned by `modId`, or nullptr if that mod is not loaded.
+    LuaSandbox* sandbox(std::string_view modId);
+
+    std::size_t modCount() const { return entries_.size(); }
 
 private:
     struct Entry {
         std::string modId;
         std::string path;
+        std::unique_ptr<LuaSandbox> sandbox;
         std::vector<sol::protected_function> onLoad;
         std::vector<sol::protected_function> onUpdate;
     };
 
-    void installApi();
+    void installApi(LuaSandbox& sandbox, Entry& entry);
 
-    LuaSandbox& sandbox_;
     vfs::VirtualFileSystem& vfs_;
-    std::vector<Entry> entries_;
+    // unique_ptr keeps each Entry at a stable address, so the `sim` callbacks can
+    // hold a reference to it while the vector grows.
+    std::vector<std::unique_ptr<Entry>> entries_;
     std::string currentMod_ = "lua";
-    std::vector<sol::protected_function>* onLoadTarget_ = nullptr;
-    std::vector<sol::protected_function>* onUpdateTarget_ = nullptr;
 };
 
 } // namespace sim::scripting

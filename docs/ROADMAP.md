@@ -95,7 +95,7 @@ manoeuvres and the numbered work packages are in the
 | Rendering | Vulkan RHI, per-face lighting with hemispheric ambient, debug draw, headless capture and golden-image workflow. No shadows, no PBR |
 | App | ImGui UI, scene browser, telemetry, orbit camera, keyboard-drivable test circuit, a pre-session flow (main menu, car / track selection with a 3D garage preview, a controls setup wizard, a session recap) and persisted driver aids (ABS/TCS/ESC) applied to the car |
 | Input | In progress: `sim::input` (SDL-free) over an SDL3 backend - compatibility database (VID:PID, vendor families, name heuristics), per-axis calibration, live remapping, multi-device merge, hot-plug, TOML-persisted profiles and a force-feedback controller. Force feedback currently sends rumble and LED only; DirectInput constant-force and spring/damper/friction conditions are a Windows-only follow-up. Profiles are not yet verified on real hardware |
-| Mods | Sandboxed Lua (JIT disabled, instruction budget), mod VFS with priorities, native plugin API skeleton |
+| Mods | Sandboxed Lua (JIT disabled, instruction budget, memory ceiling, one state per mod), mod VFS with priorities, native plugin API skeleton |
 | CI | Defined (format, Linux, Windows, gpu-linux); runs on push once the repository has CI enabled |
 
 ## Milestones
