@@ -91,7 +91,7 @@ The demo car is the `VehicleSetup` defaults plus `makeDefaultVehicleSetup()`
 | Engine | 250 N m peak at 450 rad/s, idle 90 rad/s, rev limit 700 rad/s |
 | Gearbox | automatic, 6 gears (3.20 ... 0.80), final drive 3.60, reverse 3.30, ~0.25 s shifts at 650 / 250 rad/s |
 | Drive | rear-wheel drive, open differential |
-| Brakes | 3600 N m total, 62 % front; handbrake on the rear |
+| Brakes | 5800 N m total at full pressure, 70 % front (sized to lock the wheels on dry asphalt); handbrake on the rear |
 | Steering | 0.55 rad at standstill, limit / (1 + v / 14 m/s), floor 0.10 rad, Ackermann |
 | Drag | 0.5 * rho * 0.30 * 2.1 * v^2 (about 0.39 v^2 at 1.225 kg/m^3) |
 

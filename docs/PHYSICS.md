@@ -370,8 +370,10 @@ longitudinal coefficients (peak `Dx = μx(κ) Fz`, stiffness
 `Kxκ = Fz(pKx1 + pKx2 dfz) exp(pKx3 dfz)`), and `Fy(α)` the lateral ones (peak
 `Dy = μy Fz`, cornering stiffness `Kyα = pKy1 Fz0 sin(2 arctan(Fz / (pKy2 Fz0)))`),
 all with `dfz = (Fz − Fz0)/Fz0` load dependence so the peak grip falls with load
-(load sensitivity). `Fx` opposes the slip ratio (driving is positive) and `Fy`
-opposes the slip angle. A friction-circle clamp keeps
+(load sensitivity) and the surface friction coefficient multiplying `μx`/`μy`,
+so a low-grip surface lowers the whole curve (a locked wheel then slides below
+the peak, which is what the ABS exploits). `Fx` opposes the slip ratio (driving
+is positive) and `Fy` opposes the slip angle. A friction-circle clamp keeps
 `√(Fx² + Fy²) ≤ μ_peak Fz` for combined slip. The coefficients live in a plain
 `MagicFormulaCoefficients` struct in the same layout as a `.tir` subset.
 `parseMagicFormulaCoefficients`/`loadMagicFormulaCoefficients` read that subset

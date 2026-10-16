@@ -248,8 +248,12 @@ low-speed circle, the understeer trend, a constant-force braking stop and the
 coasting deceleration invariant. Writing it exposed and fixed a driveline energy
 leak - the clutch now couples the engine to the input shaft implicitly, clamped to
 the plate capacity (Section 7.2), instead of the old two-branch rule that drove the
-car with the throttle closed - and an under-sized default master cylinder, now the
-documented 3600 N*m of total brake torque (`DRIVE.md`). A second pass fixed the
+car with the throttle closed - and an under-sized default master cylinder, now
+5800 N*m of total brake torque at a 70 % front bias, sized so the brakes lock
+the wheels on dry asphalt and the stop is grip-limited (`DRIVE.md`). A later
+pass fixed the low-grip surface: the friction coefficient now scales the tyre's
+peak (and the friction circle) instead of only capping the force, so a locked
+wheel slides below the peak and the ABS beats a skid. A second pass fixed the
 rear-axle brake chatter: with the clutch locked and the driver off the power or on
 the brakes, the engine inertia is folded onto the driven wheels before the wheel-spin
 solve, so the stiff engine-to-shaft link can no longer amplify step-to-step
