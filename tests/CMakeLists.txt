@@ -22,6 +22,7 @@ add_executable(sim_tests
     # simulation half is render-free and tested directly.
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/TrackCollisionMesh.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/CarLoader.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/TrackLoader.cpp)
 

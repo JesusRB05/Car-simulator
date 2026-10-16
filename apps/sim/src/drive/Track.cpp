@@ -30,8 +30,6 @@ constexpr Real kBankMax = 0.061;         // ~3.5 degrees of maximum cross-slope
 constexpr Real kMinHalfWidthDelta = 0.8; // most the asphalt narrows below the nominal
 constexpr Real kMaxHalfWidthDelta = 1.0; // most the asphalt widens above the nominal
 constexpr int kSmoothRadius = 4;
-constexpr Real kKerbLift = 0.04; // kerb top above the terrain (metres)
-
 // Height added to the asphalt at a signed lateral offset: the low edge sits on
 // the terrain (no ditch) and the high edge is lifted, pivoting about the outside
 // kerb. Zero away from the asphalt or on an unbanked sample.
@@ -429,7 +427,7 @@ GroundSample Track::sample(Real x, Real z) const {
         result.height = heightAt(x, z);
         result.normal = normalAt(x, z);
         if (result.surface == Surface::Kerb) {
-            result.height += kKerbLift;
+            result.height += Track::kKerbLift;
         }
     }
 

@@ -2,9 +2,11 @@
 
 The `drive` scene drives the assembled [`VehicleModel`](PHYSICS_PLAN.md) (the
 default *Voyager* setup) around a procedural test circuit to exercise the whole
-vehicle stack. The wheels still query an analytic ground instead of colliding
-with the terrain mesh, but the chassis is a real rigid body, so it does collide
-with the barrier walls and the run-off test yard.
+vehicle stack. The wheels query the circuit's **collision triangle mesh**
+(`TrackCollisionMesh`: the asphalt ribbon, the kerbs and a terrain grid, indexed
+by a per-triangle BVH), so the tyres sit on the geometry that is actually drawn;
+the chassis is a real rigid body, so it also collides with the barrier walls and
+the run-off test yard.
 
 ```bat
 build\windows-msvc-release\bin\sim.exe --scene drive

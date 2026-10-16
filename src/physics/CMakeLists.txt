@@ -11,7 +11,8 @@ add_library(sim_physics STATIC
     src/Integrator.cpp
     src/Joints.cpp
     src/PhysicsWorld.cpp
-    src/RigidBody.cpp)
+    src/RigidBody.cpp
+    src/TriangleMeshBvh.cpp)
 add_library(sim::physics ALIAS sim_physics)
 
 target_include_directories(sim_physics PUBLIC include)

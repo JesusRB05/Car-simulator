@@ -148,6 +148,10 @@ public:
     Vec3 roadPoint(const TrackSample& sample, Real lateral, Real raise) const;
     Vec3 roadNormal(const TrackSample& sample, Real lateral) const;
 
+    // Kerb top above the terrain (m). The analytic surface query and the
+    // collision mesh share it, so a wheel sits on the kerb it is drawn on.
+    static constexpr Real kKerbLift = 0.04;
+
     // Closest point on the centreline polyline to (x, z), searched through a
     // uniform grid. `found` is false when (x, z) is far from the track.
     struct Projection {

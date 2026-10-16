@@ -13,6 +13,7 @@
 #include "physics/PhysicsWorld.hpp"
 #include "physics/RigidBody.hpp"
 #include "physics/TriangleMesh.hpp"
+#include "physics/TriangleMeshBvh.hpp"
 
 using namespace sim::physics;
 
@@ -1396,5 +1397,197 @@ TEST_CASE("speculative contacts do not perturb a resting pair") {
         CHECK(plain[i].bodyA == speculative[i].bodyA);
         CHECK(plain[i].bodyB == speculative[i].bodyB);
         CHECK(plain[i].count == speculative[i].count);
+    }
+}
+
+namespace {
+
+// A deterministic pseudo-random source, so the brute-force cross-check below is
+// reproducible across platforms.
+struct Lcg {
+    std::uint64_t state = 0x9e3779b97f4a7c15ull;
+
+    Real next() {
+        state = state * 6364136223846793005ull + 1442695040888963407ull;
+        return static_cast<Real>((state >> 11) & ((1ull << 53) - 1)) / static_cast<Real>(1ull << 53);
+    }
+};
+
+// A wavy grid mesh, the shape a track surface has: smooth, but built from many
+// small triangles.
+TriangleMesh makeWaveMesh(int cells) {
+    TriangleMesh mesh;
+    const Real half = 20.0;
+    const Real step = 2.0 * half / static_cast<Real>(cells);
+    for (int j = 0; j <= cells; ++j) {
+        for (int i = 0; i <= cells; ++i) {
+            const Real x = -half + step * static_cast<Real>(i);
+            const Real z = -half + step * static_cast<Real>(j);
+            const Real y = 0.5 * std::sin(0.3 * x) * std::cos(0.2 * z);
+            mesh.vertices.push_back(Vec3(x, y, z));
+        }
+    }
+    for (int j = 0; j < cells; ++j) {
+        for (int i = 0; i < cells; ++i) {
+            const auto a = static_cast<std::uint32_t>(j * (cells + 1) + i);
+            const auto b = static_cast<std::uint32_t>(a + 1);
+            const auto c = static_cast<std::uint32_t>(a + (cells + 1) + 1);
+            const auto d = static_cast<std::uint32_t>(a + (cells + 1));
+            mesh.indices.insert(mesh.indices.end(), {a, b, c, a, c, d});
+        }
+    }
+    return mesh;
+}
+
+// The reference Moller-Trumbore test, independent of the BVH implementation.
+bool bruteTriangle(const Vec3& origin, const Vec3& direction, const Vec3& a, const Vec3& b, const Vec3& c, Real& t) {
+    const Vec3 edge1 = b - a;
+    const Vec3 edge2 = c - a;
+    const Vec3 pvec = glm::cross(direction, edge2);
+    const Real determinant = glm::dot(edge1, pvec);
+    if (std::abs(determinant) < 1e-12) {
+        return false;
+    }
+    const Real inverse = 1.0 / determinant;
+    const Vec3 tvec = origin - a;
+    const Real u = glm::dot(tvec, pvec) * inverse;
+    if (u < 0.0 || u > 1.0) {
+        return false;
+    }
+    const Vec3 qvec = glm::cross(tvec, edge1);
+    const Real v = glm::dot(direction, qvec) * inverse;
+    if (v < 0.0 || u + v > 1.0) {
+        return false;
+    }
+    t = glm::dot(edge2, qvec) * inverse;
+    return t >= 0.0;
+}
+
+} // namespace
+
+TEST_CASE("triangle-mesh BVH: a ray returns the closest triangle") {
+    // Two stacked quads, at y = 0 and y = 1: a downward ray must hit the top one.
+    const Real h = 2.0;
+    TriangleMesh mesh;
+    mesh.vertices = {Vec3(-h, 0.0, -h), Vec3(h, 0.0, -h), Vec3(h, 0.0, h), Vec3(-h, 0.0, h),
+                     Vec3(-h, 1.0, -h), Vec3(h, 1.0, -h), Vec3(h, 1.0, h), Vec3(-h, 1.0, h)};
+    mesh.indices = {0, 2, 1, 0, 3, 2, 4, 6, 5, 4, 7, 6};
+
+    TriangleMeshBvh bvh;
+    bvh.build(mesh);
+    REQUIRE_FALSE(bvh.empty());
+    CHECK(bvh.triangleCount() == 4);
+    CHECK(bvh.nodeCount() >= 4);
+
+    const MeshRayHit hit = bvh.raycast(Vec3(0.0, 5.0, 0.0), Vec3(0.0, -1.0, 0.0), 100.0);
+    REQUIRE(hit.hit);
+    CHECK(hit.point.y == doctest::Approx(1.0));
+    CHECK(hit.distance == doctest::Approx(4.0));
+    CHECK(hit.triangle >= 2); // one of the upper quads
+    CHECK(hit.normal.y == doctest::Approx(1.0));
+
+    // From below the same stack, the closest hit is the y = 0 quad and the
+    // normal faces the incoming ray.
+    const MeshRayHit under = bvh.raycast(Vec3(0.0, -5.0, 0.0), Vec3(0.0, 1.0, 0.0), 100.0);
+    REQUIRE(under.hit);
+    CHECK(under.point.y == doctest::Approx(0.0));
+    CHECK(under.normal.y == doctest::Approx(-1.0));
+}
+
+TEST_CASE("triangle-mesh BVH: misses, bounds and degenerate input") {
+    const Real h = 2.0;
+    TriangleMesh mesh;
+    mesh.vertices = {Vec3(-h, 0.0, -h), Vec3(h, 0.0, -h), Vec3(h, 0.0, h), Vec3(-h, 0.0, h)};
+    mesh.indices = {0, 2, 1, 0, 3, 2};
+    TriangleMeshBvh bvh;
+    bvh.build(mesh);
+
+    // A ray that stops short of the surface misses.
+    CHECK_FALSE(bvh.raycast(Vec3(0.0, 5.0, 0.0), Vec3(0.0, -1.0, 0.0), 2.0).hit);
+    // A ray outside the mesh's footprint misses.
+    CHECK_FALSE(bvh.raycast(Vec3(100.0, 5.0, 100.0), Vec3(0.0, -1.0, 0.0), 100.0).hit);
+    // A zero-length direction misses.
+    CHECK_FALSE(bvh.raycast(Vec3(0.0, 5.0, 0.0), Vec3(0.0), 100.0).hit);
+
+    // An empty (or invalid) mesh has no tree and never hits.
+    TriangleMeshBvh empty;
+    empty.build(TriangleMesh{});
+    CHECK(empty.empty());
+    CHECK(empty.nodeCount() == 0);
+    CHECK_FALSE(empty.raycast(Vec3(0.0, 5.0, 0.0), Vec3(0.0, -1.0, 0.0), 100.0).hit);
+
+    TriangleMesh broken;
+    broken.vertices = mesh.vertices;
+    broken.indices = {0, 1}; // not a multiple of three
+    TriangleMeshBvh invalid;
+    invalid.build(broken);
+    CHECK(invalid.empty());
+}
+
+TEST_CASE("triangle-mesh BVH: the tree matches a brute-force raycast") {
+    const TriangleMesh mesh = makeWaveMesh(24);
+    TriangleMeshBvh bvh;
+    bvh.build(mesh);
+    REQUIRE(bvh.triangleCount() == mesh.triangleCount());
+
+    Lcg rng;
+    int hits = 0;
+    for (int sample = 0; sample < 300; ++sample) {
+        const Vec3 origin(-15.0 + 30.0 * rng.next(), 8.0, -15.0 + 30.0 * rng.next());
+        const Vec3 direction(rng.next() - 0.5, -1.0, rng.next() - 0.5);
+
+        const MeshRayHit viaBvh = bvh.raycast(origin, direction, 200.0);
+
+        // Brute force over every triangle.
+        MeshRayHit brute;
+        for (std::size_t t = 0; t < mesh.triangleCount(); ++t) {
+            Vec3 a, b, c;
+            mesh.triangle(t, a, b, c);
+            Real distance = 0.0;
+            if (!bruteTriangle(origin, direction, a, b, c, distance)) {
+                continue;
+            }
+            if (brute.hit && distance >= brute.distance) {
+                continue;
+            }
+            brute.hit = true;
+            brute.distance = distance;
+            brute.triangle = t;
+        }
+
+        CHECK(viaBvh.hit == brute.hit);
+        if (viaBvh.hit && brute.hit) {
+            ++hits;
+            CHECK(viaBvh.distance == doctest::Approx(brute.distance).epsilon(1e-12));
+            const Vec3 expectedPoint = origin + direction * brute.distance;
+            CHECK(viaBvh.point.y == doctest::Approx(expectedPoint.y).epsilon(1e-12));
+            CHECK(viaBvh.point.x == doctest::Approx(expectedPoint.x).epsilon(1e-12));
+            // Ties are essentially impossible with random rays, so the index
+            // must agree.
+            CHECK(viaBvh.triangle == brute.triangle);
+        }
+    }
+    CHECK(hits > 250); // the rays mostly hit
+}
+
+TEST_CASE("triangle-mesh BVH: the build is deterministic") {
+    const TriangleMesh mesh = makeWaveMesh(16);
+    TriangleMeshBvh first;
+    first.build(mesh);
+    TriangleMeshBvh second;
+    second.build(mesh);
+
+    CHECK(first.nodeCount() == second.nodeCount());
+    CHECK(first.maxDepth() == second.maxDepth());
+
+    Lcg rng;
+    for (int sample = 0; sample < 50; ++sample) {
+        const Vec3 origin(-10.0 + 20.0 * rng.next(), 8.0, -10.0 + 20.0 * rng.next());
+        const Vec3 direction(rng.next() - 0.5, -1.0, rng.next() - 0.5);
+        const MeshRayHit a = first.raycast(origin, direction, 200.0);
+        const MeshRayHit b = second.raycast(origin, direction, 200.0);
+        CHECK(a.hit == b.hit);
+        CHECK(a.triangle == b.triangle);
+        CHECK(a.distance == b.distance);
     }
 }

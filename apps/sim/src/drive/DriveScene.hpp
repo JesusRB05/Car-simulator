@@ -127,7 +127,10 @@ private:
     };
 
     Track track_;
-    TrackGroundQuery ground_{track_};
+    // The wheels query this mesh (a per-triangle BVH raycast), not the analytic
+    // height field. Declared before the query, which borrows it.
+    TrackCollisionMesh trackMesh_{track_};
+    TrackMeshGroundQuery ground_{track_, trackMesh_};
     // The driver aids (ABS/TCS/ESC) attached to the car built into world_.
     // Declared before the world so it outlives the model that borrows it.
     vehicle::ElectronicControlUnit aids_{};

@@ -12,6 +12,7 @@ add_executable(sim
     src/drive/DriveScene.cpp
     src/drive/Obstacles.cpp
     src/drive/Track.cpp
+    src/drive/TrackCollisionMesh.cpp
     src/session/CarCatalog.cpp
     src/session/CarLoader.cpp
     src/session/ControlSetupWizard.cpp

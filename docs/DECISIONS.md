@@ -112,3 +112,20 @@ a prebuilt binary (FetchContent) and can be overridden with `SIM_SLANGC`.
 Shaders are written in **Slang** and compiled to SPIR-V at build time. Slang
 is a modern language with good ergonomics for passing structures between CPU
 and GPU.
+
+## The wheels query the circuit as a triangle mesh
+
+The vehicle wheels no longer sample an analytic height field: the drive scene
+builds a **collision triangle mesh** of the circuit (`TrackCollisionMesh`: the
+asphalt ribbon, the kerbs and a terrain grid, from the same road points the
+renderer draws) and the tyres raycast it through a **per-triangle BVH**
+(`physics::TriangleMeshBvh`). The material (friction, rolling resistance) still
+comes from the track, and a ray that misses the mesh falls back to the analytic
+surface, so a car that leaves the mapped area is still supported.
+
+The mesh is a discretisation of the same surface (a few centimetres and a
+fraction of a degree of the analytic one on the road), so the tuned braking and
+cornering numbers are unchanged; what changes is the *mechanism*, which is what
+lets a circuit be real mesh geometry later. The BVH is a deterministic
+median-split tree with one leaf per triangle, so the query order — and therefore
+the simulation — stays reproducible.

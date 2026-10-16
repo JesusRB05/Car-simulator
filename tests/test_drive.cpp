@@ -9,6 +9,7 @@
 
 #include "drive/Obstacles.hpp"
 #include "drive/Track.hpp"
+#include "drive/TrackCollisionMesh.hpp"
 #include "drive/TrackGroundQuery.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "vehicle/Electronics.hpp"
@@ -427,4 +428,117 @@ TEST_CASE("drive: a simple autopilot laps the circuit on the asphalt without rol
     CHECK(maxLateral < track.halfWidth());
     CHECK(minUp > 0.95);
     CHECK(topSpeed > 25.0);
+}
+
+TEST_CASE("drive: the collision mesh backs the wheel ground query") {
+    const Track track;
+    const TrackCollisionMesh mesh(track);
+    const TrackMeshGroundQuery query(track, mesh);
+
+    // The track surface is a real triangle mesh with a per-triangle BVH (many
+    // triangles, a shallow tree).
+    CHECK(mesh.bvh().triangleCount() > 5000);
+    // A binary tree with n leaves has 2n - 1 nodes.
+    CHECK(mesh.bvh().nodeCount() == 2 * mesh.bvh().triangleCount() - 1);
+    CHECK(mesh.bvh().maxDepth() < 64);
+
+    // On the asphalt the mesh surface matches the analytic one: the geometry is
+    // a few centimetres and a fraction of a degree apart (it is the same
+    // surface, made of 1 m chords and a linear cross-section), while the
+    // material (friction) is shared exactly.
+    const std::vector<TrackSample>& samples = track.samples();
+    double worstHeight = 0.0;
+    double worstDot = 1.0;
+    for (std::size_t i = 0; i < samples.size(); i += 29) {
+        const Vec3 p = samples[i].position;
+        const GroundSample analytic = track.sample(p.x, p.z);
+        const sim::vehicle::GroundSample viaMesh = query.sample(p.x, p.z);
+        worstHeight = std::max(worstHeight, std::abs(viaMesh.height - analytic.height));
+        worstDot = std::min(worstDot, glm::dot(viaMesh.normal, analytic.normal));
+        CHECK(viaMesh.friction == doctest::Approx(analytic.friction));
+    }
+    MESSAGE("mesh vs analytic on the centreline: worst |dHeight| " << worstHeight << " m, worst dot " << worstDot);
+    CHECK(worstHeight < 0.05);
+    CHECK(worstDot > 0.99);
+
+    // Off the road the terrain grid is coarser, so allow a looser angle, but the
+    // height still tracks the analytic terrain.
+    double worstGrassHeight = 0.0;
+    double worstGrassDot = 1.0;
+    int grassSamples = 0;
+    for (int i = 0; i < 20; ++i) {
+        for (int j = 0; j < 20; ++j) {
+            const double x = -150.0 + 20.0 * i;
+            const double z = -280.0 + 30.0 * j;
+            if (track.sample(x, z).surface != Surface::Grass) {
+                continue;
+            }
+            ++grassSamples;
+            const GroundSample analytic = track.sample(x, z);
+            const sim::vehicle::GroundSample viaMesh = query.sample(x, z);
+            worstGrassHeight = std::max(worstGrassHeight, std::abs(viaMesh.height - analytic.height));
+            worstGrassDot = std::min(worstGrassDot, glm::dot(viaMesh.normal, analytic.normal));
+        }
+    }
+    MESSAGE("mesh vs analytic on the grass: " << grassSamples << " points, worst |dHeight| " << worstGrassHeight
+                                              << " m, worst dot " << worstGrassDot);
+    REQUIRE(grassSamples > 20);
+    CHECK(worstGrassHeight < 0.1);
+    CHECK(worstGrassDot > 0.95);
+}
+
+namespace {
+
+// Full-throttle launch speed after `seconds`, on a given ground query.
+double launchSpeed(const sim::vehicle::IGroundQuery& ground, const Track& track, double seconds) {
+    PhysicsWorld world;
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), ground);
+    car.reset(track.startPosition(), track.startHeading());
+    sim::vehicle::VehicleInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+    const int steps = static_cast<int>(seconds / world.fixedStep);
+    for (int i = 0; i < steps; ++i) {
+        car.step(world.fixedStep);
+    }
+    return car.forwardSpeed();
+}
+
+} // namespace
+
+TEST_CASE("drive: the wheels drive on the mesh almost exactly as on the analytic ground") {
+    const Track track;
+    const TrackCollisionMesh mesh(track);
+    const TrackMeshGroundQuery meshGround(track, mesh);
+    const TrackGroundQuery analyticGround(track);
+
+    const double viaMesh = launchSpeed(meshGround, track, 4.0);
+    const double viaAnalytic = launchSpeed(analyticGround, track, 4.0);
+    MESSAGE("launch after 4 s: mesh " << viaMesh * 3.6 << " km/h, analytic " << viaAnalytic * 3.6 << " km/h");
+    REQUIRE(std::isfinite(viaMesh));
+    CHECK(viaMesh > 8.0);
+    // The mesh is a discretisation of the same surface, so the two launches must
+    // agree closely.
+    CHECK(viaMesh == doctest::Approx(viaAnalytic).epsilon(0.02));
+
+    // And the car can be braked to a stop on the mesh.
+    PhysicsWorld world;
+    sim::vehicle::VehicleModel& car =
+        sim::vehicle::VehicleModel::spawn(world, sim::vehicle::makeDefaultVehicleSetup(), meshGround);
+    car.reset(track.startPosition(), track.startHeading());
+    sim::vehicle::VehicleInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+    for (int i = 0; i < 3000; ++i) {
+        car.step(world.fixedStep);
+    }
+    sim::vehicle::VehicleInput brake;
+    brake.brake = 1.0;
+    car.setInput(brake);
+    for (int i = 0; i < 8000 && car.forwardSpeed() > 0.5; ++i) {
+        car.step(world.fixedStep);
+    }
+    CHECK(car.forwardSpeed() < 0.5);
+    REQUIRE(car.chassis().isFiniteState());
 }

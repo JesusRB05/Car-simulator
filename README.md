@@ -31,6 +31,9 @@ engine, with the differences expressed as data.
   steering with column torque (for force feedback), kart frame torsion.
 - **Brakes and driver aids**: disc brakes with a thermal model, brake bias,
   handbrake, and ABS / traction control / stability control.
+- **Ground contact**: the wheels raycast the circuit's collision triangle mesh
+  (asphalt, kerbs and terrain, indexed by a per-triangle BVH) instead of an
+  analytic height field, so a circuit can be real mesh geometry.
 
 ### Physics engine
 - Double precision, fixed 1 kHz step, deterministic bit for bit on the same
@@ -51,19 +54,21 @@ engine, with the differences expressed as data.
   sandboxed Lua scripts and a versioned C API for native plugins.
 - **Renderer**: Vulkan 1.3 with dynamic rendering, Slang shaders, debug
   drawing and an off-screen (headless) mode used for automated image tests.
-- **Tests**: around 140 test cases check the physics against analytic
-  solutions and driving manoeuvres (braking, cornering, crashes, jumps,
-  drifting, 0-100 km/h).
+- **Tests**: over 200 test cases check the physics against analytic solutions
+  and driving manoeuvres (braking, cornering, crashes, jumps, drifting,
+  0-100 km/h).
 
 ## Not there yet
 
 Being honest about the gaps helps contributors pick something useful:
 
-- Cars and tracks are still defined in code; `car.toml` and `track.toml`
-  describe them but are not loaded yet, so mods cannot add cars or tracks.
-- The wheels drive on an analytic ground, not on the track mesh.
+- Cars and tracks are described by `car.toml` and `track.toml` and loaded
+  through the virtual file system, so a data-only mod can add either, but the
+  app does not switch to a loaded car at runtime yet.
+- The collision mesh is generated from the track description; there is no
+  pipeline for an authored track mesh yet.
 - No PBR materials, shadows, real car models, sound, multiplayer or VR yet.
-- Brakes and some manoeuvre numbers still need tuning against reference data.
+- Some manoeuvre numbers still need tuning against reference data.
 
 ## Requirements
 

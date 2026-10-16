@@ -279,8 +279,15 @@ static level geometry that a regular heightfield cannot. The narrowphase is
 **sphere–mesh** (the closest triangle to the centre, brute-force over the soup)
 and **box–mesh** (each corner tested against its closest triangle, keeping the
 four deepest behind the surface, mirroring box–heightfield); outward triangle
-winding sets the inside test. Both argument orders are handled. A BVH to avoid
-the linear scan is future work.
+winding sets the inside test. Both argument orders are handled. A BVH behind the
+*contact* scan is still future work.
+
+`TriangleMeshBvh` (`physics/TriangleMeshBvh.hpp`) is the **ray** acceleration
+structure: it builds a deterministic median-split BVH with one leaf per triangle
+and answers `raycast(origin, direction, maxDistance)` with the closest hit (Möller
+–Trumbore, robust slab pruning, and the normal oriented to face the incoming
+ray). It is what lets the vehicle wheels query a circuit as mesh geometry instead
+of an analytic height field (see `docs/DRIVE.md`).
 
 ### Terrain (`physics/Heightfield.hpp`)
 
