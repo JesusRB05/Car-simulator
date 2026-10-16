@@ -225,9 +225,13 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
     const Real dfz = (fz - fz0) / fz0;
     const Real gamma = state.camber;
 
-    // Peaks with camber: the inclination reduces both peaks (load sensitivity).
-    const Real muX = (c.pDx1 + c.pDx2 * dfz) * (1.0 - c.pDx3 * gamma * gamma) * c.scaling.muX;
-    const Real muY = (c.pDy1 + c.pDy2 * dfz) * (1.0 - c.pDy3 * gamma * gamma) * c.scaling.muY;
+    // Peaks with camber: the inclination reduces both peaks (load sensitivity) and
+    // the surface friction scales them, so a low-grip surface lowers the whole
+    // curve, not just its ceiling. That is what lets a locked wheel slide at
+    // below the peak (and the ABS beat it) instead of sitting on a flat cap.
+    const Real surface = state.frictionCoefficient;
+    const Real muX = (c.pDx1 + c.pDx2 * dfz) * (1.0 - c.pDx3 * gamma * gamma) * c.scaling.muX * surface;
+    const Real muY = (c.pDy1 + c.pDy2 * dfz) * (1.0 - c.pDy3 * gamma * gamma) * c.scaling.muY * surface;
 
     // Pure-slip forces. fx0 uses the longitudinal stiffness kx; fy0 uses the
     // cornering stiffness ky (reduced by camber) and acts against the slip. The
@@ -280,10 +284,10 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
         const Real sy = (tanPeak != 0.0) ? tanAlpha / tanPeak : 0.0;
         const Real s = std::sqrt(sx * sx + sy * sy);
         if (s > 0.0) {
-            // The ellipse uses the uncambered peaks: the camber reduction is
-            // already folded into the pure-slip forces and the friction bound.
-            const Real ellipseMuX = c.pDx1 + c.pDx2 * dfz;
-            const Real ellipseMuY = c.pDy1 + c.pDy2 * dfz;
+            // The ellipse uses the uncambered peaks (the camber reduction is
+            // already folded into the pure-slip forces and the friction bound).
+            const Real ellipseMuX = (c.pDx1 + c.pDx2 * dfz) * surface;
+            const Real ellipseMuY = (c.pDy1 + c.pDy2 * dfz) * surface;
             const Real dmu = std::max(ellipseMuX, ellipseMuY) * fz;
             // Resultant shape constant chosen so the peak sits at s = 1.
             const Real cs = 1.5;
@@ -298,8 +302,9 @@ TireForces MagicFormulaTire::computeForces(const TireState& state) const {
     }
 
     // Friction-circle bound so a combined (kappa, alpha) input never asks for
-    // more grip than the peak available on this surface.
-    const Real limit = std::max(0.0, std::max(muX, muY) * state.frictionCoefficient) * fz;
+    // more grip than the peak available on this surface. The surface friction is
+    // already in muX/muY, so it is not applied again here.
+    const Real limit = std::max(0.0, std::max(muX, muY)) * fz;
     const Real magnitude = std::sqrt(fx * fx + fy * fy);
     if (magnitude > limit && magnitude > 0.0) {
         const Real scale = limit / magnitude;

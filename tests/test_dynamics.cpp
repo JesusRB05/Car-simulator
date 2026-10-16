@@ -422,5 +422,5 @@ TEST_CASE("dynamics: ABS keeps the wheels from locking and shortens the stop") {
     CHECK(skid.lockedSteps > 0);                 // the unaided car locks a wheel
     CHECK(aided.lockedSteps < skid.lockedSteps); // ABS releases it
     CHECK(aided.absActive);
-    CHECK(aided.distance <= skid.distance * 1.25 + 1.0); // and does not make it much worse
+    CHECK(aided.distance < skid.distance * 0.9); // ABS shortens the stop, not just unlocks the wheel
 }

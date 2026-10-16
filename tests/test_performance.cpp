@@ -269,9 +269,13 @@ TEST_CASE("performance: a dry stop is grip-limited and the distance scales with 
     // The brakes are sized to lock the wheels on dry asphalt, so the dry stop is
     // limited by the tyre, not the brakes: it lands within 15% of the reference
     // v^2 / (2 mu g).
-    const Real dryReference = referenceStop(1.0, 25.0);
-    CHECK(dry > dryReference * 0.85);
-    CHECK(dry < dryReference * 1.15);
+    const auto withinReference = [](Real distance, Real reference) {
+        return distance > reference * 0.85 && distance < reference * 1.15;
+    };
+    CHECK(withinReference(dry, referenceStop(1.0, 25.0)));
+    CHECK(withinReference(damp, referenceStop(0.6, 25.0)));
+    CHECK(withinReference(slippery, referenceStop(0.4, 25.0)));
+    CHECK(withinReference(ice, referenceStop(0.3, 25.0)));
     // And the distance climbs monotonically as the surface gets more slippery.
     CHECK(damp > dry);
     CHECK(slippery > damp);
