@@ -51,4 +51,21 @@ bool isKnownPermission(std::string_view permission);
 // True when `path` names a package by extension (case-insensitive).
 bool hasPackageExtension(const std::filesystem::path& path);
 
+// Caps applied before an archive is extracted, so a crafted `.simmod` cannot
+// fill the disk or exhaust memory.
+inline constexpr std::size_t kMaxPackageEntries = 20000;
+inline constexpr std::uint64_t kMaxPackageBytes = 2ull * 1024ull * 1024ull * 1024ull; // 2 GiB
+
+// True when `path` is a safe relative entry name inside a package: no absolute
+// path, no drive letter or UNC prefix, no `.`/`..` segment, no backslash or
+// NUL, no character Windows forbids and no reserved DOS device name. Every
+// archive entry is checked before it is written, so a crafted archive cannot
+// escape the destination directory or produce a file that cannot be written on
+// one of the supported platforms.
+bool isSafePackagePath(std::string_view path);
+
+// True when `path` names a native binary or a script that a package may only
+// ship inside `plugins/` (where the loader asks the user first).
+bool isNativeBinaryPath(std::string_view path);
+
 } // namespace sim::modding

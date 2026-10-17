@@ -7,6 +7,7 @@ add_library(sim_modding STATIC
     src/ModInstaller.cpp
     src/ModManager.cpp
     src/Package.cpp
+    src/Registry.cpp
     src/Version.cpp)
 add_library(sim::modding ALIAS sim_modding)
 

@@ -37,7 +37,8 @@ pushed, and a line here.
 | M1 | Package format: `.simmod`, `mod.toml` v2, layout, `base.core` | `a851ed4` | DONE |
 | M2 | Data-driven content (cars/tracks), namespaced ids, validation | `c0b60ef` | DONE |
 | M3 | Additive composition: patches, skins, parts, conflict detector | `8ddeac6` | DONE |
-| M4 | The installer: `.simmod`/folder detection, transactional install, rollback, CLI and drop-to-install | (this commit) | DONE |
+| M4 | The installer: `.simmod`/folder detection, transactional install, rollback, CLI and drop-to-install | `6d62857` | DONE |
+| M5 | Installer security: entry-name/binary validation, size caps, SHA-256 registry, fuzzing | (this commit) | DONE |
 | M4 | One-click install (`ModInstaller`, drag/drop, association, IPC) | — | TODO |
 | M5 | Installer security: zip validation, SHA-256, script permissions | — | TODO |
 | M6 | Dependencies, updates, modpacks, profiles | — | TODO |

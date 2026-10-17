@@ -5,11 +5,15 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "modding/Manifest.hpp"
 #include "modding/ModInstaller.hpp"
+#include "modding/Package.hpp"
+#include "modding/Registry.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
 using namespace sim::modding;
@@ -142,6 +146,26 @@ std::string makeZip(const std::vector<ZipEntry>& entries) {
 }
 
 } // namespace
+
+TEST_CASE("modinstaller: a package shipping a binary outside plugins/ is refused") {
+    const fs::path root = fs::temp_directory_path() / "sim_tests_installer_binary";
+    fs::remove_all(root);
+
+    sim::vfs::VirtualFileSystem vfs;
+    ModInstaller installer(vfs, root / "mods");
+
+    writeFile(root / "sneaky" / "mod.toml", manifest("ana.karts", "Karts", "1.0.0"));
+    writeFile(root / "sneaky" / "cars" / "kart" / "payload.dll", "MZ");
+    const InstallPlan refused = installer.inspect(root / "sneaky");
+    CHECK_FALSE(refused.ok);
+    CHECK_FALSE(refused.errors.empty());
+
+    writeFile(root / "honest" / "mod.toml", manifest("ana.karts", "Karts", "1.0.0"));
+    writeFile(root / "honest" / "plugins" / "ana.tools.dll", "MZ");
+    CHECK(installer.inspect(root / "honest").ok);
+
+    fs::remove_all(root);
+}
 
 TEST_CASE("modinstaller: a folder package is inspected and installed") {
     const fs::path root = fs::temp_directory_path() / "sim_tests_installer_folder";
@@ -286,6 +310,185 @@ TEST_CASE("modinstaller: an uninstallable source is rejected with a reason") {
 
     // Nothing was created by inspecting.
     CHECK_FALSE(fs::exists(root / "mods"));
+
+    fs::remove_all(root);
+}
+
+TEST_CASE("package: unsafe entry paths are rejected") {
+    CHECK(isSafePackagePath("mod.toml"));
+    CHECK(isSafePackagePath("cars/kart/car.toml"));
+    CHECK(isSafePackagePath("patches/a.toml"));
+    CHECK(isSafePackagePath("plugins/ana.tools.dll"));
+
+    CHECK_FALSE(isSafePackagePath(""));
+    CHECK_FALSE(isSafePackagePath("/etc/passwd"));
+    CHECK_FALSE(isSafePackagePath("C:/windows/system32"));
+    CHECK_FALSE(isSafePackagePath("../evil.txt"));
+    CHECK_FALSE(isSafePackagePath("a/../../evil.txt"));
+    CHECK_FALSE(isSafePackagePath("./evil.txt"));
+    CHECK_FALSE(isSafePackagePath("a\\b.txt"));
+    CHECK_FALSE(isSafePackagePath("\\\\server\\share\\x"));
+    CHECK_FALSE(isSafePackagePath(std::string("a\0b", 3)));
+    // Characters Windows cannot write, and its reserved device names.
+    CHECK_FALSE(isSafePackagePath("cars/a:b.toml"));
+    CHECK_FALSE(isSafePackagePath("cars/a|b.toml"));
+    CHECK_FALSE(isSafePackagePath("cars/a?b.toml"));
+    CHECK_FALSE(isSafePackagePath("con"));
+    CHECK_FALSE(isSafePackagePath("cars/NUL.toml"));
+    CHECK_FALSE(isSafePackagePath("cars/Com3.txt"));
+}
+
+TEST_CASE("package: native binaries are only allowed in plugins/") {
+    CHECK(isNativeBinaryPath("cars/kart/payload.dll"));
+    CHECK(isNativeBinaryPath("setup.exe"));
+    CHECK(isNativeBinaryPath("tools/run.ps1"));
+    CHECK(isNativeBinaryPath("lib/thing.so"));
+    CHECK_FALSE(isNativeBinaryPath("plugins/ana.tools.dll"));
+    CHECK_FALSE(isNativeBinaryPath("cars/kart/car.toml"));
+    CHECK_FALSE(isNativeBinaryPath("scripts/main.lua"));
+}
+
+TEST_CASE("modinstaller: an archive cannot write outside its destination") {
+    const fs::path root = fs::temp_directory_path() / "sim_tests_installer_escape";
+    fs::remove_all(root);
+    // Entry names that try to climb out of the extraction directory. Whatever
+    // PhysicsFS does with them, nothing may end up outside it.
+    const std::string archive = makeZip({{"../evil.txt", "pwned\n"},
+                                         {"cars/../../evil2.txt", "pwned\n"},
+                                         {"/abs.txt", "pwned\n"},
+                                         {"mod.toml", manifest("ana.karts", "Karts", "1.0.0")}});
+    writeFile(root / "evil.simmod", archive);
+
+    sim::vfs::VirtualFileSystem vfs;
+    ModInstaller installer(vfs, root / "mods");
+    const InstallPlan plan = installer.inspect(root / "evil.simmod");
+    MESSAGE("escape archive: ok=" << plan.ok << ", errors=" << plan.errors.size());
+    if (!plan.ok) {
+        CHECK_FALSE(plan.errors.empty());
+    }
+
+    // The security property: nothing escaped the working folder, and no mod was
+    // installed behind the user's back.
+    CHECK_FALSE(fs::exists(root / "evil.txt"));
+    CHECK_FALSE(fs::exists(root / "evil2.txt"));
+    CHECK_FALSE(fs::exists(root / "mods" / "ana.karts"));
+    std::error_code ec;
+    if (!plan.temp.empty()) {
+        fs::remove_all(plan.temp, ec);
+    }
+    fs::remove_all(root);
+}
+
+TEST_CASE("modinstaller: the registry records the digest and detects a tampered mod") {
+    const fs::path root = fs::temp_directory_path() / "sim_tests_installer_registry";
+    fs::remove_all(root);
+
+    sim::vfs::VirtualFileSystem vfs;
+    ModInstaller installer(vfs, root / "mods");
+    writeFile(root / "source" / "mod.toml", manifest("ana.karts", "Karts", "1.0.0"));
+    writeFile(root / "source" / "data.txt", "hello\n");
+
+    const InstallPlan plan = installer.inspect(root / "source");
+    REQUIRE(plan.ok);
+    CHECK(plan.digest.size() == 64);
+    // A permission-less package asks for nothing; the field is simply empty.
+    CHECK(plan.permissions.empty());
+    REQUIRE(installer.install(plan).ok);
+
+    ModRegistry registry(root / "mods" / ModInstaller::kRegistryName);
+    REQUIRE(registry.load());
+    const std::optional<RegistryEntry> entry = registry.find("ana.karts");
+    REQUIRE(entry.has_value());
+    CHECK(entry->version == "1.0.0");
+    CHECK(entry->digest == plan.digest);
+    CHECK(entry->source == (root / "source").string());
+    CHECK(registry.verify("ana.karts", root / "mods" / "ana.karts"));
+
+    // A file changed behind the installer's back no longer matches.
+    writeFile(root / "mods" / "ana.karts" / "data.txt", "tampered\n");
+    CHECK_FALSE(registry.verify("ana.karts", root / "mods" / "ana.karts"));
+
+    // Removing the mod drops its record; the digest of another mod is untouched.
+    REQUIRE(installer.remove("ana.karts").ok);
+    ModRegistry reloaded(root / "mods" / ModInstaller::kRegistryName);
+    REQUIRE(reloaded.load());
+    CHECK_FALSE(reloaded.find("ana.karts").has_value());
+
+    fs::remove_all(root);
+}
+
+TEST_CASE("modinstaller: a mod that declares permissions shows them in the plan") {
+    const fs::path root = fs::temp_directory_path() / "sim_tests_installer_permissions";
+    fs::remove_all(root);
+    writeFile(root / "source" / "mod.toml",
+              "format = 2\nid = \"ana.hud\"\nname = \"HUD\"\nversion = \"1.0.0\"\nauthors = [\"Ana\"]\n"
+              "license = \"GPL-3.0-or-later\"\ntypes = [\"apps\"]\npermissions = [\"hud\", \"telemetry.read\"]\n");
+
+    sim::vfs::VirtualFileSystem vfs;
+    ModInstaller installer(vfs, root / "mods");
+    const InstallPlan plan = installer.inspect(root / "source");
+    REQUIRE(plan.ok);
+    REQUIRE(plan.permissions.size() == 2);
+    CHECK(plan.permissions[0] == "hud");
+    // The confirmation text is what the user actually reads before clicking.
+    CHECK(plan.summary().find("hud") != std::string::npos);
+    CHECK(plan.summary().find("telemetry.read") != std::string::npos);
+
+    fs::remove_all(root);
+}
+
+TEST_CASE("installer: malformed manifests and archives never crash") {
+    const fs::path root = fs::temp_directory_path() / "sim_tests_installer_fuzz";
+    fs::remove_all(root);
+
+    sim::vfs::VirtualFileSystem vfs;
+    ModInstaller installer(vfs, root / "mods");
+
+    // A deterministic byte-level fuzz: whatever the input, the parser and the
+    // installer must return a clean error instead of crashing.
+    std::uint32_t state = 0x12345678u;
+    auto next = [&state]() {
+        state = state * 1664525u + 1013904223u;
+        return state;
+    };
+
+    const std::string base = manifest("ana.karts", "Karts", "1.0.0");
+    int accepted = 0;
+    for (int iteration = 0; iteration < 400; ++iteration) {
+        std::string text = base;
+        const int mutations = 1 + static_cast<int>(next() % 8);
+        for (int m = 0; m < mutations; ++m) {
+            text[next() % text.size()] = static_cast<char>(next() % 256);
+        }
+        const ManifestResult result = parseManifest(text, "fuzz");
+        if (result.ok()) {
+            ++accepted;
+        } else {
+            CHECK_FALSE(result.errors.empty());
+        }
+    }
+    MESSAGE("fuzz: " << accepted << " of 400 mutated manifests still parsed");
+
+    const std::string archive = makeZip({{"mod.toml", base}, {"cars/kart/car.toml", "id = \"kart\"\n"}});
+    for (int iteration = 0; iteration < 150; ++iteration) {
+        std::string mutated = archive;
+        const int mutations = 1 + static_cast<int>(next() % 16);
+        for (int m = 0; m < mutations; ++m) {
+            mutated[next() % mutated.size()] = static_cast<char>(next() % 256);
+        }
+        writeFile(root / "fuzzed.simmod", mutated);
+        const InstallPlan plan = installer.inspect(root / "fuzzed.simmod");
+        if (plan.ok) {
+            // Understood archives always install inside the mods directory.
+            CHECK(plan.target.parent_path() == root / "mods");
+        } else {
+            CHECK_FALSE(plan.errors.empty());
+        }
+        std::error_code ec;
+        if (!plan.temp.empty()) {
+            fs::remove_all(plan.temp, ec);
+        }
+    }
 
     fs::remove_all(root);
 }

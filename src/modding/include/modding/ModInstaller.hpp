@@ -35,6 +35,11 @@ struct InstallPlan {
     std::string name;
     std::string version;
     std::vector<std::string> types;
+    // Script permissions the mod declares, shown before it is installed.
+    std::vector<std::string> permissions;
+    // SHA-256 of the payload, recorded by the registry on install and shown in
+    // the confirmation screen.
+    std::string digest;
     std::filesystem::path target; // `<mods>/<id>`
     bool replacesExisting = false;
     std::string existingVersion;
@@ -62,6 +67,8 @@ public:
     // dot-prefixed entries, so neither is ever loaded as a mod.
     static constexpr std::string_view kStagingName = ".simmod-staging";
     static constexpr std::string_view kBackupName = ".simmod-backups";
+    // The installed-mod registry (ids, versions, digests and origins).
+    static constexpr std::string_view kRegistryName = ".simmod-registry.toml";
 
     ModInstaller(vfs::VirtualFileSystem& vfs, std::filesystem::path modsDirectory);
 

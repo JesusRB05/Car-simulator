@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iterator>
 #include <sstream>
@@ -14,6 +15,7 @@
 #include "core/Log.hpp"
 #include "modding/Manifest.hpp"
 #include "modding/Package.hpp"
+#include "modding/Registry.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
 namespace sim::modding {
@@ -86,7 +88,10 @@ fs::path findPackageRoot(const fs::path& start, std::vector<std::string>& warnin
     return fs::exists(current / kManifestName, ec) ? current : fs::path{};
 }
 
-// Copies every file of a mounted archive out to `destination`.
+// Copies every file of a mounted archive out to `destination`. Every entry name
+// is validated first (no absolute paths, no `..`, no drive letters) and the
+// whole extraction is bounded, so a crafted archive cannot escape the
+// destination directory, fill the disk or exhaust memory.
 bool extractArchive(vfs::VirtualFileSystem& vfs, const fs::path& asZip, const fs::path& destination,
                     std::vector<std::string>& errors) {
     const std::string mountPoint = "/__modinstall";
@@ -96,32 +101,91 @@ bool extractArchive(vfs::VirtualFileSystem& vfs, const fs::path& asZip, const fs
     }
     std::vector<std::pair<std::string, fs::path>> pending{{mountPoint, destination}};
     bool ok = true;
-    while (!pending.empty()) {
+    std::size_t entries = 0;
+    std::uint64_t totalBytes = 0;
+    while (!pending.empty() && ok) {
         auto [virtualDir, realDir] = pending.back();
         pending.pop_back();
         std::error_code ec;
         fs::create_directories(realDir, ec);
         for (const std::string& name : vfs.list(virtualDir)) {
             const std::string child = virtualDir + "/" + name;
+            const std::string relative = child.substr(mountPoint.size() + 1);
+            if (!isSafePackagePath(relative)) {
+                errors.push_back("the archive contains an unsafe path: '" + relative + "'");
+                ok = false;
+                break;
+            }
+            if (isNativeBinaryPath(relative)) {
+                errors.push_back("the archive ships '" + relative +
+                                 "'; native binaries are only allowed inside plugins/");
+                ok = false;
+                break;
+            }
             if (vfs.isDirectory(child)) {
                 pending.emplace_back(child, realDir / name);
                 continue;
             }
+            if (++entries > kMaxPackageEntries) {
+                errors.push_back("the archive has more than " + std::to_string(kMaxPackageEntries) + " files");
+                ok = false;
+                break;
+            }
             const auto bytes = vfs.readBinary(child);
             if (!bytes) {
-                errors.push_back("cannot read '" + name + "' from the archive");
+                errors.push_back("cannot read '" + relative + "' from the archive");
                 ok = false;
-                continue;
+                break;
+            }
+            totalBytes += bytes->size();
+            if (totalBytes > kMaxPackageBytes) {
+                errors.push_back("the archive is larger than " + std::to_string(kMaxPackageBytes) + " bytes");
+                ok = false;
+                break;
             }
             std::ofstream out(realDir / name, std::ios::binary);
             out.write(reinterpret_cast<const char*>(bytes->data()), static_cast<std::streamsize>(bytes->size()));
             if (!out) {
                 errors.push_back("cannot write '" + (realDir / name).string() + "'");
                 ok = false;
+                break;
             }
         }
     }
     vfs.unmount(asZip);
+    return ok;
+}
+
+// A folder source bypasses the archive walk, so the same rules are applied to
+// its files directly: no unsafe names and no native binary outside `plugins/`.
+bool checkPayloadFiles(const fs::path& payload, std::vector<std::string>& errors) {
+    std::error_code ec;
+    bool ok = true;
+    std::size_t entries = 0;
+    std::uint64_t totalBytes = 0;
+    for (const fs::recursive_directory_iterator::value_type& entry : fs::recursive_directory_iterator(payload, ec)) {
+        const std::string relative = entry.path().lexically_relative(payload).generic_string();
+        if (!isSafePackagePath(relative)) {
+            errors.push_back("the package contains an unsafe path: '" + relative + "'");
+            return false;
+        }
+        if (!entry.is_regular_file(ec)) {
+            continue;
+        }
+        if (isNativeBinaryPath(relative)) {
+            errors.push_back("the package ships '" + relative + "'; native binaries are only allowed inside plugins/");
+            ok = false;
+        }
+        if (++entries > kMaxPackageEntries) {
+            errors.push_back("the package has more than " + std::to_string(kMaxPackageEntries) + " files");
+            return false;
+        }
+        totalBytes += static_cast<std::uint64_t>(entry.file_size(ec));
+        if (totalBytes > kMaxPackageBytes) {
+            errors.push_back("the package is larger than " + std::to_string(kMaxPackageBytes) + " bytes");
+            return false;
+        }
+    }
     return ok;
 }
 
@@ -168,6 +232,15 @@ std::string InstallPlan::summary() const {
             oss << " " << type;
         }
     }
+    if (!permissions.empty()) {
+        oss << "\n  asks for:";
+        for (const std::string& permission : permissions) {
+            oss << " " << permission;
+        }
+    }
+    if (!digest.empty()) {
+        oss << "\n  sha256: " << digest;
+    }
     for (const std::string& warning : warnings) {
         oss << "\n  ~ " << warning;
     }
@@ -192,6 +265,9 @@ InstallPlan ModInstaller::inspect(const std::filesystem::path& source) const {
         plan.payload = findPackageRoot(source, plan.warnings);
         if (plan.payload.empty()) {
             plan.errors.push_back("no " + std::string(kManifestName) + " found in '" + source.string() + "'");
+            return plan;
+        }
+        if (!checkPayloadFiles(plan.payload, plan.errors)) {
             return plan;
         }
     } else if (isArchive(source)) {
@@ -244,6 +320,8 @@ InstallPlan ModInstaller::inspect(const std::filesystem::path& source) const {
     plan.name = result.manifest->name;
     plan.version = result.manifest->version.toString();
     plan.types = result.manifest->types;
+    plan.permissions = result.manifest->permissions;
+    plan.digest = payloadDigest(plan.payload);
     plan.target = mods_ / plan.modId;
     if (fs::exists(plan.target, ec)) {
         plan.replacesExisting = true;
@@ -317,6 +395,17 @@ InstallResult ModInstaller::install(const InstallPlan& plan) {
     std::error_code pruneEc;
     fs::remove(mods_ / kStagingName, pruneEc);
 
+    // Record what was installed and where it came from: the registry is the
+    // only place the origin is remembered, and the digest lets the manager
+    // notice a payload that changed behind the installer's back.
+    ModRegistry registry(mods_ / kRegistryName);
+    registry.load();
+    registry.upsert({plan.modId, plan.version, payloadDigest(target), plan.input.string()});
+    std::string registryError;
+    if (!registry.save(&registryError)) {
+        core::Log::get("modding")->warn("cannot update the mod registry: {}", registryError);
+    }
+
     result.ok = true;
     result.installed = target;
     result.backup = backup;
@@ -340,6 +429,13 @@ InstallResult ModInstaller::remove(std::string_view modId) {
         result.error = "cannot remove '" + target.string() + "': " + ec.message();
         return result;
     }
+    ModRegistry registry(mods_ / kRegistryName);
+    registry.load();
+    registry.remove(modId);
+    std::string registryError;
+    if (!registry.save(&registryError)) {
+        core::Log::get("modding")->warn("cannot update the mod registry: {}", registryError);
+    }
     result.ok = true;
     result.installed = target;
     result.backup = backup;
@@ -360,6 +456,23 @@ InstallResult ModInstaller::rollback(std::string_view modId) {
     if (ec) {
         result.error = "cannot restore '" + target.string() + "': " + ec.message();
         return result;
+    }
+    // Re-derive the record from the restored files, keeping the origin we knew.
+    ModRegistry registry(mods_ / kRegistryName);
+    registry.load();
+    const std::optional<RegistryEntry> previous = registry.find(modId);
+    std::string version;
+    std::string text;
+    if (readFile(target / kManifestName, text)) {
+        const ManifestResult manifest = parseManifest(text, target.filename().string());
+        if (manifest.ok()) {
+            version = manifest.manifest->version.toString();
+        }
+    }
+    registry.upsert({std::string(modId), version, payloadDigest(target), previous ? previous->source : std::string{}});
+    std::string registryError;
+    if (!registry.save(&registryError)) {
+        core::Log::get("modding")->warn("cannot update the mod registry: {}", registryError);
     }
     result.ok = true;
     result.installed = target;
