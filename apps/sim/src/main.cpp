@@ -91,6 +91,9 @@ int main(int argc, char** argv) {
         } else if (matches(arg, "--install-mod") && next != nullptr) {
             modCommand.install = next;
             ++i;
+        } else if (matches(arg, "--mod-updates") && next != nullptr) {
+            modCommand.updatesIndex = next;
+            ++i;
         } else if (matches(arg, "--dry-run")) {
             modCommand.dryRun = true;
         }
@@ -99,7 +102,7 @@ int main(int argc, char** argv) {
     try {
         // A mod command never creates a window: it is what a file association,
         // a `simmod://` link or an IPC hand-off ends up running.
-        if (!modCommand.install.empty()) {
+        if (!modCommand.install.empty() || !modCommand.updatesIndex.empty()) {
             return sim::app::runModCommand(modCommand);
         }
         if (runHeadless) {

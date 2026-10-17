@@ -153,8 +153,11 @@ identifiers** — only GET requests for static files. Every download is verified
 against its SHA-256 before installation.
 
 The HTTP client is isolated in `src/net` and justified in
-[DECISIONS.md](DECISIONS.md). `tools/mod-index/` holds the documented index
-format, a CI script that validates submissions, and a worked example index.
+[DECISIONS.md](DECISIONS.md). `tools/mod-index/` generates the index from a
+folder of packages. An index is a static file, so a local copy, a share or a
+USB stick work with the same code path; the ships-today transport reads
+`file://` URLs, and `https://` reports the missing transport instead of
+downgrading to the clear (docs/DECISIONS.md).
 
 The browser has **Installed / Explore / Updates** tabs, search, type filters,
 covers, install/update/uninstall, download progress and clear error states.

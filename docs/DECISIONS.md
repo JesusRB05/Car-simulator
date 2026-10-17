@@ -132,3 +132,28 @@ cornering numbers are unchanged; what changes is the *mechanism*, which is what
 lets a circuit be real mesh geometry later. The BVH is a deterministic
 median-split tree with one leaf per triangle, so the query order — and therefore
 the simulation — stays reproducible.
+
+## HTTP transport: a tiny interface, no TLS stack yet
+
+The mod catalog (docs/MODS.md section 6) is the only feature that talks to the
+network, and it is **off until the user configures an index**. Rather than pull
+a TLS stack into every build to serve one optional feature, the network layer
+is a two-method interface, `net::HttpClient`, whose only shipped implementation
+reads `file://` URLs and plain paths.
+
+That is not a limitation of the format: an index is a static file, so a local
+copy, a network share or a USB stick all work today, and `sim --mod-updates`
+against such a path is the same code path an https index would take. What is
+missing is only the wire:
+
+- `https://` requests fail with a message that says the transport is missing,
+  and are never downgraded to plain `http://`;
+- a future implementation (libcurl via vcpkg is the leading candidate; it
+  brings TLS, redirects, proxies and certificate checking that are all easy to
+  get wrong by hand) plugs into the same interface, so the catalog, the update
+  check and the verified download do not change;
+- nothing else links against `net`, so the decision stays contained.
+
+A download is verified **before** it is written: the size and the SHA-256 from
+the index must both match, and a mismatch discards the file instead of leaving
+it on disk for the user to click by accident.

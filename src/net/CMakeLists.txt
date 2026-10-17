@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Car Simulator contributors
 add_library(sim_net STATIC
+    src/HttpClient.cpp
     src/NetworkSystem.cpp)
 add_library(sim::net ALIAS sim_net)
 

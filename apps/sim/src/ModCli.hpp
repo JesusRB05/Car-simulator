@@ -12,6 +12,8 @@ namespace sim::app {
 // depend on how the user got here.
 struct ModCommandOptions {
     std::string install; // a `.simmod`, `.zip` or folder; empty means none
+    // An index (a `file://` URL or a path) to check the installed mods against.
+    std::string updatesIndex;
     bool dryRun = false; // print the plan and stop before touching the disk
 };
 
