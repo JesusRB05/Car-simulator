@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Car Simulator contributors
 add_library(sim_modding STATIC
+    src/Collection.cpp
     src/Composition.cpp
     src/DependencyResolver.cpp
     src/Manifest.cpp
     src/ModInstaller.cpp
     src/ModManager.cpp
     src/Package.cpp
+    src/Profile.cpp
     src/Registry.cpp
     src/Version.cpp)
 add_library(sim::modding ALIAS sim_modding)

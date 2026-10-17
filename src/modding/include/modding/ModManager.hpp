@@ -9,6 +9,7 @@
 
 #include "modding/DependencyResolver.hpp"
 #include "modding/Manifest.hpp"
+#include "modding/Profile.hpp"
 
 namespace sim::core {
 class Config;
@@ -62,6 +63,9 @@ public:
         // here so the official example mod still loads next to the user's own
         // mods, which are kept in the per-user data directory.
         std::vector<std::filesystem::path> extraModDirectories;
+        // Named active sets, e.g. `<userdata>/profiles.toml`. Empty disables
+        // profiles for this manager.
+        std::filesystem::path profilesFile;
     };
 
     ModManager(vfs::VirtualFileSystem& vfs, core::Config& config, Paths paths);
@@ -75,6 +79,14 @@ public:
 
     bool isActive(std::string_view id) const;
     bool setModActive(std::string_view id, bool active);
+
+    // Named sets of active mods ("profiles"). Switching a profile replaces the
+    // active set and reloads; the current set can be saved under a name, and a
+    // profile can be exported to a file and imported back.
+    const ProfileStore& profiles() const { return profiles_; }
+    bool applyProfile(std::string_view name);
+    bool saveProfile(std::string_view name);
+    bool deleteProfile(std::string_view name);
 
     // The id of the mod that provides a virtual file, used to build namespaced
     // content references (`<mod-id>/<content-id>`). Empty when the file comes
@@ -97,6 +109,7 @@ private:
     std::vector<Discovered> discovered_;
     std::vector<std::string> activeIds_;
     ModReport report_;
+    ProfileStore profiles_;
 };
 
 } // namespace sim::modding

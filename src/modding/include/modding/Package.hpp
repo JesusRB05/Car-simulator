@@ -16,6 +16,12 @@ inline constexpr std::string_view kManifestName = "mod.toml";
 // The mod id of the official content. It is a normal mod in every other way.
 inline constexpr std::string_view kBaseModId = "base.core";
 
+// A collection lists other mods next to its `mod.toml` (docs/MODS.md section 7).
+inline constexpr std::string_view kCollectionName = "collection.toml";
+
+// Named sets of active mods, kept next to the user's settings.
+inline constexpr std::string_view kProfilesFileName = "profiles.toml";
+
 // Folder names inside a package (docs/MOD_FORMAT.md section 1).
 inline constexpr std::string_view kCarsDir = "cars";
 inline constexpr std::string_view kTracksDir = "tracks";

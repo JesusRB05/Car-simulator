@@ -3,9 +3,12 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
+
+#include "modding/Collection.hpp"
 
 namespace sim::vfs {
 class VirtualFileSystem;
@@ -43,6 +46,9 @@ struct InstallPlan {
     std::filesystem::path target; // `<mods>/<id>`
     bool replacesExisting = false;
     std::string existingVersion;
+    // Set when the package is a collection: the mods it wants, to be checked
+    // against what is installed with planCollection().
+    std::optional<Collection> collection;
     std::vector<std::string> errors;
     std::vector<std::string> warnings;
 

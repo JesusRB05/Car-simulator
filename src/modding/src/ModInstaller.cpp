@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "core/Log.hpp"
+#include "modding/Collection.hpp"
 #include "modding/Manifest.hpp"
 #include "modding/Package.hpp"
 #include "modding/Registry.hpp"
@@ -238,6 +239,15 @@ std::string InstallPlan::summary() const {
             oss << " " << permission;
         }
     }
+    if (collection) {
+        oss << "\n  collection of " << collection->entries.size() << " mod(s):";
+        for (const CollectionEntry& entry : collection->entries) {
+            oss << " " << entry.modId;
+            if (entry.optional) {
+                oss << "(optional)";
+            }
+        }
+    }
     if (!digest.empty()) {
         oss << "\n  sha256: " << digest;
     }
@@ -323,6 +333,25 @@ InstallPlan ModInstaller::inspect(const std::filesystem::path& source) const {
     plan.permissions = result.manifest->permissions;
     plan.digest = payloadDigest(plan.payload);
     plan.target = mods_ / plan.modId;
+
+    // A collection is a normal mod that also lists other mods to bring along.
+    std::string collectionText;
+    if (readFile(plan.payload / kCollectionName, collectionText)) {
+        const CollectionResult parsed = parseCollection(collectionText, plan.payload.filename().string());
+        plan.warnings.insert(plan.warnings.end(), parsed.warnings.begin(), parsed.warnings.end());
+        if (parsed.ok()) {
+            plan.collection = parsed.collection;
+            const bool declaresCollection = std::any_of(plan.types.begin(), plan.types.end(),
+                                                        [](const std::string& type) { return type == "collection"; });
+            if (!declaresCollection) {
+                plan.warnings.push_back("the package lists mods in " + std::string(kCollectionName) +
+                                        " but does not declare 'collection' in types");
+            }
+        } else {
+            plan.errors.insert(plan.errors.end(), parsed.errors.begin(), parsed.errors.end());
+            return plan;
+        }
+    }
     if (fs::exists(plan.target, ec)) {
         plan.replacesExisting = true;
         plan.existingVersion = installedVersion(plan.target);

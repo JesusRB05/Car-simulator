@@ -102,7 +102,14 @@ std::string ModReport::toString() const {
 }
 
 ModManager::ModManager(vfs::VirtualFileSystem& vfs, core::Config& config, Paths paths)
-    : vfs_(vfs), config_(config), paths_(std::move(paths)) {}
+    : vfs_(vfs), config_(config), paths_(std::move(paths)), profiles_(paths_.profilesFile) {
+    if (!paths_.profilesFile.empty()) {
+        std::string error;
+        if (!profiles_.load(&error) && !error.empty()) {
+            core::Log::get("modding")->warn("cannot read profiles: {}", error);
+        }
+    }
+}
 
 void ModManager::reload() {
     activeIds_ = config_.getStringArray(kActiveKey);
@@ -297,16 +304,63 @@ bool ModManager::isActive(std::string_view id) const {
 }
 
 bool ModManager::setModActive(std::string_view id, bool active) {
-    const std::string key(id);
-    const auto it = std::find(activeIds_.begin(), activeIds_.end(), key);
+    // The requested set lives in the config, which reload() reads back: writing
+    // it there (not just in memory) is what makes the change survive reload().
+    std::vector<std::string> ids = config_.getStringArray(kActiveKey);
+    const auto it = std::find(ids.begin(), ids.end(), id);
     if (active) {
-        if (it == activeIds_.end()) {
-            activeIds_.push_back(key);
+        if (it == ids.end()) {
+            ids.emplace_back(id);
         }
-    } else if (it != activeIds_.end()) {
-        activeIds_.erase(it);
+    } else if (it != ids.end()) {
+        ids.erase(it);
+    }
+    config_.setStringArray(kActiveKey, ids);
+    config_.save();
+    reload();
+    return true;
+}
+
+bool ModManager::applyProfile(std::string_view name) {
+    const std::optional<Profile> profile = profiles_.find(name);
+    if (!profile) {
+        return false;
+    }
+    config_.setStringArray(kActiveKey, profile->mods);
+    config_.save();
+    profiles_.setLastApplied(profile->name);
+    std::string error;
+    if (!profiles_.save(&error)) {
+        core::Log::get("modding")->warn("cannot save profiles: {}", error);
     }
     reload();
+    return true;
+}
+
+bool ModManager::saveProfile(std::string_view name) {
+    if (name.empty()) {
+        return false;
+    }
+    if (!profiles_.set(Profile{std::string(name), config_.getStringArray(kActiveKey)})) {
+        return false;
+    }
+    std::string error;
+    if (!profiles_.save(&error)) {
+        core::Log::get("modding")->warn("cannot save profiles: {}", error);
+        return false;
+    }
+    return true;
+}
+
+bool ModManager::deleteProfile(std::string_view name) {
+    if (!profiles_.remove(name)) {
+        return false;
+    }
+    std::string error;
+    if (!profiles_.save(&error)) {
+        core::Log::get("modding")->warn("cannot save profiles: {}", error);
+        return false;
+    }
     return true;
 }
 

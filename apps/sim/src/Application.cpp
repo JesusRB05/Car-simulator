@@ -24,6 +24,7 @@
 #include "core/Log.hpp"
 #include "core/Version.hpp"
 #include "drive/DriveScene.hpp"
+#include "modding/Collection.hpp"
 #include "modding/Composition.hpp"
 #include "modding/ModInstaller.hpp"
 #include "modding/Package.hpp"
@@ -154,6 +155,7 @@ bool Application::initialise() {
     // The bundled `mods/` folder (the example mod, hand-installed mods) is still
     // scanned, below the user's own directory.
     modPaths.extraModDirectories.push_back(rootDirectory_ / "mods");
+    modPaths.profilesFile = rootDirectory_ / "userdata" / modding::kProfilesFileName;
     log->info("mods directory: {}", modPaths.modsDirectory.string());
     exeDir_ = exeDir;
     installer_ = std::make_unique<modding::ModInstaller>(*vfs_, modPaths.modsDirectory);
@@ -792,6 +794,17 @@ void Application::updateModInstall() {
     pendingDrops_.erase(pendingDrops_.begin());
     auto plan = std::make_unique<modding::InstallPlan>(installer_->inspect(source));
     installSummary_ = plan->summary();
+    if (plan->collection) {
+        // What the pack still needs, checked against what is installed, so the
+        // user sees the whole picture before confirming.
+        std::vector<modding::InstalledMod> installed;
+        for (const modding::ModStatus& mod : mods_->report().mods) {
+            installed.push_back({mod.id, mod.version});
+        }
+        for (const std::string& line : modding::planCollection(*plan->collection, installed).messages()) {
+            installSummary_ += "\n  ! " + line;
+        }
+    }
     pendingInstall_ = std::move(plan);
 }
 
