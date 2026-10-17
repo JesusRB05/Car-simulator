@@ -1,144 +1,227 @@
 # Mod system
 
-The engine is designed to be moddable. Mods **do not change the binary**: they
-are mounted on the virtual file system (VFS) and can optionally add Lua scripts
-or native plugins.
+Goal: **the easiest simulator to install and to create mods for.** One file,
+one click, a manager inside the game, and content that is *added* rather than
+overwritten.
 
-## Where a mod lives
+We take the best of the field and avoid its mistakes:
 
+- **BeamNG.drive** — one archive, one click, an in-game manager, and *parts*
+  that plug into a vehicle without replacing its files.
+- **Assetto Corsa + Content Manager** — folders per content type, skins that
+  live inside the car, drag-any-file installation, and downloading a server's
+  content when you join.
+- **rFactor 2** — championship packs and per-component versions.
+
+Mistakes we refuse to copy: files that clobber each other, no versions or
+dependencies, encrypted data, mandatory external tools, and several
+installation paths that disagree.
+
+The formats are in [MOD_FORMAT.md](MOD_FORMAT.md); a step-by-step creator
+tutorial is in [MODDING_GUIDE.md](MODDING_GUIDE.md).
+
+## 1. Concepts
+
+- **Package** — a mod is one `.simmod` file (a ZIP) or the same tree as a
+  folder. The extension is a single constant in the code so it can be renamed.
+- **Manifest** — `mod.toml` v2: namespaced `id` (`author.name`), name, semver
+  `version`, `authors`, SPDX `license`, `description`, `cover`,
+  `min_game_version`, `types`, `dependencies`, `conflicts`, `permissions`,
+  `urls` and `format = 2`. v1 manifests are migrated in memory with a warning.
+- **Content reference** — `<mod-id>/<content-id>`, always. The official content
+  is the mod **`base.core`** and is described by the very same format.
+- **Additive composition** — skins, parts, setups, tyres, weather, locales, apps
+  and modes are merged by id; nothing is copied and nothing is replaced unless
+  the mod explicitly declares an override.
+- **Patches** — small, targeted changes (`set`/`add`/`multiply`/`remove`) with a
+  mandatory `target`; never a silent whole-file replacement.
+- **Profiles** — named sets of active mods and their load order, to switch a
+  league setup in one click and to share it as a small file.
+
+## 2. Layout
+
+The package layout and every descriptor are specified in
+[MOD_FORMAT.md](MOD_FORMAT.md): `mod.toml`, `cars/`, `tracks/` (`layouts/`),
+`skins/<car>/`, `parts/`, `tyres/`, `sounds/`, `setups/`, `weather/`, `apps/`,
+`modes/`, `visuals/`, `locale/`, `input/`, `plugins/`, `patches/`.
+
+The old `content/base` becomes the mod `base.core` with exactly this layout.
+
+## 3. What a mod can do without copying anything
+
+- **Skins** — `skins/<car-mod>/<car>/<skin>/` shows up in the skin selector of a
+  car made by *any* mod.
+- **Parts and slots** — a car declares `slots` (wheels, tyre, wing, engine,
+  exhaust, suspension, gear ratios, ...) and a default per slot; a mod adds a
+  part to a slot of another mod's car by dropping a `part.toml`. Setups choose
+  one part per slot.
+- **Patches** — targeted edits of another mod's values, applied in load order.
+- **Overrides** — a whole-file replacement only when declared under
+  `overrides` in `mod.toml`; the manager shows it as a warning.
+
+### Conflict detector
+
+Two mods that patch the same `(target, path)` or override the same file are
+reported with the **effective order** (who wins today). The user reorders mods
+by drag-and-drop; the order is the tie-break and is saved in the active
+profile.
+
+## 4. One-click installation
+
+There is exactly **one** code path — `ModInstaller` — and several ways to reach
+it:
+
+1. **Drag a file onto the window** (SDL file drop).
+2. **Double-click a `.simmod`** (optional per-user file association, no admin
+   rights). If the game is already running, the second process forwards the
+   file to the first over a local IPC channel and exits.
+3. **A button in the in-game browser** (section 6).
+4. **A `simmod://install?id=…&version=…` link** (optional URL-scheme
+   registration; always asks for confirmation).
+5. **Copy into the user mods folder** — detected at start-up and while running.
+
+### Smart detection
+
+If the dropped file is a ZIP **without** `mod.toml`, the installer analyses it:
+when it recognises the structure (a folder with a `car.toml`, or a loose
+skin), it offers to create the manifest and wrap it into a proper package;
+otherwise it explains exactly what is missing.
+
+### Where mods live
+
+Mods are installed in the **user data directory** — never in the game folder:
+
+- Windows: `%LOCALAPPDATA%/Car Simulator/mods/`
+- Linux: `$XDG_DATA_HOME/car-simulator/mods/` (or `~/.local/share/…`)
+- Configurable via `[mods] directory = "..."`.
+
+Each mod is stored **packaged** and **per version**; the current and the
+previous version are kept so the user can roll back.
+
+### Confirmation screen
+
+Before installing: cover, name, author, version, license, size, what it
+contains ("2 cars, 14 skins"), the dependencies that will be installed with it,
+the script permissions it requests, and — if it ships native plugins — a strong
+warning. **Native plugins are never enabled automatically.**
+
+Uninstall and disable live in the manager; uninstall removes every file and
+registry entry it created.
+
+## 5. Installer security
+
+Validated **before** anything is extracted or mounted:
+
+- no `..`, no absolute paths, no drive letters or UNC in entry names;
+- total size, per-file size, entry count and compression-ratio ceilings (ZIP
+  bomb);
+- per-folder allowed extensions (executables only inside `plugins/`);
+- names that are valid on Windows **and** Linux (no reserved names, no `<>:"|?*`).
+
+Every installed package's SHA-256 is stored in the local registry.
+
+### Script permissions
+
+Scripts declare what they need in `mod.toml` (`permissions = [...]`), for
+example `hud`, `telemetry.read`, `input.read`, `vehicle.tuning`,
+`session.control`. The Lua API exposes **only** what is declared. A script has
+**no** network, **no** filesystem outside the read-only VFS of its own mod, and
+**no** access to other mods except its declared dependencies. A request for an
+undeclared capability is denied and logged.
+
+The `mod.toml` parser and the ZIP validator are fuzzed (wired into the CI
+security job).
+
+## 6. Catalog (in-game mod browser)
+
+Source: an **open static index** (a JSON/TOML file served over HTTPS, for
+example a GitHub `mod-index` repository) with one entry per version: id,
+version, download URL, SHA-256, size, cover, types, dependencies, license.
+The files themselves can be hosted anywhere (GitHub Releases, the author's
+site). Several sources can be configured.
+
+Privacy: the catalog is **off by default**; turning it on explains what is
+downloaded. There are **no accounts, no telemetry, no cookies and no
+identifiers** — only GET requests for static files. Every download is verified
+against its SHA-256 before installation.
+
+The HTTP client is isolated in `src/net` and justified in
+[DECISIONS.md](DECISIONS.md). `tools/mod-index/` holds the documented index
+format, a CI script that validates submissions, and a worked example index.
+
+The browser has **Installed / Explore / Updates** tabs, search, type filters,
+covers, install/update/uninstall, download progress and clear error states.
+
+## 7. Dependencies, updates and profiles
+
+- semver ranges are resolved when mods are enabled; missing dependencies are
+  offered for installation (from the catalog when configured).
+- **Collections** (modpacks/championships) are a mod that only lists other mods
+  (with exact versions or ranges) and can carry a session configuration.
+  Installing one installs all of them.
+- Update checks are manual by default (automatic optional), show the changelog
+  and offer a rollback to the previous version.
+- **Profiles** switch a named active set + order in one click, and export/import
+  as a small file.
+
+## 8. Multiplayer-ready content
+
+No game networking is implemented yet. What exists is the **format** and the
+comparison so a future session can reject mismatches early:
+
+- a deterministic **content fingerprint** per active mod that affects the
+  simulation (cars, circuits, physics-affecting patches);
+- a `RequiredContent` message (`id`, `version`, `hash`, optional `url`);
+- a comparator that reports `missing`, `version-mismatch` and `hash-mismatch`
+  with one-click download+install.
+
+**Skins do not require a match.**
+
+## 9. Creator tools
+
+A single CLI lives in `sim.exe`:
+
+```bat
+sim mod new car ana.karts/kart                 # scaffold, commented
+sim mod new car ana.karts/kart --from base.core/voyager
+sim mod validate mods/examples/kart            # CI-friendly, exit code
+sim mod pack mods/examples/kart                # .simmod + sha256 + index entry
+sim mod list | install | remove | enable | disable
+sim mod skin-template base.core/voyager        # UV template PNG with guides
 ```
-mods/
-  my_mod/
-    mod.toml            <- required manifest
-    scripts/main.lua    <- optional (entry_script)
-    cars/<id>/car.toml  <- optional; adds a car
-    tracks/<id>/track.toml  <- optional; adds a circuit
-    ...                 <- any other content (textures, meshes, data)
-```
 
-A mod can add a **car** or a **track** with a descriptor only: the catalogs scan
-the VFS at start-up and list everything they find, so `cars/<id>/car.toml` and
-`tracks/<id>/track.toml` show up next to the official ones. See
-[CONTENT.md](CONTENT.md) for the schema.
+- **Developer mode** — an unpacked mods folder with hot reload when
+  `car.toml`, `track.toml`, a skin or a script is saved (no session restart
+  when it is safe).
+- **JSON schemas** for `mod.toml`, `car.toml`, `track.toml`, `livery.toml`,
+  `part.toml`, `setup.toml`, `patches` and the index, in `docs/schemas/`, so
+  Taplo and *Even Better TOML* autocomplete and validate in the editor.
 
-A mod can be a **directory** or a **`.zip`**. The manager scans `mods/`, and
-every entry is a mod candidate. The official content (`content/base`) is, as
-far as the system is concerned, just another mod (the "base" one), always
-present and with the lowest priority.
+## 10. In-game manager
 
-`ModManager`:
+- Installed list: cover, type, version, author, origin, state (active, disabled,
+  error, update available), conflicts and a load-order control.
+- **Human errors**, technical detail collapsible: *"The skin 'Rojo' needs the
+  car 'pepe.f3', which is not installed. [Install] [Disable]"*.
+- Car and track selection shows a label with the source mod.
 
-1. Discovers candidates (base content first, then the mods sorted by name).
-2. Reads and validates each `mod.toml`.
-3. Resolves dependencies and computes the load order.
-4. Unmounts the whole VFS and mounts the base content and, on top of it, the
-   active mods.
-5. Persists the list of active mods and produces a report.
+## 11. Example mods
 
-An invalid mod **never** aborts start-up: it is marked `Invalid` with a clear
-message and the rest keep loading.
+`mods/examples/` is built with `mod pack` during the build and validated in CI:
+a data-only front-wheel-drive car with 2 skins; a skin pack for the Voyager by
+another author; a part for the Voyager added by slot; a setup patch (stiffer
+springs); a Lua HUD app with declared permissions; a small circuit with two
+layouts; and an example championship collection that lists them.
 
-## `mod.toml`
+The old `mods/example_mod` is migrated into this set.
 
-```toml
-id = "my_mod"                 # required, unique
-name = "My Mod"               # required
-version = "1.0.0"             # required, semver (x.y.z)
-author = "Your name"          # optional
-license = "CC BY-SA 4.0"      # required
-description = "What it does"  # optional
-min_game_version = "0.1.0"    # optional; semver or "*"
-entry_script = "scripts/main.lua"  # optional
-priority = 10                 # optional; higher = mounted further up
-dependencies = [
-    "other_mod",
-    "library >=1.2.0",
-    "^other_lib 1.4.0",
-]
-```
+## 12. How a mod is born (short version)
 
-### Fields
+1. `sim mod new car ana.karts/kart` (or `--from base.core/voyager`).
+2. Edit `cars/kart/car.toml`; add `skins/<car>/<skin>/livery.toml`.
+3. `sim mod validate .` until it is clean.
+4. `sim mod pack .` → `ana.karts-1.0.0.simmod`.
+5. Publish the file anywhere; open a pull request to a `mod-index` with its
+   entry. Players install it by dropping it on the window or from the browser.
 
-| Field | Required | Notes |
-|---|---|---|
-| `id` | Yes | lowercase letters, digits, `-` and `_`, starting with a letter |
-| `name` | Yes | Display name |
-| `version` | Yes | Valid semver (`major.minor.patch[-prerelease]`) |
-| `license` | Yes | SPDX or descriptive string |
-| `author` | No | |
-| `description` | No | |
-| `min_game_version` | No | Semver or `"*"`. If it cannot be parsed, the mod is invalid |
-| `entry_script` | No | Path inside the mod to an entry Lua script |
-| `priority` | No | Integer; **higher priority ⇒ mounted further up** (overrides) |
-| `dependencies` | No | List of `"id"` or `"id <version range>"` |
-
-### Dependencies
-
-They are **strings**, not tables. Each entry is an `id` optionally followed by
-a space and a version range:
-
-```toml
-dependencies = ["base", "wheels >=2.0.0 <3.0.0"]
-```
-
-`resolveMods` (in `DependencyResolver`) builds a **topological, stable** load
-order: a mod always comes after its dependencies. Dependencies of the
-requested mods are activated automatically. The following are detected and
-reported:
-
-- missing dependencies,
-- unsatisfied version ranges,
-- cycles,
-- duplicate ids between two mods (conflict).
-
-Mods affected by an error are disabled; the rest load anyway.
-
-## Version ranges
-
-Syntax supported by `satisfies()` (all comparators are combined with AND;
-alternatives are separated with `||`):
-
-| Range | Meaning |
-|---|---|
-| `*` | Any version |
-| `1.2.3`, `=1.2.3` | Exact match |
-| `1.2`, `1` | Prefix match |
-| `>=1.2.0`, `>1.2.0` | Comparison |
-| `<=1.2.0`, `<1.2.0` | Comparison |
-| `^1.2.3` | `>=1.2.3` and `<2.0.0` (following the `0.x` rule) |
-| `~1.2.3`, `~1.2` | `>=1.2.3` and `<1.3.0` |
-| `>=1.0.0 <2.0.0` | Several comparators |
-
-Semver *build metadata* (`+something`) is ignored in comparisons.
-
-## Priority and overriding
-
-All mods (and the base content) are mounted at the **same virtual point**
-(`/`). The mount priority determines which one wins when two mods have the
-same path:
-
-```
-base (always, the lowest)
-  → active mods with priority = 0 ...
-  → active mods with higher priority (on top)
-```
-
-Because a higher-priority mod is mounted **later**, its files override those
-of lower priority. A mod can, for example, replace a texture of the base
-content without touching the engine at all.
-
-## Enabling and disabling mods
-
-Active mods are stored in the user configuration, under the `mods.active` key
-(a list of ids). The base content is always requested, whether or not it is in
-the list.
-
-`ModManager::setModActive(id, active)` updates the list and reloads. The
-configuration is saved automatically after every `reload()`.
-
-## Report
-
-`ModReport` (available through `ModManager::report()`) describes every
-discovered mod with its state (`Active`, `Disabled`, `Invalid`), dependencies
-and errors, plus a list of messages (conflicts, cycles, ...). `toString()`
-returns a readable summary that the engine writes to the log.
+See [MODDING_GUIDE.md](MODDING_GUIDE.md) for the walk-through.
