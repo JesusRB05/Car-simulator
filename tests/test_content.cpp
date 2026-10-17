@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "drive/Track.hpp"
+#include "modding/Composition.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "session/CarCatalog.hpp"
 #include "session/CarLoader.hpp"
@@ -137,6 +138,35 @@ TEST_CASE("content: the catalog resolves namespaced references and rejects ambig
     REQUIRE(tracks.find("base.core/sunset_circuit") != nullptr);
     CHECK(tracks.find("base.core/sunset_circuit")->modId == "base.core");
     CHECK(tracks.find("missing") == nullptr);
+}
+
+TEST_CASE("content: a patch changes a car without copying its file") {
+    sim::vfs::VirtualFileSystem vfs;
+    REQUIRE(vfs.mount(sourceDir() / "content" / "base"));
+    const sim::app::ContentOwner owner = [](std::string_view) { return std::string("base.core"); };
+
+    // Without the patch: the descriptor's own mass.
+    const sim::app::CarLoadResult plain = sim::app::loadCars(vfs, owner);
+    REQUIRE(plain.errors.empty());
+    REQUIRE(plain.cars.size() == 1);
+    const double stock = plain.cars[0].massKg;
+
+    // A patch adds 100 kg to the car, leaving its file untouched.
+    std::string error;
+    const auto patch = sim::modding::parsePatchText(
+        "target = \"base.core/voyager\"\n[[patch]]\npath = \"chassis.mass\"\nop = \"add\"\nvalue = 100.0\n",
+        "patches/heavy.toml", "ana.tune", error);
+    REQUIRE(patch.has_value());
+    sim::modding::Composition composition;
+    composition.patches.push_back(*patch);
+
+    const sim::app::CarLoadResult patched = sim::app::loadCars(vfs, owner, &composition);
+    for (const std::string& message : patched.errors) {
+        MESSAGE("patched car error: " << message);
+    }
+    REQUIRE(patched.errors.empty());
+    REQUIRE(patched.cars.size() == 1);
+    CHECK(patched.cars[0].massKg == doctest::Approx(stock + 100.0));
 }
 
 TEST_CASE("content: a car discovered in a mod loads and drives") {

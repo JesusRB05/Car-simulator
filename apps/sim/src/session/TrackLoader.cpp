@@ -10,6 +10,7 @@
 #include <toml++/toml.hpp>
 
 #include "drive/Track.hpp"
+#include "modding/Composition.hpp"
 #include "modding/Package.hpp"
 #include "session/ContentToml.hpp"
 #include "vfs/VirtualFileSystem.hpp"
@@ -204,7 +205,19 @@ std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view 
     return spec;
 }
 
-TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner) {
+// Same as parseTrackSpec, on an already-parsed table (so patches can be applied
+// to it first).
+std::optional<TrackSpec> parseTrackSpecTable(const toml::table& root, std::string_view sourcePath, std::string& error) {
+    ParseContext context{std::string(sourcePath), {}};
+    std::optional<TrackSpec> spec = parseTrackSpecImpl(root, context);
+    if (!spec) {
+        error = context.joined();
+    }
+    return spec;
+}
+
+TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner,
+                           const modding::Composition* composition) {
     TrackLoadResult result;
     const std::string root(modding::kTracksDir);
 
@@ -224,11 +237,29 @@ TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, const ContentOwner
             result.errors.push_back(path + ": cannot read the descriptor");
             continue;
         }
+
+        const std::string modId = owner ? owner(path) : std::string{};
+        const std::string ref = modId.empty() ? entry : modId + "/" + entry;
+        const bool patched = composition != nullptr && !composition->patchesFor(ref).empty();
+
         std::string error;
-        if (auto spec = parseTrackSpec(*text, path, error)) {
-            if (owner) {
-                spec->modId = owner(path);
+        std::optional<TrackSpec> spec;
+        if (patched) {
+            toml::table table;
+            try {
+                table = toml::parse(*text, path);
+            } catch (const toml::parse_error& parseError) {
+                result.errors.push_back(path + ": " + std::string(parseError.description()));
+                continue;
             }
+            modding::applyPatches(composition->patchesFor(ref), table, &result.errors);
+            spec = parseTrackSpecTable(table, path, error);
+        } else {
+            spec = parseTrackSpec(*text, path, error);
+        }
+
+        if (spec) {
+            spec->modId = modId;
             result.tracks.push_back(std::move(*spec));
         } else {
             result.errors.push_back(std::move(error));

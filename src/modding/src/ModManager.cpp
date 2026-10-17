@@ -163,6 +163,7 @@ void ModManager::discover() {
                     discovered.status.types = result.manifest->types;
                     discovered.status.warnings = result.warnings;
                     discovered.status.migratedFromV1 = result.manifest->migratedFromV1;
+                    discovered.status.overrides = result.manifest->overrides;
                     if (discovered.status.types.empty()) {
                         discovered.status.types = inferTypes(vfs_, mountPoint);
                     }

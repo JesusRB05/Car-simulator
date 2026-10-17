@@ -302,7 +302,11 @@ whose `car` cannot be resolved is reported as a non-fatal error in the manager
 ### 5.4 `parts/<car-mod>/<car>/<slot>/<part>.toml`
 
 A part fills a slot of a car of any mod. Parts are additive; adding one never
-touches the car's own files.
+touches the car's own files. The folder mirrors the reference
+`<car-mod>/<car>/<slot>/<part>`, so a part is filed under the car it belongs to;
+the mod that actually ships it is recorded and shown in the manager. Two mods
+filing the **same** reference are reported as a conflict by the conflict
+detector (M3).
 
 ```toml
 id = "gt_wing"
@@ -328,7 +332,7 @@ name = "Qualifying"
 car = "base.core/voyager"
 
 [parts]
-rear_wing = "ana.aero/voyager/rear_wing/gt_wing"
+rear_wing = "base.core/voyager/rear_wing/gt_wing"
 tyre = "base.core/voyager/tyre/slick"
 
 [values]

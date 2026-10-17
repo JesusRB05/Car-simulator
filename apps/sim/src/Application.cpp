@@ -23,6 +23,7 @@
 #include "core/Log.hpp"
 #include "core/Version.hpp"
 #include "drive/DriveScene.hpp"
+#include "modding/Composition.hpp"
 #include "modding/Package.hpp"
 #include "session/CarCatalog.hpp"
 #include "session/GarageScene.hpp"
@@ -159,8 +160,27 @@ bool Application::initialise() {
     // each descriptor its namespaced reference (`<mod-id>/<content-id>`). A
     // descriptor that fails validation is logged and skipped.
     const ContentOwner owner = [this](std::string_view path) { return mods_->modIdFor(path); };
-    CarCatalog::instance().reload(*vfs_, owner);
-    TrackCatalog::instance().reload(*vfs_, owner);
+
+    // Additive composition: the patches, skins and parts every mod adds without
+    // copying anything, plus the conflicts between mods. Loaded before the
+    // catalogs so a patch is applied to its target before validation.
+    modding::Composition composition = modding::loadComposition(*vfs_, owner);
+    std::vector<std::pair<std::string, std::string>> overrides;
+    for (const modding::ModStatus& mod : mods_->report().mods) {
+        for (const std::string& path : mod.overrides) {
+            overrides.emplace_back(mod.id, path);
+        }
+    }
+    modding::detectConflicts(composition, overrides);
+    for (const std::string& error : composition.errors) {
+        log->warn("composition: {}", error);
+    }
+    for (const modding::CompositionConflict& conflict : composition.conflicts) {
+        log->warn("mod conflict: {}", conflict.message);
+    }
+
+    CarCatalog::instance().reload(*vfs_, owner, &composition);
+    TrackCatalog::instance().reload(*vfs_, owner, &composition);
 
     net_ = std::make_unique<net::NetworkSystem>();
     net_->start(0);

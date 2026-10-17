@@ -8,6 +8,7 @@
 
 #include <toml++/toml.hpp>
 
+#include "modding/Composition.hpp"
 #include "modding/Package.hpp"
 #include "session/ContentToml.hpp"
 #include "vehicle/VehicleModel.hpp"
@@ -267,7 +268,19 @@ std::optional<CarSpec> parseCarSpec(std::string_view text, std::string_view sour
     return car;
 }
 
-CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner) {
+// Same as parseCarSpec, on an already-parsed table (so patches can be applied
+// to it first).
+std::optional<CarSpec> parseCarSpecTable(const toml::table& root, std::string_view sourcePath, std::string& error) {
+    ParseContext context{std::string(sourcePath), {}};
+    std::optional<CarSpec> car = parseCarSpecImpl(root, context);
+    if (!car) {
+        error = context.joined();
+    }
+    return car;
+}
+
+CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner,
+                       const modding::Composition* composition) {
     CarLoadResult result;
     const std::string root(modding::kCarsDir);
 
@@ -287,11 +300,29 @@ CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, const ContentOwner& ow
             result.errors.push_back(path + ": cannot read the descriptor");
             continue;
         }
+
+        const std::string modId = owner ? owner(path) : std::string{};
+        const std::string ref = modId.empty() ? entry : modId + "/" + entry;
+        const bool patched = composition != nullptr && !composition->patchesFor(ref).empty();
+
         std::string error;
-        if (auto car = parseCarSpec(*text, path, error)) {
-            if (owner) {
-                car->modId = owner(path);
+        std::optional<CarSpec> car;
+        if (patched) {
+            toml::table table;
+            try {
+                table = toml::parse(*text, path);
+            } catch (const toml::parse_error& parseError) {
+                result.errors.push_back(path + ": " + std::string(parseError.description()));
+                continue;
             }
+            modding::applyPatches(composition->patchesFor(ref), table, &result.errors);
+            car = parseCarSpecTable(table, path, error);
+        } else {
+            car = parseCarSpec(*text, path, error);
+        }
+
+        if (car) {
+            car->modId = modId;
             result.cars.push_back(std::move(*car));
         } else {
             result.errors.push_back(std::move(error));

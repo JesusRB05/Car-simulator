@@ -34,6 +34,9 @@ struct ModStatus {
     ModState state = ModState::Disabled;
     std::vector<std::string> types;
     std::vector<std::string> dependencies;
+    // Whole files this mod declares it replaces (`overrides` in mod.toml), used
+    // by the conflict detector.
+    std::vector<std::string> overrides;
     std::vector<std::string> errors;
     std::vector<std::string> warnings;
     bool migratedFromV1 = false;

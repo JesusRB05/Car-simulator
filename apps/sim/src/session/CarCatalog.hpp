@@ -10,6 +10,10 @@
 #include "session/ContentOwner.hpp"
 #include "vehicle/VehicleModel.hpp"
 
+namespace sim::modding {
+struct Composition;
+}
+
 namespace sim::vfs {
 class VirtualFileSystem;
 }
@@ -68,8 +72,10 @@ public:
     static CarCatalog& instance();
 
     // Rescans the VFS. Called once at start-up after the mods are mounted.
-    // `owner` resolves which mod provides each descriptor (see ContentOwner).
-    void reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner = {});
+    // `owner` resolves which mod provides each descriptor (see ContentOwner);
+    // `composition` supplies the patches to apply before a car is validated.
+    void reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner = {},
+                const modding::Composition* composition = nullptr);
 
     const std::vector<CarSpec>& cars() const { return cars_; }
 

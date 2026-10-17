@@ -5,6 +5,7 @@ add_executable(sim_tests
     test_collision.cpp
     test_core.cpp
     test_modding.cpp
+    test_composition.cpp
     test_physics.cpp
     test_render_math.cpp
     test_scripting.cpp

@@ -17,8 +17,9 @@ TrackCatalog& TrackCatalog::instance() {
     return catalog;
 }
 
-void TrackCatalog::reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner) {
-    TrackLoadResult result = loadTracks(vfs, owner);
+void TrackCatalog::reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner,
+                          const modding::Composition* composition) {
+    TrackLoadResult result = loadTracks(vfs, owner, composition);
 
     errors_ = std::move(result.errors);
     for (const std::string& error : errors_) {

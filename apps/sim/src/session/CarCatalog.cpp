@@ -17,8 +17,9 @@ CarCatalog& CarCatalog::instance() {
     return catalog;
 }
 
-void CarCatalog::reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner) {
-    CarLoadResult result = loadCars(vfs, owner);
+void CarCatalog::reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner,
+                        const modding::Composition* composition) {
+    CarLoadResult result = loadCars(vfs, owner, composition);
 
     errors_ = std::move(result.errors);
     for (const std::string& error : errors_) {

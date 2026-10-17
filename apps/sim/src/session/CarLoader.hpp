@@ -11,6 +11,10 @@
 #include "session/CarCatalog.hpp"
 #include "session/ContentOwner.hpp"
 
+namespace sim::modding {
+struct Composition;
+}
+
 namespace sim::vfs {
 class VirtualFileSystem;
 }
@@ -37,8 +41,11 @@ std::optional<CarSpec> parseCarSpec(std::string_view text, std::string_view sour
 
 // Loads every `cars/<id>/car.toml` reachable through the VFS (official content
 // and mods alike). The optional `owner` gives each car its owning mod so its
-// content reference is `<mod-id>/<id>`. Cars are returned sorted by reference.
-// Invalid cars are skipped with an error; the rest still load.
-CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner = {});
+// content reference is `<mod-id>/<id>`. When `composition` is given, any patch
+// targeting a car's reference is applied to its descriptor before validation.
+// Cars are returned sorted by reference. Invalid cars are skipped with an error;
+// the rest still load.
+CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner = {},
+                       const modding::Composition* composition = nullptr);
 
 } // namespace sim::app
