@@ -4,11 +4,11 @@
 
 ```
 content/
-  base/                 <- official content (CC BY-SA 4.0)
+  base/                 <- official content (CC BY-SA 4.0), the mod `base.core`
     mod.toml
     README.txt
     LICENSE.txt
-    scripts/main.lua
+    apps/main.lua
     tracks/<id>/        <- track descriptor (track.toml) + model/
     cars/<id>/          <- car descriptor (car.toml) + model/
 mods/                   <- user mods (scanned at start-up)
@@ -27,18 +27,18 @@ sim.read("/README.txt")   -- reads content/base/README.txt
 
 ## Base content
 
-As far as the system is concerned, `content/base` is the `base` mod: always
-present and with the lowest priority. Any mod can **override** its files by
-being mounted on top of it.
+As far as the system is concerned, `content/base` is the mod `base.core`:
+always present and with the lowest priority. Any mod can **override** its files
+by being mounted on top of it.
 
 Current content:
 
 | File | Description |
 |---|---|
-| `mod.toml` | Base content manifest (id `base`, version `0.1.0`) |
+| `mod.toml` | Base content manifest (format 2, id `base.core`, version `0.1.0`) |
 | `README.txt` | Description of the content tree |
 | `LICENSE.txt` | CC BY-SA 4.0 notice and reference to the root license |
-| `scripts/main.lua` | Entry script; only logs a load message |
+| `apps/main.lua` | Entry application; only logs a load message |
 | `tracks/sunset_circuit/` | Track descriptor (`track.toml`) and a placeholder model |
 | `cars/voyager/` | Car descriptor (`car.toml`) and a placeholder model |
 
@@ -51,8 +51,9 @@ Both descriptors are **real**: at start-up the game scans the VFS for
 `cars/<id>/car.toml` and `tracks/<id>/track.toml`, validates every value and
 builds the physics from them (see [Data-driven cars and tracks](#data-driven-cars-and-tracks)).
 Mods are mounted on top of the base content, so a mod can add a car or a track
-with nothing but a descriptor, or override an official one. If no descriptor
-loads, the compiled-in Voyager car and Sunset Circuit are used as a fallback.
+with nothing but a descriptor, or override an official one. There is **no
+compiled-in car or circuit**: official content is data (`base.core/voyager`,
+`base.core/sunset_circuit`) like any other.
 
 Compiled *shaders* (`shaders/*.spv`) are **not** here: the build generates the
 SPIR-V next to the executable and the application mounts that directory after
@@ -63,9 +64,11 @@ loading the mods, so that mods cannot shadow it.
 The loaders (`apps/sim/src/session/CarLoader.cpp` and `TrackLoader.cpp`) read
 every descriptor through the VFS, so official content and enabled mods are
 treated the same. A descriptor that fails validation is **skipped with a clear
-error** (`<virtual path>: <message>`, naming the key and the allowed range); the
-other cars and tracks still load. The game keeps working with whatever loaded,
-falling back to the compiled-in car and circuit only if *nothing* loaded.
+error** (naming the file, the line, the key, the value and the allowed range);
+the other cars and tracks still load. Each car and circuit is identified by its
+namespaced content reference `<mod-id>/<content-id>` (for example
+`base.core/voyager`), never by a bare folder name, so two mods may ship a car
+called `kart` without colliding.
 
 All values are **SI** (metres, kilograms, radians, seconds); rotational speeds
 are in **rad/s**, not rpm. Every number is range-checked and cross-checked

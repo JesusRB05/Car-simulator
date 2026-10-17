@@ -7,6 +7,9 @@
 
 #include <glm/glm.hpp>
 
+#include "drive/Track.hpp"
+#include "session/ContentOwner.hpp"
+
 namespace sim::vfs {
 class VirtualFileSystem;
 }
@@ -17,11 +20,23 @@ namespace sim::app {
 // procedural Track, so the preview matches what is driven. Variants and
 // availability are declared here; when a track declares no variants the UI
 // shows a single "Full circuit" layout.
+//
+// A circuit is identified by its **content reference** `<mod-id>/<content-id>`
+// (for example `base.core/sunset_circuit`).
 struct TrackSpec {
-    std::string id;
+    std::string modId; // owning mod, e.g. "base.core"
+    std::string id;    // content id (folder name), e.g. "sunset_circuit"
+
+    // The namespaced reference used everywhere a circuit is identified.
+    std::string ref() const { return modId.empty() ? id : modId + "/" + id; }
+
     std::string name;
     std::string description;
     std::string location;
+
+    // The description the drive scene rebuilds the real circuit from, so what is
+    // driven is exactly the data that was loaded.
+    drive::TrackDescription track;
 
     double lengthMeters = 0.0;
     double widthMeters = 0.0;
@@ -42,18 +57,22 @@ struct TrackSpec {
 
 // The set of circuits the player can pick. Populated from the VFS: every
 // `tracks/<id>/track.toml` in the official content and in the enabled mods is
-// loaded (see TrackLoader). If no descriptor loads, the compiled-in Sunset
-// Circuit is kept so the game always has a track.
+// loaded (see TrackLoader). There is no compiled-in circuit: the official
+// content is data (`base.core/sunset_circuit`).
 class TrackCatalog {
 public:
     static TrackCatalog& instance();
 
     // Rescans the VFS. Called once at start-up after the mods are mounted.
-    void reload(const vfs::VirtualFileSystem& vfs);
+    // `owner` resolves which mod provides each descriptor (see ContentOwner).
+    void reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner = {});
 
     const std::vector<TrackSpec>& tracks() const { return tracks_; }
-    const TrackSpec* find(const std::string& id) const;
-    const TrackSpec& defaultTrack() const { return tracks_.front(); }
+
+    // Looks a circuit up by content reference or, as a fallback for saved
+    // selections, by a bare, unambiguous id.
+    const TrackSpec* find(const std::string& key) const;
+    const TrackSpec* defaultTrack() const { return tracks_.empty() ? nullptr : &tracks_.front(); }
 
     // One entry per track descriptor that was rejected, with the reason.
     const std::vector<std::string>& errors() const { return errors_; }

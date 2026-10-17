@@ -7,6 +7,7 @@
 
 #include <glm/glm.hpp>
 
+#include "session/ContentOwner.hpp"
 #include "vehicle/VehicleModel.hpp"
 
 namespace sim::vfs {
@@ -16,11 +17,19 @@ class VirtualFileSystem;
 namespace sim::app {
 
 // One selectable car. The setup is the actual vehicle the physics spawns; the
-// display fields are derived from it (or from content/base/cars/<id>) and are
-// never invented. Cars are registered in CarCatalog; adding one is a matter of
-// pushing a CarSpec built from a VehicleSetup plus its metadata.
+// display fields are derived from the descriptor and are never invented.
+//
+// A car is identified by its **content reference** `<mod-id>/<content-id>`
+// (for example `base.core/voyager`). `id` is the folder name inside the owning
+// package; `modId` is the mod that provides it. Two mods may ship a car with
+// the same folder name without colliding.
 struct CarSpec {
-    std::string id;
+    std::string modId; // owning mod, e.g. "base.core"
+    std::string id;    // content id (folder name), e.g. "voyager"
+
+    // The namespaced reference used everywhere a car is identified.
+    std::string ref() const { return modId.empty() ? id : modId + "/" + id; }
+
     std::string manufacturer;
     std::string model;
     std::string category;
@@ -51,19 +60,25 @@ struct CarSpec {
 
 // The set of cars the player can pick. Populated from the VFS: every
 // `cars/<id>/car.toml` in the official content and in the enabled mods is
-// loaded (see CarLoader). If no descriptor loads, the compiled-in Voyager is
-// kept so the game always has a car to drive.
+// loaded (see CarLoader). There is no compiled-in car: the official content is
+// data (`base.core/voyager`). If nothing loads, the catalog is empty and the UI
+// reports it.
 class CarCatalog {
 public:
     static CarCatalog& instance();
 
     // Rescans the VFS. Called once at start-up after the mods are mounted.
-    void reload(const vfs::VirtualFileSystem& vfs);
+    // `owner` resolves which mod provides each descriptor (see ContentOwner).
+    void reload(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner = {});
 
     const std::vector<CarSpec>& cars() const { return cars_; }
-    const CarSpec* find(const std::string& id) const;
-    // The car used when a saved selection is missing or points at a gone car.
-    const CarSpec& defaultCar() const { return cars_.front(); }
+
+    // Looks a car up by content reference (`base.core/voyager`) or, as a
+    // fallback for saved selections, by a bare, unambiguous id.
+    const CarSpec* find(const std::string& key) const;
+    // The car used when a saved selection is missing or points at a gone car,
+    // or nullptr when no car loaded at all.
+    const CarSpec* defaultCar() const { return cars_.empty() ? nullptr : &cars_.front(); }
 
     // One entry per car descriptor that was rejected, with the reason.
     const std::vector<std::string>& errors() const { return errors_; }

@@ -25,11 +25,12 @@ enum class GameScreen {
 const char* gameScreenName(GameScreen screen);
 
 // What the player picked. Persisted in the user's config so the next launch
-// starts where they left off. Ids are resolved against CarCatalog/TrackCatalog;
-// unknown ids fall back to the catalog defaults.
+// starts where they left off. Ids are content references (`<mod-id>/<id>`),
+// resolved against CarCatalog/TrackCatalog; unknown selections fall back to the
+// catalog defaults.
 struct SessionSelection {
-    std::string carId = "voyager";
-    std::string trackId = "sunset_circuit";
+    std::string carId = "base.core/voyager";
+    std::string trackId = "base.core/sunset_circuit";
     std::string modeId = "practice";
     std::string weatherId = "clear";
     std::string timeOfDayId = "day";

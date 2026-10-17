@@ -125,8 +125,8 @@ glm::vec4 unpackColor(std::uint32_t rgba) {
                      static_cast<float>((rgba >> 24) & 0xFFu) / 255.0f);
 }
 
-Vec3 onTerrain(const Vec3& p, double raise) {
-    return Vec3(p.x, Track::terrainHeight(p.x, p.z) + raise, p.z);
+Vec3 onTerrain(const Track& track, const Vec3& p, double raise) {
+    return Vec3(p.x, track.heightAt(p.x, p.z) + raise, p.z);
 }
 
 glm::mat4 bodyMatrix(const physics::RigidBody& body) {
@@ -156,9 +156,10 @@ std::string formatLap(double seconds) {
 
 } // namespace
 
-DriveScene::DriveScene(rhi::Device& device) {
+DriveScene::DriveScene(rhi::Device& device, const TrackDescription& description, const vehicle::VehicleSetup& car)
+    : description_(description), track_(description_), trackMesh_(track_), ground_(track_, trackMesh_) {
     world_.fixedStep = 1.0 / 1000.0;
-    car_ = &VehicleModel::spawn(world_, vehicle::makeDefaultVehicleSetup(), ground_);
+    car_ = &VehicleModel::spawn(world_, car, ground_);
     // Driver aids (ABS/TCS/ESC) are attached to the car here and enabled by the
     // app from the session setting (all three are on by default). The unit is
     // sampled by the model every fixed step.
@@ -383,7 +384,7 @@ void DriveScene::buildMeshes(rhi::Device& device) {
             for (int column = 0; column <= columns; ++column) {
                 const double x = kMinX + kCell * column;
                 const double z = kMinZ + kCell * row;
-                builder.vertex(Vec3(x, Track::terrainHeight(x, z) - kGrassDrop, z), Track::terrainNormal(x, z));
+                builder.vertex(Vec3(x, track_.heightAt(x, z) - kGrassDrop, z), track_.normalAt(x, z));
             }
         }
         const auto index = [&](int column, int row) {
@@ -437,8 +438,8 @@ void DriveScene::buildMeshes(rhi::Device& device) {
                 const Vec3 edge = track_.roadPoint(sample, side * sample.halfWidth, 0.0);
                 const Vec3 outer = sample.position + sample.right * (side * (sample.halfWidth + kVergeWidth));
                 builder.vertex(edge, track_.roadNormal(sample, side * sample.halfWidth));
-                builder.vertex(Vec3(outer.x, Track::terrainHeight(outer.x, outer.z), outer.z),
-                               Track::terrainNormal(outer.x, outer.z));
+                builder.vertex(Vec3(outer.x, track_.heightAt(outer.x, outer.z), outer.z),
+                               track_.normalAt(outer.x, outer.z));
             }
             for (std::size_t i = 0; i < count; ++i) {
                 const std::uint32_t a = base + static_cast<std::uint32_t>(2 * i);
@@ -589,11 +590,11 @@ void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelt
     // Start gantry posts, so the line reads from a distance.
     const TrackSample& start = track_.samples()[track_.startIndex()];
     for (const double side : {-1.0, 1.0}) {
-        const Vec3 base = onTerrain(start.position + start.right * (side * (track_.halfWidth() + 2.0)), 0.0);
+        const Vec3 base = onTerrain(track_, start.position + start.right * (side * (track_.halfWidth() + 2.0)), 0.0);
         scene.add(cube_, boxAt(glm::mat4(1.0f), toVec3(base) + glm::vec3(0.0f, 2.5f, 0.0f), {0.3f, 5.0f, 0.3f}),
                   kLineWhite);
     }
-    const Vec3 beam = onTerrain(start.position, 0.0);
+    const Vec3 beam = onTerrain(track_, start.position, 0.0);
     const glm::mat4 beamFrame =
         glm::translate(glm::mat4(1.0f), toVec3(beam) + glm::vec3(0.0f, 5.0f, 0.0f)) *
         glm::rotate(glm::mat4(1.0f), static_cast<float>(track_.startHeading()), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -682,7 +683,7 @@ void DriveScene::updateCamera(float aspect, double frameDelta, render::Scene& sc
         chaseEye_ += (desiredEye - chaseEye_) * eyeBlend;
         chaseTarget_ += (desiredTarget - chaseTarget_) * targetBlend;
     }
-    const float ground = static_cast<float>(Track::terrainHeight(chaseEye_.x, chaseEye_.z)) + 0.5f;
+    const float ground = static_cast<float>(track_.heightAt(chaseEye_.x, chaseEye_.z)) + 0.5f;
     chaseEye_.y = std::max(chaseEye_.y, ground);
     camera.lookAt(chaseEye_, chaseTarget_, glm::vec3(0.0f, 1.0f, 0.0f));
 }

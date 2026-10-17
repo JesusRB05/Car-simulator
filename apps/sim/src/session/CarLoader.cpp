@@ -8,6 +8,7 @@
 
 #include <toml++/toml.hpp>
 
+#include "modding/Package.hpp"
 #include "session/ContentToml.hpp"
 #include "vehicle/VehicleModel.hpp"
 #include "vfs/VirtualFileSystem.hpp"
@@ -25,14 +26,15 @@ bool readColor(const toml::table& root, glm::vec4& out, ParseContext& context) {
     }
     const toml::array* array = node->as_array();
     if (array == nullptr || (array->size() != 3 && array->size() != 4)) {
-        context.fail("'color' must be an array of three or four numbers in [0, 1]");
+        context.failAt(*node, "color", "must be an array of three or four numbers in [0, 1]");
         return false;
     }
     glm::vec4 color = out;
     for (std::size_t i = 0; i < array->size(); ++i) {
-        const auto component = (*array)[i].value<double>();
+        const toml::node& componentNode = (*array)[i];
+        const auto component = componentNode.value<double>();
         if (!component || *component < 0.0 || *component > 1.0) {
-            context.fail("'color[" + std::to_string(i) + "]' must be a number in [0, 1]");
+            context.failAt(componentNode, "color[" + std::to_string(i) + "]", "must be a number in [0, 1]");
             return false;
         }
         color[static_cast<glm::length_t>(i)] = static_cast<float>(*component);
@@ -48,8 +50,13 @@ std::optional<CarSpec> parseCarSpecImpl(const toml::table& root, ParseContext& c
     car.manufacturer = content::readString(root, "author", "Unknown");
     car.category = content::readString(root, "category", "Data-defined car");
     car.description = content::readString(root, "description", "");
-    if (!content::isValidId(car.id)) {
-        context.fail("'id' must be a lower-case identifier of letters, digits and '_' (got '" + car.id + "')");
+    if (const toml::node* idNode = root.get("id")) {
+        if (!content::isValidId(car.id)) {
+            context.failAt(*idNode, "id",
+                           "must be a lower-case identifier of letters, digits, '_' and '-' (got '" + car.id + "')");
+        }
+    } else {
+        context.fail("missing required field 'id'");
     }
 
     vehicle::VehicleSetup setup = vehicle::makeDefaultVehicleSetup();
@@ -260,9 +267,9 @@ std::optional<CarSpec> parseCarSpec(std::string_view text, std::string_view sour
     return car;
 }
 
-CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, std::string_view carsDirectory) {
+CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner) {
     CarLoadResult result;
-    const std::string root(carsDirectory);
+    const std::string root(modding::kCarsDir);
 
     std::vector<std::string> entries = vfs.list(root);
     std::sort(entries.begin(), entries.end());
@@ -282,13 +289,17 @@ CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, std::string_view carsD
         }
         std::string error;
         if (auto car = parseCarSpec(*text, path, error)) {
+            if (owner) {
+                car->modId = owner(path);
+            }
             result.cars.push_back(std::move(*car));
         } else {
             result.errors.push_back(std::move(error));
         }
     }
 
-    std::sort(result.cars.begin(), result.cars.end(), [](const CarSpec& a, const CarSpec& b) { return a.id < b.id; });
+    std::sort(result.cars.begin(), result.cars.end(),
+              [](const CarSpec& a, const CarSpec& b) { return a.ref() < b.ref(); });
     return result;
 }
 

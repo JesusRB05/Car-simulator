@@ -63,7 +63,7 @@ enum class DriveCamera {
 // (main) thread.
 class DriveScene {
 public:
-    explicit DriveScene(rhi::Device& device);
+    explicit DriveScene(rhi::Device& device, const TrackDescription& track, const vehicle::VehicleSetup& car);
     ~DriveScene();
 
     DriveScene(const DriveScene&) = delete;
@@ -126,11 +126,14 @@ private:
         glm::vec4 color{1.0f};
     };
 
+    // The description the circuit is rebuilt from (content-driven), declared
+    // before the track so the track is built from it in the initialiser list.
+    TrackDescription description_;
     Track track_;
     // The wheels query this mesh (a per-triangle BVH raycast), not the analytic
     // height field. Declared before the query, which borrows it.
-    TrackCollisionMesh trackMesh_{track_};
-    TrackMeshGroundQuery ground_{track_, trackMesh_};
+    TrackCollisionMesh trackMesh_; // built from track_
+    TrackMeshGroundQuery ground_;  // borrows track_ and trackMesh_
     // The driver aids (ABS/TCS/ESC) attached to the car built into world_.
     // Declared before the world so it outlives the model that borrows it.
     vehicle::ElectronicControlUnit aids_{};

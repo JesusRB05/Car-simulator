@@ -10,6 +10,7 @@
 #include <toml++/toml.hpp>
 
 #include "drive/Track.hpp"
+#include "modding/Package.hpp"
 #include "session/ContentToml.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
@@ -100,8 +101,13 @@ std::optional<TrackSpec> parseTrackSpecImpl(const toml::table& root, ParseContex
     spec.name = content::readString(root, "name", spec.id);
     spec.description = content::readString(root, "description", "");
     spec.location = content::readString(root, "location", "Data-defined circuit");
-    if (!content::isValidId(spec.id)) {
-        context.fail("'id' must be a lower-case identifier of letters, digits and '_' (got '" + spec.id + "')");
+    if (const toml::node* idNode = root.get("id")) {
+        if (!content::isValidId(spec.id)) {
+            context.failAt(*idNode, "id",
+                           "must be a lower-case identifier of letters, digits, '_' and '-' (got '" + spec.id + "')");
+        }
+    } else {
+        context.fail("missing required field 'id'");
     }
 
     drive::TrackDescription description;
@@ -129,6 +135,9 @@ std::optional<TrackSpec> parseTrackSpecImpl(const toml::table& root, ParseContex
     if (!context.ok()) {
         return std::nullopt;
     }
+
+    // Keep the description so the drive scene rebuilds exactly this circuit.
+    spec.track = description;
 
     // Build the real circuit to measure it and to derive the minimap.
     const drive::Track track(description);
@@ -195,9 +204,9 @@ std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view 
     return spec;
 }
 
-TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, std::string_view tracksDirectory) {
+TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner) {
     TrackLoadResult result;
-    const std::string root(tracksDirectory);
+    const std::string root(modding::kTracksDir);
 
     std::vector<std::string> entries = vfs.list(root);
     std::sort(entries.begin(), entries.end());
@@ -217,6 +226,9 @@ TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, std::string_view t
         }
         std::string error;
         if (auto spec = parseTrackSpec(*text, path, error)) {
+            if (owner) {
+                spec->modId = owner(path);
+            }
             result.tracks.push_back(std::move(*spec));
         } else {
             result.errors.push_back(std::move(error));
@@ -224,7 +236,7 @@ TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, std::string_view t
     }
 
     std::sort(result.tracks.begin(), result.tracks.end(),
-              [](const TrackSpec& a, const TrackSpec& b) { return a.id < b.id; });
+              [](const TrackSpec& a, const TrackSpec& b) { return a.ref() < b.ref(); });
     return result;
 }
 

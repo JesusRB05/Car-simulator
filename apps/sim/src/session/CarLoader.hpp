@@ -2,12 +2,14 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include "session/CarCatalog.hpp"
+#include "session/ContentOwner.hpp"
 
 namespace sim::vfs {
 class VirtualFileSystem;
@@ -34,8 +36,9 @@ void deriveCarSpec(CarSpec& car);
 std::optional<CarSpec> parseCarSpec(std::string_view text, std::string_view sourcePath, std::string& error);
 
 // Loads every `cars/<id>/car.toml` reachable through the VFS (official content
-// and mods alike, mods overriding base content). Cars are returned sorted by
-// id. Invalid cars are skipped with an error; the rest still load.
-CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, std::string_view carsDirectory = "cars");
+// and mods alike). The optional `owner` gives each car its owning mod so its
+// content reference is `<mod-id>/<id>`. Cars are returned sorted by reference.
+// Invalid cars are skipped with an error; the rest still load.
+CarLoadResult loadCars(const vfs::VirtualFileSystem& vfs, const ContentOwner& owner = {});
 
 } // namespace sim::app

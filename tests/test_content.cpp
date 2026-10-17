@@ -9,7 +9,10 @@
 
 #include "drive/Track.hpp"
 #include "physics/PhysicsWorld.hpp"
+#include "session/CarCatalog.hpp"
 #include "session/CarLoader.hpp"
+#include "session/ContentOwner.hpp"
+#include "session/TrackCatalog.hpp"
 #include "session/TrackLoader.hpp"
 #include "vehicle/GroundQuery.hpp"
 #include "vehicle/VehicleModel.hpp"
@@ -26,6 +29,18 @@ fs::path sourceDir() {
     return fs::path(SIM_SOURCE_DIR);
 }
 
+// Which mod owns a virtual path: the base content or the example mod. This is
+// the same job the app gives to ModManager::modIdFor in production.
+sim::app::ContentOwner ownerFor(const sim::vfs::VirtualFileSystem& vfs) {
+    return [&vfs](std::string_view path) -> std::string {
+        const std::string real = vfs.realDirectoryOf(path);
+        if (real.find("example_mod") != std::string::npos) {
+            return "example.hatchback";
+        }
+        return "base.core";
+    };
+}
+
 } // namespace
 
 TEST_CASE("content: the official car and circuit load through the VFS") {
@@ -33,19 +48,21 @@ TEST_CASE("content: the official car and circuit load through the VFS") {
     REQUIRE(vfs.mount(sourceDir() / "content" / "base"));
     REQUIRE(vfs.mount(sourceDir() / "mods" / "example_mod"));
 
-    const sim::app::CarLoadResult cars = sim::app::loadCars(vfs);
+    const sim::app::CarLoadResult cars = sim::app::loadCars(vfs, ownerFor(vfs));
     for (const std::string& error : cars.errors) {
         MESSAGE("car error: " << error);
     }
     REQUIRE(cars.errors.empty());
     REQUIRE(cars.cars.size() == 2);
-    CHECK(cars.cars[0].id == "hatchback"); // sorted by id
-    CHECK(cars.cars[1].id == "voyager");
+    // Every car carries a namespaced reference, never a bare name.
+    CHECK(cars.cars[0].ref() == "base.core/voyager"); // sorted by reference
+    CHECK(cars.cars[1].ref() == "example.hatchback/hatchback");
+    CHECK(cars.cars[1].id == "hatchback");
 
     // The base car.toml must reproduce the compiled-in default bit for bit, so
     // moving the car into content changes nothing about how it drives.
     const sim::vehicle::VehicleSetup& expected = sim::vehicle::makeDefaultVehicleSetup();
-    const sim::vehicle::VehicleSetup& actual = cars.cars[1].setup;
+    const sim::vehicle::VehicleSetup& actual = cars.cars[0].setup;
     CHECK(actual.mass == expected.mass);
     CHECK(actual.principalInertia == expected.principalInertia);
     CHECK(actual.bodyHalfExtents == expected.bodyHalfExtents);
@@ -77,15 +94,17 @@ TEST_CASE("content: the official car and circuit load through the VFS") {
     CHECK(actual.ackermann.track == expected.ackermann.track);
     CHECK(actual.ackermann.wheelbase == expected.ackermann.wheelbase);
 
-    const sim::app::TrackLoadResult tracks = sim::app::loadTracks(vfs);
+    const sim::app::TrackLoadResult tracks = sim::app::loadTracks(vfs, ownerFor(vfs));
     for (const std::string& error : tracks.errors) {
         MESSAGE("track error: " << error);
     }
     REQUIRE(tracks.errors.empty());
     REQUIRE(tracks.tracks.size() == 1);
-    CHECK(tracks.tracks[0].id == "sunset_circuit");
+    CHECK(tracks.tracks[0].ref() == "base.core/sunset_circuit");
     CHECK(tracks.tracks[0].lengthMeters > 100.0);
     CHECK(tracks.tracks[0].minimap.size() > 10);
+    // The spec keeps the description the drive scene rebuilds the circuit from.
+    CHECK(tracks.tracks[0].track.controlPoints.size() > 3);
 
     // The base track.toml must reproduce the compiled-in layout exactly, so the
     // circuit does not move when it comes from content.
@@ -95,6 +114,29 @@ TEST_CASE("content: the official car and circuit load through the VFS") {
     CHECK(tracks.tracks[0].widthMeters == expectedTrack.widthMeters);
     CHECK(tracks.tracks[0].minimap == expectedTrack.minimap);
     CHECK(tracks.tracks[0].aspect == expectedTrack.aspect);
+}
+
+TEST_CASE("content: the catalog resolves namespaced references and rejects ambiguity") {
+    sim::vfs::VirtualFileSystem vfs;
+    REQUIRE(vfs.mount(sourceDir() / "content" / "base"));
+    REQUIRE(vfs.mount(sourceDir() / "mods" / "example_mod"));
+
+    sim::app::CarCatalog& cars = sim::app::CarCatalog::instance();
+    cars.reload(vfs, ownerFor(vfs));
+    const sim::app::CarSpec* voyager = cars.find("base.core/voyager");
+    REQUIRE(voyager != nullptr);
+    CHECK(voyager->modId == "base.core");
+    CHECK(voyager->id == "voyager");
+    // A bare, unambiguous id still resolves (saved selections from v1).
+    CHECK(cars.find("voyager") == voyager);
+    CHECK(cars.find("base.core/does_not_exist") == nullptr);
+    CHECK(cars.find("does_not_exist") == nullptr);
+
+    sim::app::TrackCatalog& tracks = sim::app::TrackCatalog::instance();
+    tracks.reload(vfs, ownerFor(vfs));
+    REQUIRE(tracks.find("base.core/sunset_circuit") != nullptr);
+    CHECK(tracks.find("base.core/sunset_circuit")->modId == "base.core");
+    CHECK(tracks.find("missing") == nullptr);
 }
 
 TEST_CASE("content: a car discovered in a mod loads and drives") {
@@ -154,6 +196,19 @@ TEST_CASE("content: an invalid car descriptor is rejected with a reason") {
     const auto ok = sim::app::parseCarSpec("id = \"ok_car\"\n[chassis]\nmass = 1000.0\n", "cars/ok/car.toml", error);
     CHECK(ok.has_value());
     CHECK(error.empty());
+}
+
+TEST_CASE("content: a rejected value names the file, the line, the key and the value") {
+    std::string error;
+    const auto heavy =
+        sim::app::parseCarSpec("id = \"lead_sled\"\n[chassis]\nmass = 90000.0\n", "cars/lead/car.toml", error);
+    REQUIRE_FALSE(heavy.has_value());
+    CHECK(error.find("cars/lead/car.toml") != std::string::npos);
+    CHECK(error.find("line 3") != std::string::npos);
+    CHECK(error.find("key 'mass'") != std::string::npos);
+    CHECK(error.find("90000") != std::string::npos);
+    CHECK(error.find("range") != std::string::npos);
+    MESSAGE("rejected descriptor: " << error);
 }
 
 TEST_CASE("content: an invalid track descriptor is rejected with a reason") {

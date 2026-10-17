@@ -15,7 +15,7 @@ The host installs a global `sim` table:
 | `sim.register_on_update(function)` | Registers the function called every frame, with `dt` |
 | `sim.game_version` | Game version string (e.g. `"0.1.0"`) |
 
-Example (`content/base/scripts/main.lua`):
+Example (`content/base/apps/main.lua`):
 
 ```lua
 local loaded = false
@@ -103,13 +103,14 @@ list, so there is no shared target a later mod could hijack.
 Logging uses `core::Log::forMod(modId)`, so each mod's messages are tagged with
 its id.
 
-## The `entry_script`
+## The `entry_script` (v1) and `apps/`
 
-A mod declares its entry script in `mod.toml`:
+A v1 mod declares its entry script in `mod.toml`:
 
 ```toml
 entry_script = "scripts/main.lua"
 ```
 
-The application loads that script (through `ScriptHost`) after mounting the
-mods. If an `entry_script` fails, the error is logged and loading continues.
+That key is deprecated. A v2 mod drops its Lua applications into `apps/`
+(for example `apps/main.lua`); the application loads `apps/main.lua` after
+mounting the mods. If a script fails, the error is logged and loading continues.

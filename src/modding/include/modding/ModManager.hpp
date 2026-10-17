@@ -69,6 +69,11 @@ public:
     bool isActive(std::string_view id) const;
     bool setModActive(std::string_view id, bool active);
 
+    // The id of the mod that provides a virtual file, used to build namespaced
+    // content references (`<mod-id>/<content-id>`). Empty when the file comes
+    // from the base content or cannot be resolved.
+    std::string modIdFor(std::string_view virtualPath) const;
+
 private:
     struct Discovered {
         ModStatus status;

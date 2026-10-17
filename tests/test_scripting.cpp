@@ -127,7 +127,7 @@ TEST_CASE("ScriptHost exposes the documented sim API and runs an entry script") 
     namespace fs = std::filesystem;
     const fs::path root = fs::temp_directory_path() / "sim_tests_script_host";
     fs::remove_all(root);
-    // Same shape as content/base/scripts/main.lua: uses every sim.* entry point.
+    // Same shape as content/base/apps/main.lua: uses every sim.* entry point.
     writeFile(root / "scripts" / "main.lua", "sim.log('loaded ' .. sim.game_version)\n"
                                              "assert(type(sim.read) == 'function')\n"
                                              "assert(sim.read('scripts/main.lua') ~= nil)\n"

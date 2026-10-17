@@ -99,10 +99,14 @@ SessionUI::Action SessionUI::draw(SessionState& state, input::WheelManager* whee
 
     // Keep the selection pointing at something that exists.
     if (cars.find(state.selection.carId) == nullptr) {
-        state.selection.carId = cars.defaultCar().id;
+        if (const CarSpec* car = cars.defaultCar()) {
+            state.selection.carId = car->ref();
+        }
     }
     if (tracks.find(state.selection.trackId) == nullptr) {
-        state.selection.trackId = tracks.defaultTrack().id;
+        if (const TrackSpec* track = tracks.defaultTrack()) {
+            state.selection.trackId = track->ref();
+        }
     }
 
     Action action = Action::None;
@@ -163,11 +167,17 @@ void SessionUI::drawMainMenu(SessionState& state, bool haveWheel, Action& action
     ImGui::Separator();
     ImGui::Dummy(ImVec2(0.0f, 4.0f));
 
-    const CarSpec& car = *CarCatalog::instance().find(state.selection.carId);
-    const TrackSpec& track = *TrackCatalog::instance().find(state.selection.trackId);
-    ImGui::TextDisabled("Car:   %s %s", car.manufacturer.c_str(), car.model.c_str());
-    ImGui::TextDisabled("Track: %s (%.0f m)", track.name.c_str(), track.lengthMeters);
-    ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    const CarSpec* car = CarCatalog::instance().find(state.selection.carId);
+    const TrackSpec* track = TrackCatalog::instance().find(state.selection.trackId);
+    if (car == nullptr || track == nullptr) {
+        ImGui::TextColored(ImVec4(0.9f, 0.3f, 0.3f, 1.0f),
+                           "No content loaded: install a car and a circuit (see mods).");
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    } else {
+        ImGui::TextDisabled("Car:   %s %s", car->manufacturer.c_str(), car->model.c_str());
+        ImGui::TextDisabled("Track: %s (%.0f m)", track->name.c_str(), track->lengthMeters);
+        ImGui::Dummy(ImVec2(0.0f, 8.0f));
+    }
 
     const ImVec2 button(ImGui::GetContentRegionAvail().x, 34.0f);
     if (ImGui::Button("Start session", button)) {

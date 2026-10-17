@@ -302,4 +302,23 @@ bool ModManager::setModActive(std::string_view id, bool active) {
     return true;
 }
 
+std::string ModManager::modIdFor(std::string_view virtualPath) const {
+    const std::string real = vfs_.realDirectoryOf(virtualPath);
+    if (real.empty()) {
+        return {};
+    }
+    std::error_code ec;
+    const std::filesystem::path canonical = std::filesystem::weakly_canonical(real, ec);
+    if (ec) {
+        return {};
+    }
+    for (const Discovered& discovered : discovered_) {
+        std::error_code sourceEc;
+        if (std::filesystem::weakly_canonical(discovered.status.source, sourceEc) == canonical) {
+            return discovered.manifest ? discovered.manifest->id : std::string{};
+        }
+    }
+    return {};
+}
+
 } // namespace sim::modding

@@ -26,6 +26,7 @@
 #include "core/Log.hpp"
 #include "core/Version.hpp"
 #include "drive/DriveScene.hpp"
+#include "modding/Package.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "render/DebugDraw.hpp"
 #include "render/Mesh.hpp"
@@ -35,6 +36,9 @@
 #include "rhi/Device.hpp"
 #include "rhi/Resources.hpp"
 #include "rhi/Types.hpp"
+#include "session/CarCatalog.hpp"
+#include "session/ContentOwner.hpp"
+#include "session/TrackCatalog.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
 namespace sim::app {
@@ -566,6 +570,16 @@ int runHeadless(const HeadlessOptions& options) {
     vfs::VirtualFileSystem vfs;
     vfs.mount(exeDir, "/", true);
 
+    // Mount the official content so the drive scene can load the real car and
+    // circuit through the same path the game uses. Only base content is mounted
+    // here, so every descriptor belongs to `base.core`.
+    if (std::filesystem::exists(root / "content" / "base")) {
+        vfs.mount(root / "content" / "base", "/", false);
+    }
+    const ContentOwner owner = [](std::string_view) { return std::string(modding::kBaseModId); };
+    CarCatalog::instance().reload(vfs, owner);
+    TrackCatalog::instance().reload(vfs, owner);
+
     rhi::DeviceConfig deviceConfig;
     deviceConfig.headless = true;
     deviceConfig.enableValidation = options.validation;
@@ -607,8 +621,14 @@ int runHeadless(const HeadlessOptions& options) {
         if (drive::isDriveScene(options.scene)) {
             // The drivable circuit: let the car settle on its springs at the
             // start line, optionally autopilot for `time` seconds (so a capture
-            // can show the car moving or cornering), then frame it.
-            driveScene = std::make_unique<drive::DriveScene>(*device);
+            // can show the car moving or cornering), then frame it. The car and
+            // circuit come from the content that was just mounted.
+            const CarSpec* car = CarCatalog::instance().defaultCar();
+            const TrackSpec* track = TrackCatalog::instance().defaultTrack();
+            static const drive::TrackDescription kReferenceTrack = drive::defaultTrackDescription();
+            driveScene =
+                std::make_unique<drive::DriveScene>(*device, track != nullptr ? track->track : kReferenceTrack,
+                                                    car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup());
             driveScene->simulate(1.0);
             if (options.time > 0.0) {
                 driveScene->autopilot(options.time);

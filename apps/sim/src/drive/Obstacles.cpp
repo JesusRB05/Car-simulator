@@ -27,8 +27,8 @@ physics::Quat yawToTangent(const Vec3& tangent) {
     return physics::quaternionFromAxisAngle(Vec3(0.0, 1.0, 0.0), yaw);
 }
 
-Real groundY(Real x, Real z, Real halfHeight) {
-    return Track::terrainHeight(x, z) + halfHeight;
+Real groundY(const Track& track, Real x, Real z, Real halfHeight) {
+    return track.heightAt(x, z) + halfHeight;
 }
 
 } // namespace
@@ -64,7 +64,7 @@ std::vector<Obstacle> buildObstacleLayout(const Track& track) {
                 obstacle.halfExtents = Vec3(0.12, 0.45, 1.8);
                 obstacle.rgba = (blockIndex % 2 == 0) ? kBarrierRed : kBarrierWhite;
             }
-            obstacle.position = Vec3(base.x, groundY(base.x, base.z, obstacle.halfExtents.y), base.z);
+            obstacle.position = Vec3(base.x, groundY(track, base.x, base.z, obstacle.halfExtents.y), base.z);
             obstacles.push_back(obstacle);
             ++blockIndex;
         }
@@ -97,7 +97,7 @@ std::vector<Obstacle> buildObstacleLayout(const Track& track) {
         block.rgba = kConcrete;
         block.orientation = yardYaw;
         const Vec3 p = at(lateral, -5.0);
-        block.position = Vec3(p.x, groundY(p.x, p.z, block.halfExtents.y), p.z);
+        block.position = Vec3(p.x, groundY(track, p.x, p.z, block.halfExtents.y), p.z);
         obstacles.push_back(block);
     }
 
@@ -109,7 +109,7 @@ std::vector<Obstacle> buildObstacleLayout(const Track& track) {
         post.rgba = kConcrete;
         post.orientation = yardYaw;
         const Vec3 p = at(lateral, -9.0);
-        post.position = Vec3(p.x, groundY(p.x, p.z, post.halfExtents.y), p.z);
+        post.position = Vec3(p.x, groundY(track, p.x, p.z, post.halfExtents.y), p.z);
         obstacles.push_back(post);
     }
 
@@ -125,7 +125,7 @@ std::vector<Obstacle> buildObstacleLayout(const Track& track) {
             tyre.halfHeight = stackHeight[i];
             tyre.rgba = kTyre;
             const Vec3 p = at(stackLateral[i], -13.0);
-            tyre.position = Vec3(p.x, groundY(p.x, p.z, tyre.halfHeight), p.z);
+            tyre.position = Vec3(p.x, groundY(track, p.x, p.z, tyre.halfHeight), p.z);
             obstacles.push_back(tyre);
         }
     }
@@ -139,7 +139,7 @@ std::vector<Obstacle> buildObstacleLayout(const Track& track) {
         cone.halfHeight = 0.28;
         cone.rgba = kCone;
         const Vec3 p = at((i % 2 == 0) ? -1.0 : 1.0, 2.0 - 3.0 * static_cast<Real>(i));
-        cone.position = Vec3(p.x, groundY(p.x, p.z, cone.halfHeight), p.z);
+        cone.position = Vec3(p.x, groundY(track, p.x, p.z, cone.halfHeight), p.z);
         obstacles.push_back(cone);
     }
 
@@ -165,7 +165,7 @@ std::vector<Obstacle> buildObstacleLayout(const Track& track) {
         deflector.orientation =
             physics::quaternionMultiply(yardYaw, physics::quaternionFromAxisAngle(Vec3(0.0, 1.0, 0.0), 0.6));
         const Vec3 p = at(7.0, -19.0);
-        deflector.position = Vec3(p.x, groundY(p.x, p.z, deflector.halfExtents.y), p.z);
+        deflector.position = Vec3(p.x, groundY(track, p.x, p.z, deflector.halfExtents.y), p.z);
         obstacles.push_back(deflector);
     }
 

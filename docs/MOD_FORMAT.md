@@ -510,11 +510,11 @@ active mod that affects the simulation:
 ## 12. Validation and error messages
 
 `sim mod validate <path>` (M9) and the loaders share one validation core. A
-message names the source and the exact location:
+message names the source, the line and the key, then the value and what was
+expected:
 
 ```
-cars/voyager/car.toml: line 23, key 'chassis.mass': value -1250.0 is outside
-the allowed range [1.0, 20000.0] (expected a positive mass in kg)
+cars/voyager/car.toml: line 23, key 'mass': = -1250 is outside the allowed range [100, 5000]
 ```
 
 Hard errors (a malformed manifest, an out-of-range value, a missing

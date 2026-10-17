@@ -30,13 +30,14 @@ inline std::string formatNumber(double value) {
     return out.str();
 }
 
-// A descriptor id: lower-case letters, digits and underscores.
+// A descriptor id: lower-case letters, digits, underscores and hyphens.
 inline bool isValidId(std::string_view id) {
     if (id.empty()) {
         return false;
     }
-    return std::all_of(id.begin(), id.end(),
-                       [](unsigned char c) { return std::islower(c) != 0 || std::isdigit(c) != 0 || c == '_'; });
+    return std::all_of(id.begin(), id.end(), [](unsigned char c) {
+        return std::islower(c) != 0 || std::isdigit(c) != 0 || c == '_' || c == '-';
+    });
 }
 
 // Collects the errors of one descriptor.
@@ -45,6 +46,22 @@ struct ParseContext {
     std::vector<std::string> errors;
 
     void fail(std::string message) { errors.push_back(source + ": " + std::move(message)); }
+
+    // Names the exact place of a value so a modder knows which line to fix:
+    // "<file>: line N, key 'a.b': <message>" (value and expectation are in the
+    // message). Falls back to just the file when the node has no source region.
+    void failAt(const toml::node& node, std::string_view key, std::string message) {
+        const toml::source_region region = node.source();
+        std::string where = source;
+        if (region.begin.line > 0) {
+            where += ": line " + std::to_string(region.begin.line);
+        }
+        if (!key.empty()) {
+            where += ", key '" + std::string(key) + "'";
+        }
+        errors.push_back(where + ": " + std::move(message));
+    }
+
     bool ok() const { return errors.empty(); }
 
     std::string joined() const {
@@ -68,12 +85,13 @@ inline bool readNumber(const toml::table& table, std::string_view key, double lo
     }
     const auto value = node->value<double>();
     if (!value) {
-        context.fail("'" + std::string(key) + "' must be a number");
+        context.failAt(*node, key, "must be a number");
         return false;
     }
     if (!(low <= *value && *value <= high)) {
-        context.fail("'" + std::string(key) + "' = " + formatNumber(*value) + " is outside the allowed range [" +
-                     formatNumber(low) + ", " + formatNumber(high) + "]");
+        context.failAt(*node, key,
+                       "= " + formatNumber(*value) + " is outside the allowed range [" + formatNumber(low) + ", " +
+                           formatNumber(high) + "]");
         return false;
     }
     out = *value;
@@ -89,19 +107,22 @@ inline bool readVec2(const toml::table& table, std::string_view key, double low,
     }
     const toml::array* array = node->as_array();
     if (array == nullptr || array->size() != 2) {
-        context.fail("'" + std::string(key) + "' must be an array of two numbers");
+        context.failAt(*node, key, "must be an array of two numbers");
         return false;
     }
     glm::dvec2 value{};
     for (std::size_t i = 0; i < 2; ++i) {
-        const auto component = (*array)[i].value<double>();
+        const toml::node& componentNode = (*array)[i];
+        const std::string elementKey = std::string(key) + "[" + std::to_string(i) + "]";
+        const auto component = componentNode.value<double>();
         if (!component) {
-            context.fail("'" + std::string(key) + "[" + std::to_string(i) + "]' must be a number");
+            context.failAt(componentNode, elementKey, "must be a number");
             return false;
         }
         if (!(low <= *component && *component <= high)) {
-            context.fail("'" + std::string(key) + "[" + std::to_string(i) + "]' = " + formatNumber(*component) +
-                         " is outside the allowed range [" + formatNumber(low) + ", " + formatNumber(high) + "]");
+            context.failAt(componentNode, elementKey,
+                           "= " + formatNumber(*component) + " is outside the allowed range [" + formatNumber(low) +
+                               ", " + formatNumber(high) + "]");
             return false;
         }
         value[static_cast<glm::length_t>(i)] = *component;
@@ -119,19 +140,22 @@ inline bool readVec3(const toml::table& table, std::string_view key, double low,
     }
     const toml::array* array = node->as_array();
     if (array == nullptr || array->size() != 3) {
-        context.fail("'" + std::string(key) + "' must be an array of three numbers");
+        context.failAt(*node, key, "must be an array of three numbers");
         return false;
     }
     physics::Vec3 value{};
     for (std::size_t i = 0; i < 3; ++i) {
-        const auto component = (*array)[i].value<double>();
+        const toml::node& componentNode = (*array)[i];
+        const std::string elementKey = std::string(key) + "[" + std::to_string(i) + "]";
+        const auto component = componentNode.value<double>();
         if (!component) {
-            context.fail("'" + std::string(key) + "[" + std::to_string(i) + "]' must be a number");
+            context.failAt(componentNode, elementKey, "must be a number");
             return false;
         }
         if (!(low <= *component && *component <= high)) {
-            context.fail("'" + std::string(key) + "[" + std::to_string(i) + "]' = " + formatNumber(*component) +
-                         " is outside the allowed range [" + formatNumber(low) + ", " + formatNumber(high) + "]");
+            context.failAt(componentNode, elementKey,
+                           "= " + formatNumber(*component) + " is outside the allowed range [" + formatNumber(low) +
+                               ", " + formatNumber(high) + "]");
             return false;
         }
         value[static_cast<glm::length_t>(i)] = *component;
@@ -149,20 +173,23 @@ inline bool readNumberArray(const toml::table& table, std::string_view key, doub
     }
     const toml::array* array = node->as_array();
     if (array == nullptr || array->empty()) {
-        context.fail("'" + std::string(key) + "' must be a non-empty array of numbers");
+        context.failAt(*node, key, "must be a non-empty array of numbers");
         return false;
     }
     std::vector<double> values;
     values.reserve(array->size());
     for (std::size_t i = 0; i < array->size(); ++i) {
-        const auto component = (*array)[i].value<double>();
+        const toml::node& componentNode = (*array)[i];
+        const std::string elementKey = std::string(key) + "[" + std::to_string(i) + "]";
+        const auto component = componentNode.value<double>();
         if (!component) {
-            context.fail("'" + std::string(key) + "[" + std::to_string(i) + "]' must be a number");
+            context.failAt(componentNode, elementKey, "must be a number");
             return false;
         }
         if (!(low <= *component && *component <= high)) {
-            context.fail("'" + std::string(key) + "[" + std::to_string(i) + "]' = " + formatNumber(*component) +
-                         " is outside the allowed range [" + formatNumber(low) + ", " + formatNumber(high) + "]");
+            context.failAt(componentNode, elementKey,
+                           "= " + formatNumber(*component) + " is outside the allowed range [" + formatNumber(low) +
+                               ", " + formatNumber(high) + "]");
             return false;
         }
         values.push_back(*component);

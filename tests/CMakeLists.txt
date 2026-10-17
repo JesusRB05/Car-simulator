@@ -23,7 +23,9 @@ add_executable(sim_tests
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/TrackCollisionMesh.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/session/CarCatalog.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/CarLoader.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/session/TrackCatalog.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/TrackLoader.cpp)
 
 target_include_directories(sim_tests PRIVATE . ${CMAKE_SOURCE_DIR}/apps/sim/src)

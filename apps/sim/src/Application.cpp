@@ -155,11 +155,12 @@ bool Application::initialise() {
     vfs_->mount(exeDir, "/", true);
 
     // The content catalogs read their descriptors through the VFS, so they see
-    // the official cars/tracks and every enabled mod's. A descriptor that fails
-    // validation is logged and skipped; the compiled-in car and circuit remain
-    // as a fallback.
-    CarCatalog::instance().reload(*vfs_);
-    TrackCatalog::instance().reload(*vfs_);
+    // the official cars/tracks and every enabled mod's. The owner resolver gives
+    // each descriptor its namespaced reference (`<mod-id>/<content-id>`). A
+    // descriptor that fails validation is logged and skipped.
+    const ContentOwner owner = [this](std::string_view path) { return mods_->modIdFor(path); };
+    CarCatalog::instance().reload(*vfs_, owner);
+    TrackCatalog::instance().reload(*vfs_, owner);
 
     net_ = std::make_unique<net::NetworkSystem>();
     net_->start(0);
@@ -167,7 +168,15 @@ bool Application::initialise() {
     const double fixedDt = config_->getDouble("physics.fixed_dt", 1.0 / 1000.0);
     physicsClock_.setFixedDt(fixedDt);
     world_.fixedStep = fixedDt;
-    vehicle_ = &vehicle::VehicleModel::spawn(world_, vehicle::makeDefaultVehicleSetup(), vehicleGround_);
+    const CarSpec* selectedCar = CarCatalog::instance().find(session_.selection.carId);
+    if (selectedCar == nullptr) {
+        selectedCar = CarCatalog::instance().defaultCar();
+        if (selectedCar == nullptr) {
+            core::Log::get("app")->error("no car descriptor loaded; falling back to the library default setup");
+        }
+    }
+    vehicle_ = &vehicle::VehicleModel::spawn(
+        world_, selectedCar != nullptr ? selectedCar->setup : vehicle::makeDefaultVehicleSetup(), vehicleGround_);
     // The car's driver aids: attach the unit and honour the persisted mask.
     vehicle_->setElectronics(&electronics_);
     for (std::size_t i = 0; i < wheelOffsets_.size() && i < vehicle_->corners().size(); ++i) {
@@ -543,7 +552,19 @@ void Application::loadScene(const std::string& name) {
         return;
     }
     if (drive::isDriveScene(name)) {
-        drive_ = std::make_unique<drive::DriveScene>(*device_);
+        const CarSpec* car = CarCatalog::instance().find(session_.selection.carId);
+        if (car == nullptr) {
+            car = CarCatalog::instance().defaultCar();
+        }
+        const TrackSpec* track = TrackCatalog::instance().find(session_.selection.trackId);
+        if (track == nullptr) {
+            track = TrackCatalog::instance().defaultTrack();
+        }
+        // Fallbacks: the vehicle library default setup and the reference circuit
+        // description, used only when no content loaded at all.
+        static const drive::TrackDescription kReferenceTrack = drive::defaultTrackDescription();
+        drive_ = std::make_unique<drive::DriveScene>(*device_, track != nullptr ? track->track : kReferenceTrack,
+                                                     car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup());
         drive_->snapCamera();
         return;
     }

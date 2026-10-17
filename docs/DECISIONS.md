@@ -66,11 +66,14 @@ A car is a `cars/<id>/car.toml` descriptor and a track is a
 `tracks/<id>/track.toml` descriptor; the loaders read them through the VFS and
 build the physics from them. This makes a car or a circuit pure data: a mod adds
 one with no code and no rebuild. Every value is **validated against an SI range**
-and the descriptor is rejected with a precise error (`<path>: <key> ...`) instead
-of crashing or silently driving something broken. The compiled-in Voyager and
-Sunset Circuit survive only as a **fallback** when nothing loads, and the base
-`car.toml`/`track.toml` reproduce them exactly, so moving them into content
-changed no behaviour.
+and the descriptor is rejected with a precise error naming the file, the line,
+the key, the value and the allowed range, instead of crashing or silently driving
+something broken. There is **no compiled-in car or circuit**: the official
+content (`base.core/voyager`, `base.core/sunset_circuit`) is data like any mod.
+The vehicle library keeps a generic `makeDefaultVehicleSetup()` and the drive
+module a reference `defaultTrackDescription()`, used only as the well-defined
+defaults a partial descriptor is layered onto and as test fixtures; a test pins
+the base descriptors to them so the two cannot drift.
 
 ## Sandboxed scripting (LuaJIT + sol2)
 
