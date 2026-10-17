@@ -125,9 +125,16 @@ void ModManager::discover() {
     candidates.push_back({paths_.baseContent, true});
 
     std::error_code ec;
-    if (std::filesystem::is_directory(paths_.modsDirectory, ec)) {
+    std::vector<std::filesystem::path> modDirectories = paths_.extraModDirectories;
+    if (!paths_.modsDirectory.empty()) {
+        modDirectories.push_back(paths_.modsDirectory);
+    }
+    for (const std::filesystem::path& directory : modDirectories) {
+        if (!std::filesystem::is_directory(directory, ec)) {
+            continue;
+        }
         std::vector<std::filesystem::path> entries;
-        for (const auto& entry : std::filesystem::directory_iterator(paths_.modsDirectory, ec)) {
+        for (const auto& entry : std::filesystem::directory_iterator(directory, ec)) {
             if (entry.path().filename().string().starts_with('.')) {
                 continue;
             }

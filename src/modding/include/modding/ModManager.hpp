@@ -57,7 +57,11 @@ class ModManager {
 public:
     struct Paths {
         std::filesystem::path baseContent;   // e.g. <root>/content/base
-        std::filesystem::path modsDirectory; // e.g. <root>/mods
+        std::filesystem::path modsDirectory; // where new mods are installed and scanned
+        // Also scanned, below `modsDirectory`. The bundled `mods/` folder lives
+        // here so the official example mod still loads next to the user's own
+        // mods, which are kept in the per-user data directory.
+        std::vector<std::filesystem::path> extraModDirectories;
     };
 
     ModManager(vfs::VirtualFileSystem& vfs, core::Config& config, Paths paths);

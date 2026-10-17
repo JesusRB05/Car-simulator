@@ -20,6 +20,7 @@
 #include "core/Config.hpp"
 #include "input/Profiles.hpp"
 #include "input/WheelManager.hpp"
+#include "modding/ModInstaller.hpp"
 #include "modding/ModManager.hpp"
 #include "net/NetworkSystem.hpp"
 #include "physics/PhysicsWorld.hpp"
@@ -148,6 +149,13 @@ private:
     void handleGarageCamera();
     void drawUi();
     void drawSessionUi();
+    // Rebuilds the mount table from the mod list: catalogs, composition and
+    // conflicts. Called at start-up and after a mod is installed.
+    void reloadContent();
+    // Picks up a dropped `.simmod` and asks the user to confirm it.
+    void updateModInstall();
+    void drawInstallConfirm();
+    void finishInstall(bool confirm);
     void startSession();
     void loadScene(const std::string& name);
     void frameScene();
@@ -178,6 +186,14 @@ private:
     std::unique_ptr<input::ProfileStore> inputProfiles_;
     std::unique_ptr<input::WheelManager> wheel_;
     std::unique_ptr<modding::ModManager> mods_;
+    // The single installer every trigger funnels into (drag-and-drop, file
+    // association, `--install-mod`, the in-game button).
+    std::unique_ptr<modding::ModInstaller> installer_;
+    std::vector<std::filesystem::path> pendingDrops_;
+    std::unique_ptr<modding::InstallPlan> pendingInstall_;
+    std::string installSummary_;
+    bool reloadContentPending_ = false;
+    std::filesystem::path exeDir_;
     std::unique_ptr<scripting::ScriptHost> scripts_;
     std::unique_ptr<plugin::PluginLoader> plugins_;
     std::unique_ptr<audio::AudioEngine> audio_;

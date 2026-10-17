@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "ImGuiLayer.hpp"
+#include "Paths.hpp"
 #include "PhysicsScenes.hpp"
 #include "Scenes.hpp"
 #include "SimUi.hpp"
@@ -24,6 +25,7 @@
 #include "core/Version.hpp"
 #include "drive/DriveScene.hpp"
 #include "modding/Composition.hpp"
+#include "modding/ModInstaller.hpp"
 #include "modding/Package.hpp"
 #include "session/CarCatalog.hpp"
 #include "session/GarageScene.hpp"
@@ -48,34 +50,6 @@ glm::dvec3 toDvec(const physics::Vec3& value) {
     return {value.x, value.y, value.z};
 }
 
-std::filesystem::path executableDirectory() {
-    const char* base = SDL_GetBasePath();
-    if (base == nullptr) {
-        return std::filesystem::current_path();
-    }
-    // SDL3 owns and caches this string: freeing it would leave later calls
-    // returning freed memory.
-    return std::filesystem::path(base);
-}
-
-std::filesystem::path searchForRoot() {
-    std::vector<std::filesystem::path> starts{std::filesystem::current_path(), executableDirectory()};
-    for (const std::filesystem::path& start : starts) {
-        std::filesystem::path dir = start;
-        for (int depth = 0; depth < 8 && !dir.empty(); ++depth) {
-            if (std::filesystem::exists(dir / "content" / "base")) {
-                return dir;
-            }
-            const std::filesystem::path parent = dir.parent_path();
-            if (parent == dir) {
-                break;
-            }
-            dir = parent;
-        }
-    }
-    return executableDirectory();
-}
-
 bool keyDown(const platform::InputManager* input, SDL_Scancode scancode) {
     return input != nullptr && input->keyDown(scancode);
 }
@@ -91,7 +65,38 @@ Application::Application() = default;
 Application::~Application() = default;
 
 std::filesystem::path Application::locateRoot() const {
-    return searchForRoot();
+    return locateRootDirectory();
+}
+
+void Application::reloadContent() {
+    auto log = core::Log::get("app");
+
+    // The content catalogs read their descriptors through the VFS, so they see
+    // the official cars/tracks and every enabled mod's. The owner resolver gives
+    // each descriptor its namespaced reference (`<mod-id>/<content-id>`). A
+    // descriptor that fails validation is logged and skipped.
+    const ContentOwner owner = [this](std::string_view path) { return mods_->modIdFor(path); };
+
+    // Additive composition: the patches, skins and parts every mod adds without
+    // copying anything, plus the conflicts between mods. Loaded before the
+    // catalogs so a patch is applied to its target before validation.
+    modding::Composition composition = modding::loadComposition(*vfs_, owner);
+    std::vector<std::pair<std::string, std::string>> overrides;
+    for (const modding::ModStatus& mod : mods_->report().mods) {
+        for (const std::string& path : mod.overrides) {
+            overrides.emplace_back(mod.id, path);
+        }
+    }
+    modding::detectConflicts(composition, overrides);
+    for (const std::string& error : composition.errors) {
+        log->warn("composition: {}", error);
+    }
+    for (const modding::CompositionConflict& conflict : composition.conflicts) {
+        log->warn("mod conflict: {}", conflict.message);
+    }
+
+    CarCatalog::instance().reload(*vfs_, owner, &composition);
+    TrackCatalog::instance().reload(*vfs_, owner, &composition);
 }
 
 bool Application::initialise() {
@@ -145,7 +150,13 @@ bool Application::initialise() {
 
     modding::ModManager::Paths modPaths;
     modPaths.baseContent = rootDirectory_ / "content" / "base";
-    modPaths.modsDirectory = rootDirectory_ / "mods";
+    modPaths.modsDirectory = locateModsDirectory(*config_);
+    // The bundled `mods/` folder (the example mod, hand-installed mods) is still
+    // scanned, below the user's own directory.
+    modPaths.extraModDirectories.push_back(rootDirectory_ / "mods");
+    log->info("mods directory: {}", modPaths.modsDirectory.string());
+    exeDir_ = exeDir;
+    installer_ = std::make_unique<modding::ModInstaller>(*vfs_, modPaths.modsDirectory);
     mods_ = std::make_unique<modding::ModManager>(*vfs_, *config_, modPaths);
     mods_->reload();
     log->info("mods: {}", mods_->report().toString());
@@ -153,34 +164,9 @@ bool Application::initialise() {
     // ModManager rebuilds the mount table from scratch (base + mods), so the
     // engine's own runtime directory is mounted afterwards, at the lowest
     // priority, to make shaders/*.spv resolvable without shadowing content.
-    vfs_->mount(exeDir, "/", true);
+    vfs_->mount(exeDir_, "/", true);
 
-    // The content catalogs read their descriptors through the VFS, so they see
-    // the official cars/tracks and every enabled mod's. The owner resolver gives
-    // each descriptor its namespaced reference (`<mod-id>/<content-id>`). A
-    // descriptor that fails validation is logged and skipped.
-    const ContentOwner owner = [this](std::string_view path) { return mods_->modIdFor(path); };
-
-    // Additive composition: the patches, skins and parts every mod adds without
-    // copying anything, plus the conflicts between mods. Loaded before the
-    // catalogs so a patch is applied to its target before validation.
-    modding::Composition composition = modding::loadComposition(*vfs_, owner);
-    std::vector<std::pair<std::string, std::string>> overrides;
-    for (const modding::ModStatus& mod : mods_->report().mods) {
-        for (const std::string& path : mod.overrides) {
-            overrides.emplace_back(mod.id, path);
-        }
-    }
-    modding::detectConflicts(composition, overrides);
-    for (const std::string& error : composition.errors) {
-        log->warn("composition: {}", error);
-    }
-    for (const modding::CompositionConflict& conflict : composition.conflicts) {
-        log->warn("mod conflict: {}", conflict.message);
-    }
-
-    CarCatalog::instance().reload(*vfs_, owner, &composition);
-    TrackCatalog::instance().reload(*vfs_, owner, &composition);
+    reloadContent();
 
     net_ = std::make_unique<net::NetworkSystem>();
     net_->start(0);
@@ -231,7 +217,15 @@ bool Application::initialise() {
     debugDraw_->ensureTargets(frame_->colorFormat(), swapchain_->extent());
 
     imgui_ = std::make_unique<ImGuiLayer>(*device_, *swapchain_, window_->handle());
-    window_->setEventHook([this](const SDL_Event& event) { imgui_->processEvent(event); });
+    window_->setEventHook([this](const SDL_Event& event) {
+        imgui_->processEvent(event);
+        // A `.simmod` (or a folder with a mod.toml) dropped on the window is
+        // inspected and offered for confirmation. Nothing is installed until
+        // the user clicks: dropping a file is never silently destructive.
+        if (event.type == SDL_EVENT_DROP_FILE && event.drop.data != nullptr) {
+            pendingDrops_.emplace_back(event.drop.data);
+        }
+    });
     ui_ = std::make_unique<SimUi>();
 
     telemetry_ = std::make_unique<telemetry::Telemetry>(600);
@@ -782,10 +776,74 @@ void Application::handleCameraKeys() {
     }
 }
 
+void Application::updateModInstall() {
+    // A finished install is applied here, at a frame boundary, so no descriptor
+    // pointer handed out during the previous frame is still in use.
+    if (reloadContentPending_) {
+        reloadContentPending_ = false;
+        mods_->reload();
+        vfs_->mount(exeDir_, "/", true);
+        reloadContent();
+    }
+    if (pendingInstall_ != nullptr || pendingDrops_.empty() || installer_ == nullptr) {
+        return;
+    }
+    const std::filesystem::path source = pendingDrops_.front();
+    pendingDrops_.erase(pendingDrops_.begin());
+    auto plan = std::make_unique<modding::InstallPlan>(installer_->inspect(source));
+    installSummary_ = plan->summary();
+    pendingInstall_ = std::move(plan);
+}
+
+void Application::drawInstallConfirm() {
+    if (pendingInstall_ == nullptr) {
+        return;
+    }
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    bool open = true;
+    if (ImGui::Begin("Install mod", &open, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoCollapse)) {
+        ImGui::TextUnformatted(installSummary_.c_str());
+        ImGui::Separator();
+        if (pendingInstall_->ok) {
+            if (ImGui::Button("Install")) {
+                finishInstall(true);
+            }
+            ImGui::SameLine();
+        }
+        if (ImGui::Button(pendingInstall_->ok ? "Cancel" : "Close")) {
+            finishInstall(false);
+        }
+    }
+    ImGui::End();
+    if (!open) {
+        finishInstall(false);
+    }
+}
+
+void Application::finishInstall(bool confirm) {
+    if (pendingInstall_ == nullptr) {
+        return;
+    }
+    auto log = core::Log::get("modding");
+    if (confirm) {
+        const modding::InstallResult result = installer_->install(*pendingInstall_);
+        if (!result.ok) {
+            log->error("install failed: {}", result.error);
+        } else {
+            log->info("installed '{}'", pendingInstall_->modId);
+            reloadContentPending_ = true;
+        }
+    }
+    pendingInstall_.reset();
+    installSummary_.clear();
+}
+
 void Application::drawUi() {
     // The driver aids are edited in the main menu and in the Vehicle panel; the
     // physics thread only ever sees the derived mask.
     applySessionAids();
+    updateModInstall();
+    drawInstallConfirm();
     if (session_.screen != GameScreen::Driving) {
         drawSessionUi();
         return;

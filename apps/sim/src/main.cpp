@@ -8,6 +8,7 @@
 
 #include "Application.hpp"
 #include "HeadlessRunner.hpp"
+#include "ModCli.hpp"
 
 namespace {
 
@@ -20,6 +21,7 @@ bool matches(const char* arg, const char* name) {
 int main(int argc, char** argv) {
     sim::app::HeadlessOptions headless;
     headless.executablePath = argc > 0 ? argv[0] : "";
+    sim::app::ModCommandOptions modCommand;
     bool runHeadless = false;
     bool sceneGiven = false;
 
@@ -86,10 +88,20 @@ int main(int argc, char** argv) {
         } else if (matches(arg, "--min-psnr") && next != nullptr) {
             headless.minPsnr = std::strtod(next, nullptr);
             ++i;
+        } else if (matches(arg, "--install-mod") && next != nullptr) {
+            modCommand.install = next;
+            ++i;
+        } else if (matches(arg, "--dry-run")) {
+            modCommand.dryRun = true;
         }
     }
 
     try {
+        // A mod command never creates a window: it is what a file association,
+        // a `simmod://` link or an IPC hand-off ends up running.
+        if (!modCommand.install.empty()) {
+            return sim::app::runModCommand(modCommand);
+        }
         if (runHeadless) {
             return sim::app::runHeadless(headless);
         }

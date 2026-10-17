@@ -6,6 +6,7 @@ add_executable(sim_tests
     test_core.cpp
     test_modding.cpp
     test_composition.cpp
+    test_modinstaller.cpp
     test_physics.cpp
     test_render_math.cpp
     test_scripting.cpp

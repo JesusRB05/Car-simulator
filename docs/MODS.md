@@ -79,6 +79,9 @@ it:
 4. **A `simmod://install?id=…&version=…` link** (optional URL-scheme
    registration; always asks for confirmation).
 5. **Copy into the user mods folder** — detected at start-up and while running.
+6. **`sim --install-mod <path>`** (add `--dry-run` to print the plan and stop):
+   what a file association, a `simmod://` link or an IPC hand-off ends up
+   running, and usable on its own.
 
 ### Smart detection
 
@@ -89,14 +92,18 @@ otherwise it explains exactly what is missing.
 
 ### Where mods live
 
-Mods are installed in the **user data directory** — never in the game folder:
+Mods are installed in the **user data directory** — never in the game folder,
+which may be read-only:
 
-- Windows: `%LOCALAPPDATA%/Car Simulator/mods/`
-- Linux: `$XDG_DATA_HOME/car-simulator/mods/` (or `~/.local/share/…`)
-- Configurable via `[mods] directory = "..."`.
+- Windows: `%APPDATA%/Car Simulator/mods/`
+- Linux: `$XDG_DATA_HOME/Car Simulator/mods/` (or `~/.local/share/…`)
+- Configurable with `mods.directory` in `config.toml`.
 
-Each mod is stored **packaged** and **per version**; the current and the
-previous version are kept so the user can roll back.
+The application also scans the bundled `mods/` folder next to the executable
+(the official example mod lives there), below the user's own directory.
+
+Each install keeps the previous version in a hidden backup folder, so the user
+can roll back:
 
 ### Confirmation screen
 

@@ -4,6 +4,7 @@ add_library(sim_modding STATIC
     src/Composition.cpp
     src/DependencyResolver.cpp
     src/Manifest.cpp
+    src/ModInstaller.cpp
     src/ModManager.cpp
     src/Package.cpp
     src/Version.cpp)

@@ -5,7 +5,9 @@ add_executable(sim
     src/Application.cpp
     src/ImGuiLayer.cpp
     src/HeadlessRunner.cpp
+    src/ModCli.cpp
     src/OrbitCamera.cpp
+    src/Paths.cpp
     src/PhysicsScenes.cpp
     src/Scenes.cpp
     src/SimUi.cpp
