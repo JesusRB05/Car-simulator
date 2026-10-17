@@ -32,8 +32,11 @@ struct ModStatus {
     std::filesystem::path source;
     bool isBase = false;
     ModState state = ModState::Disabled;
+    std::vector<std::string> types;
     std::vector<std::string> dependencies;
     std::vector<std::string> errors;
+    std::vector<std::string> warnings;
+    bool migratedFromV1 = false;
 };
 
 struct ModReport {

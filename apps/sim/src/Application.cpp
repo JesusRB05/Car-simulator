@@ -23,6 +23,7 @@
 #include "core/Log.hpp"
 #include "core/Version.hpp"
 #include "drive/DriveScene.hpp"
+#include "modding/Package.hpp"
 #include "session/CarCatalog.hpp"
 #include "session/GarageScene.hpp"
 #include "session/SessionUI.hpp"
@@ -218,8 +219,8 @@ bool Application::initialise() {
     plugins_->loadDirectory(exeDir / "plugins", pluginOptions);
 
     scripts_ = std::make_unique<scripting::ScriptHost>(*vfs_);
-    if (vfs_->exists("scripts/main.lua")) {
-        scripts_->loadScript("base", "scripts/main.lua");
+    if (vfs_->exists("apps/main.lua")) {
+        scripts_->loadScript(std::string(modding::kBaseModId), "apps/main.lua");
         scripts_->callOnLoad();
     }
 

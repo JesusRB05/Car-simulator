@@ -1,7 +1,17 @@
-id = "base"
+# Base content - the official mod `base.core` (format 2).
+#
+# The official content is, to the mod system, an ordinary mod. It is always
+# present and has the lowest load priority. See docs/MOD_FORMAT.md.
+
+format = 2
+
+id = "base.core"
 name = "Base Content"
 version = "0.1.0"
-author = "Car Simulator contributors"
-license = "CC BY-SA 4.0"
-description = "Official base content, community-maintained. Everything in this folder is CC BY-SA 4.0."
+authors = ["Car Simulator contributors"]
+license = "CC-BY-SA-4.0"
+description = "Official base content, community-maintained. Everything in this package is CC BY-SA 4.0."
 min_game_version = "0.1.0"
+
+types = ["car", "track", "apps"]
+permissions = ["hud"]

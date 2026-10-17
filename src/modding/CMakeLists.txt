@@ -4,6 +4,7 @@ add_library(sim_modding STATIC
     src/DependencyResolver.cpp
     src/Manifest.cpp
     src/ModManager.cpp
+    src/Package.cpp
     src/Version.cpp)
 add_library(sim::modding ALIAS sim_modding)
 

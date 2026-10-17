@@ -1,8 +1,19 @@
-id = "example_mod"
+# Example mod - reference for the format (format 2). See docs/MOD_FORMAT.md.
+#
+# Enable it in config.toml under `mods.active` to load its car next to the
+# official ones.
+
+format = 2
+
+id = "example.hatchback"
 name = "Example Mod"
 version = "0.1.0"
-author = "Car Simulator contributors"
-license = "CC BY-SA 4.0"
-description = "Reference mod showing the required structure. Enable it in config under mods.active."
+authors = ["Car Simulator contributors"]
+license = "CC-BY-SA-4.0"
+description = "Reference mod showing the required structure: a data-only hatchback."
 min_game_version = "0.1.0"
-dependencies = []
+
+types = ["car"]
+dependencies = [
+    { id = "base.core", version = "^0.1.0" },
+]

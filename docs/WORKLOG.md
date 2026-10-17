@@ -33,8 +33,8 @@ pushed, and a line here.
 
 | Point | What | Commit | State |
 |---|---|---|---|
-| Design | Rewrite `docs/MODS.md`, add `docs/MOD_FORMAT.md` | — | WIP |
-| M1 | Package format: `.simmod`, `mod.toml` v2, layout, `base.core` | — | TODO |
+| Design | Rewrite `docs/MODS.md`, add `docs/MOD_FORMAT.md` | `5f3ba69` | DONE |
+| M1 | Package format: `.simmod`, `mod.toml` v2, layout, `base.core` | (this commit) | DONE |
 | M2 | Data-driven content (cars/tracks), namespaced ids, validation | — | TODO |
 | M3 | Additive composition: skins, slots/parts, patches, conflicts | — | TODO |
 | M4 | One-click install (`ModInstaller`, drag/drop, association, IPC) | — | TODO |

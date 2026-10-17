@@ -9,6 +9,7 @@
 
 #include "core/Config.hpp"
 #include "core/Log.hpp"
+#include "modding/Package.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
 namespace sim::modding {
@@ -29,7 +30,32 @@ bool isMountableSource(const std::filesystem::path& path) {
         return true;
     }
     const std::string ext = lowerExtension(path);
-    return ext == ".zip";
+    return ext == ".zip" || ext == kPackageExtension;
+}
+
+// The content types implied by the folders a package actually ships. Used for a
+// v1 manifest and as a fallback when `types` is missing.
+struct FolderType {
+    std::string_view folder;
+    std::string_view type;
+};
+
+constexpr FolderType kFolderTypes[] = {
+    {kCarsDir, "car"},    {kTracksDir, "track"},    {kSkinsDir, "skins"},     {kPartsDir, "parts"},
+    {kTyresDir, "tyres"}, {kSoundsDir, "sounds"},   {kSetupsDir, "setups"},   {kWeatherDir, "weather"},
+    {kAppsDir, "apps"},   {kModesDir, "modes"},     {kVisualsDir, "visuals"}, {kLocaleDir, "locale"},
+    {kInputDir, "input"}, {kPluginsDir, "plugins"}, {kPatchesDir, "patches"},
+};
+
+std::vector<std::string> inferTypes(vfs::VirtualFileSystem& vfs, const std::string& mountPoint) {
+    std::vector<std::string> types;
+    for (const FolderType& entry : kFolderTypes) {
+        const std::string directory = mountPoint + "/" + std::string(entry.folder);
+        if (!vfs.list(directory).empty()) {
+            types.emplace_back(entry.type);
+        }
+    }
+    return types;
 }
 
 } // namespace
@@ -49,6 +75,12 @@ std::string ModReport::toString() const {
             state = "INVALID";
         }
         oss << "  - " << mod.id << " " << mod.version << " [" << state << "]";
+        if (!mod.types.empty()) {
+            oss << " types:";
+            for (const auto& type : mod.types) {
+                oss << " " << type;
+            }
+        }
         if (!mod.dependencies.empty()) {
             oss << " deps:";
             for (const auto& dependency : mod.dependencies) {
@@ -56,6 +88,9 @@ std::string ModReport::toString() const {
             }
         }
         oss << "\n";
+        for (const auto& warning : mod.warnings) {
+            oss << "      ~ " << warning << "\n";
+        }
         for (const auto& error : mod.errors) {
             oss << "      ! " << error << "\n";
         }
@@ -125,6 +160,12 @@ void ModManager::discover() {
                     discovered.status.id = result.manifest->id;
                     discovered.status.name = result.manifest->name;
                     discovered.status.version = result.manifest->version.toString();
+                    discovered.status.types = result.manifest->types;
+                    discovered.status.warnings = result.warnings;
+                    discovered.status.migratedFromV1 = result.manifest->migratedFromV1;
+                    if (discovered.status.types.empty()) {
+                        discovered.status.types = inferTypes(vfs_, mountPoint);
+                    }
                     discovered.status.dependencies.reserve(result.manifest->dependencies.size());
                     for (const auto& dependency : result.manifest->dependencies) {
                         discovered.status.dependencies.push_back(dependency.id + " " + dependency.versionRange);
@@ -132,6 +173,7 @@ void ModManager::discover() {
                     parsed = true;
                 } else {
                     discovered.status.errors = result.errors;
+                    discovered.status.warnings = result.warnings;
                     discovered.status.id = fallbackId;
                     discovered.status.name = fallbackId;
                 }
