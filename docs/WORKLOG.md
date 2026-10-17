@@ -40,7 +40,8 @@ pushed, and a line here.
 | M4 | The installer: `.simmod`/folder detection, transactional install, rollback, CLI and drop-to-install | `6d62857` | DONE |
 | M5 | Installer security: entry-name/binary validation, size caps, SHA-256 registry, fuzzing | `fd6586e` | DONE |
 | M6 | Collections (modpacks) and profiles, plus working enable/disable | `0828cfd` | DONE |
-| M7 | The catalog: index format, update check, verified download, `tools/mod-index/`, `--mod-updates` | (this commit) | DONE |
+| M7 | The catalog: index format, update check, verified download, `tools/mod-index/`, `--mod-updates` | `4bcd8f1` | DONE |
+| M8 | Content fingerprint and required-content comparison (`--mod-fingerprint`, `--content-check`) | (this commit) | DONE |
 | M4 | One-click install (`ModInstaller`, drag/drop, association, IPC) | — | TODO |
 | M5 | Installer security: zip validation, SHA-256, script permissions | — | TODO |
 | M6 | Dependencies, updates, modpacks, profiles | — | TODO |

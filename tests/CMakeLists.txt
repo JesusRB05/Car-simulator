@@ -7,6 +7,7 @@ add_executable(sim_tests
     test_modding.cpp
     test_catalog.cpp
     test_composition.cpp
+    test_fingerprint.cpp
     test_modinstaller.cpp
     test_modmeta.cpp
     test_physics.cpp

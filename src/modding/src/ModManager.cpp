@@ -364,6 +364,21 @@ bool ModManager::deleteProfile(std::string_view name) {
     return true;
 }
 
+std::vector<ContentSource> ModManager::contentSources() const {
+    std::vector<ContentSource> sources;
+    for (const ModStatus& mod : report_.mods) {
+        if (mod.state != ModState::Active) {
+            continue;
+        }
+        sources.push_back({mod.id, mod.version, mod.types, mod.source});
+    }
+    return sources;
+}
+
+ContentFingerprint ModManager::contentFingerprint() const {
+    return fingerprintOf(contentSources());
+}
+
 std::string ModManager::modIdFor(std::string_view virtualPath) const {
     const std::string real = vfs_.realDirectoryOf(virtualPath);
     if (real.empty()) {

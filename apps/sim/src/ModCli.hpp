@@ -14,6 +14,11 @@ struct ModCommandOptions {
     std::string install; // a `.simmod`, `.zip` or folder; empty means none
     // An index (a `file://` URL or a path) to check the installed mods against.
     std::string updatesIndex;
+    // A required-content file to check the installed mods against (the check a
+    // client runs before joining a session).
+    std::string contentCheck;
+    // Print the content fingerprint of the installed mods and stop.
+    bool fingerprint = false;
     bool dryRun = false; // print the plan and stop before touching the disk
 };
 

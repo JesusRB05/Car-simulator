@@ -5,6 +5,7 @@ add_library(sim_modding STATIC
     src/Collection.cpp
     src/Composition.cpp
     src/DependencyResolver.cpp
+    src/Fingerprint.cpp
     src/Manifest.cpp
     src/ModInstaller.cpp
     src/ModManager.cpp

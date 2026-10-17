@@ -185,6 +185,11 @@ comparison so a future session can reject mismatches early:
 - a comparator that reports `missing`, `version-mismatch` and `hash-mismatch`
   with one-click download+install.
 
+`sim --mod-fingerprint` prints the fingerprint of the installed mods as a
+required-content file, and `sim --content-check <file>` compares one against
+this machine (exit code 1 on a mismatch), which is the check a client will run
+before it joins.
+
 **Skins do not require a match.**
 
 ## 9. Creator tools

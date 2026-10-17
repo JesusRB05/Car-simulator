@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "modding/DependencyResolver.hpp"
+#include "modding/Fingerprint.hpp"
 #include "modding/Manifest.hpp"
 #include "modding/Profile.hpp"
 
@@ -87,6 +88,12 @@ public:
     bool applyProfile(std::string_view name);
     bool saveProfile(std::string_view name);
     bool deleteProfile(std::string_view name);
+
+    // The content a peer must have to simulate with us (docs/MODS.md section 8):
+    // every active mod that changes the simulation, with a digest of its files.
+    // Skins, sounds and HUD apps are left out on purpose.
+    std::vector<ContentSource> contentSources() const;
+    ContentFingerprint contentFingerprint() const;
 
     // The id of the mod that provides a virtual file, used to build namespaced
     // content references (`<mod-id>/<content-id>`). Empty when the file comes
