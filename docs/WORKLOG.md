@@ -55,7 +55,7 @@ commit, tests green, pushed, and a line here.
 
 | Point | What | Commit | State |
 |---|---|---|---|
-| I1 | Git LFS for `*.glb` and content textures, docs, hygiene check | (this commit) | DONE |
+| I1 | Git LFS for `*.glb` and content textures, docs, hygiene check | `947ac97` | DONE |
 | I2 | glTF 2.0 loader (cgltf, VFS, materials, tangents, textures) | — | TODO |
 | I3 | PBR rendering, sun shadows, sky ambient, tone mapping, transparencies | — | TODO |
 | I4 | Halvard GT3 `car.toml`, visual wheels, selectable skins | — | TODO |

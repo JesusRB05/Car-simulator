@@ -54,16 +54,24 @@ TEST_CASE("content: the official car and circuit load through the VFS") {
         MESSAGE("car error: " << error);
     }
     REQUIRE(cars.errors.empty());
-    REQUIRE(cars.cars.size() == 2);
+    REQUIRE(cars.cars.size() == 3);
     // Every car carries a namespaced reference, never a bare name.
-    CHECK(cars.cars[0].ref() == "base.core/voyager"); // sorted by reference
-    CHECK(cars.cars[1].ref() == "example.hatchback/hatchback");
-    CHECK(cars.cars[1].id == "hatchback");
+    CHECK(cars.cars[0].ref() == "base.core/halvard_gt3"); // sorted by reference
+    CHECK(cars.cars[1].ref() == "base.core/voyager");
+    CHECK(cars.cars[2].ref() == "example.hatchback/hatchback");
+    CHECK(cars.cars[2].id == "hatchback");
 
     // The base car.toml must reproduce the compiled-in default bit for bit, so
     // moving the car into content changes nothing about how it drives.
+    const sim::app::CarSpec* voyagerSpec = nullptr;
+    for (const sim::app::CarSpec& car : cars.cars) {
+        if (car.ref() == "base.core/voyager") {
+            voyagerSpec = &car;
+        }
+    }
+    REQUIRE(voyagerSpec != nullptr);
     const sim::vehicle::VehicleSetup& expected = sim::vehicle::makeDefaultVehicleSetup();
-    const sim::vehicle::VehicleSetup& actual = cars.cars[0].setup;
+    const sim::vehicle::VehicleSetup& actual = voyagerSpec->setup;
     CHECK(actual.mass == expected.mass);
     CHECK(actual.principalInertia == expected.principalInertia);
     CHECK(actual.bodyHalfExtents == expected.bodyHalfExtents);
@@ -148,8 +156,15 @@ TEST_CASE("content: a patch changes a car without copying its file") {
     // Without the patch: the descriptor's own mass.
     const sim::app::CarLoadResult plain = sim::app::loadCars(vfs, owner);
     REQUIRE(plain.errors.empty());
-    REQUIRE(plain.cars.size() == 1);
-    const double stock = plain.cars[0].massKg;
+    REQUIRE(plain.cars.size() == 2);
+    const sim::app::CarSpec* stockCar = nullptr;
+    for (const sim::app::CarSpec& car : plain.cars) {
+        if (car.id == "voyager") {
+            stockCar = &car;
+        }
+    }
+    REQUIRE(stockCar != nullptr);
+    const double stock = stockCar->massKg;
 
     // A patch adds 100 kg to the car, leaving its file untouched.
     std::string error;
@@ -165,8 +180,15 @@ TEST_CASE("content: a patch changes a car without copying its file") {
         MESSAGE("patched car error: " << message);
     }
     REQUIRE(patched.errors.empty());
-    REQUIRE(patched.cars.size() == 1);
-    CHECK(patched.cars[0].massKg == doctest::Approx(stock + 100.0));
+    REQUIRE(patched.cars.size() == 2);
+    const sim::app::CarSpec* patchedCar = nullptr;
+    for (const sim::app::CarSpec& car : patched.cars) {
+        if (car.id == "voyager") {
+            patchedCar = &car;
+        }
+    }
+    REQUIRE(patchedCar != nullptr);
+    CHECK(patchedCar->massKg == doctest::Approx(stock + 100.0));
 }
 
 TEST_CASE("content: a car discovered in a mod loads and drives") {
