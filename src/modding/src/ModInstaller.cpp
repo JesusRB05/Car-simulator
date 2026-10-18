@@ -214,7 +214,7 @@ std::string installedVersion(const fs::path& directory) {
 std::string InstallPlan::summary() const {
     if (!ok) {
         std::ostringstream oss;
-        oss << "cannot install " << input.string();
+        oss << "cannot install " << input.generic_string();
         for (const std::string& error : errors) {
             oss << "\n  ! " << error;
         }
@@ -226,7 +226,7 @@ std::string InstallPlan::summary() const {
     if (replacesExisting) {
         oss << ", replacing " << (existingVersion.empty() ? "the installed version" : existingVersion);
     }
-    oss << "\n  into " << target.string();
+    oss << "\n  into " << target.generic_string();
     if (!types.empty()) {
         oss << "\n  provides:";
         for (const std::string& type : types) {

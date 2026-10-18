@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/setup.schema.json",
+  "title": "setup.toml",
+  "description": "Named car configuration, setups/<car-mod>/<car>/<setup>.toml (docs/MOD_FORMAT.md section 5.5).",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+    "name": { "type": "string" },
+    "car": { "type": "string", "description": "The car this setup is for, as a content reference." },
+    "parts": {
+      "type": "object",
+      "description": "One part per slot: slot name to a part content reference.",
+      "additionalProperties": { "type": "string" }
+    },
+    "values": {
+      "type": "object",
+      "description": "Dotted numeric overrides, e.g. suspension.spring_stiffness_front.",
+      "additionalProperties": { "type": "number" }
+    }
+  },
+  "required": ["id", "car"],
+  "additionalProperties": false
+}

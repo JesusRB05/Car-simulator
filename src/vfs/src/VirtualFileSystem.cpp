@@ -5,11 +5,17 @@
 #include <physfs.h>
 
 #include <array>
+#include <atomic>
 
 #include "core/Log.hpp"
 
 namespace sim::vfs {
 namespace {
+
+// PhysicsFS is a single global library state: several VirtualFileSystem
+// instances may coexist (the app, a CLI command and a validation scratch mount),
+// so the init/deinit pair is reference-counted and done once.
+std::atomic<int> g_instances{0};
 
 std::string normalise(std::string_view path) {
     std::string result(path);
@@ -27,18 +33,24 @@ void logLastError(std::string_view what) {
 } // namespace
 
 VirtualFileSystem::VirtualFileSystem() {
-    if (!PHYSFS_init("car-simulator")) {
-        logLastError("PHYSFS_init");
-        return;
+    if (g_instances == 0) {
+        if (!PHYSFS_init("car-simulator")) {
+            logLastError("PHYSFS_init");
+            return;
+        }
+        PHYSFS_permitSymbolicLinks(1);
     }
-    PHYSFS_permitSymbolicLinks(1);
+    ++g_instances;
     initialised_ = true;
 }
 
 VirtualFileSystem::~VirtualFileSystem() {
-    if (initialised_) {
+    if (!initialised_) {
+        return;
+    }
+    initialised_ = false;
+    if (--g_instances == 0) {
         PHYSFS_deinit();
-        initialised_ = false;
     }
 }
 

@@ -193,6 +193,9 @@ private:
     std::unique_ptr<modding::InstallPlan> pendingInstall_;
     std::string installSummary_;
     bool reloadContentPending_ = false;
+    // Developer mode (docs/MODS.md section 9): the mods folder is watched and
+    // polled every few frames, not every frame, so the scan stays cheap.
+    int developerPollCountdown_ = 0;
     std::filesystem::path exeDir_;
     std::unique_ptr<scripting::ScriptHost> scripts_;
     std::unique_ptr<plugin::PluginLoader> plugins_;

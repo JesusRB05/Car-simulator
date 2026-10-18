@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/car.schema.json",
+  "title": "car.toml",
+  "description": "Car descriptor, cars/<car>/car.toml (docs/MOD_FORMAT.md section 5.1).",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+    "name": { "type": "string" },
+    "author": { "type": "string", "description": "Free text, e.g. a name and an email." },
+    "license": { "type": "string" },
+    "category": { "type": "string" },
+    "description": { "type": "string" },
+    "color": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0, "maximum": 1 },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "model": { "type": "string", "description": "Path to a glTF/GLB model." },
+    "chassis": {
+      "type": "object",
+      "properties": {
+        "mass": { "type": "number", "exclusiveMinimum": 0 },
+        "inertia": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+        "half_extents": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 }
+      },
+      "additionalProperties": false
+    },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "front_axle_z": { "type": "number" },
+        "rear_axle_z": { "type": "number" },
+        "half_track": { "type": "number", "exclusiveMinimum": 0 },
+        "mount_y": { "type": "number" },
+        "rest_length": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "suspension": {
+      "type": "object",
+      "properties": {
+        "spring_stiffness_front": { "type": "number", "exclusiveMinimum": 0 },
+        "spring_stiffness_rear": { "type": "number", "exclusiveMinimum": 0 },
+        "damper_bump": { "type": "number" },
+        "damper_rebound": { "type": "number" },
+        "bump_stop_length": { "type": "number" },
+        "bump_stop_stiffness": { "type": "number" },
+        "bump_stop_damping": { "type": "number" },
+        "bump_stop_exponent": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "wheels": {
+      "type": "object",
+      "properties": {
+        "radius": { "type": "number", "exclusiveMinimum": 0 },
+        "inertia": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "tyres": {
+      "type": "object",
+      "properties": {
+        "compound": { "type": "string", "description": "A shared tyre reference; inline values otherwise." },
+        "peak_friction_longitudinal": { "type": "number" },
+        "peak_friction_lateral": { "type": "number" },
+        "nominal_load": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "engine": {
+      "type": "object",
+      "properties": {
+        "idle_speed": { "type": "number", "exclusiveMinimum": 0 },
+        "rev_limit": { "type": "number", "exclusiveMinimum": 0 },
+        "torque_curve_speed": { "type": "array", "items": { "type": "number" } },
+        "torque_curve_torque": { "type": "array", "items": { "type": "number" } },
+        "friction_constant": { "type": "number" },
+        "friction_linear": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "drivetrain": {
+      "type": "object",
+      "properties": {
+        "gear_ratios": { "type": "array", "items": { "type": "number" }, "minItems": 1 },
+        "reverse_ratio": { "type": "number" },
+        "final_drive": { "type": "number" },
+        "efficiency": { "type": "number", "minimum": 0, "maximum": 1 },
+        "upshift_speed": { "type": "number" },
+        "downshift_speed": { "type": "number" },
+        "drive": { "enum": ["rwd", "fwd", "awd"] }
+      },
+      "additionalProperties": false
+    },
+    "brakes": {
+      "type": "object",
+      "properties": {
+        "max_brake_pressure": { "type": "number", "exclusiveMinimum": 0 },
+        "brake_bias": { "type": "number", "minimum": 0, "maximum": 1 },
+        "handbrake_pressure": { "type": "number" },
+        "pad_friction": { "type": "number" },
+        "piston_area": { "type": "number" },
+        "effective_radius": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "steering": {
+      "type": "object",
+      "properties": {
+        "max_steer_angle": { "type": "number" },
+        "min_steer_angle": { "type": "number" },
+        "steer_speed_scale": { "type": "number" },
+        "steer_input_rate": { "type": "number" },
+        "steer_return_rate": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "aero": {
+      "type": "object",
+      "properties": {
+        "drag_coefficient": { "type": "number", "minimum": 0 },
+        "lift_coefficient": { "type": "number" },
+        "frontal_area": { "type": "number", "exclusiveMinimum": 0 },
+        "centre_of_pressure": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+        "air_density": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "slots": {
+      "type": "object",
+      "description": "Named slots and the default part installed in each.",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "default": { "type": "string", "description": "Empty means no default part." }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["id", "name"],
+  "additionalProperties": false
+}

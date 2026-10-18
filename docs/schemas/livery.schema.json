@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/livery.schema.json",
+  "title": "livery.toml",
+  "description": "Skin descriptor, skins/<car-mod>/<car>/<skin>/livery.toml (docs/MOD_FORMAT.md section 5.3).",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+    "name": { "type": "string" },
+    "authors": { "type": "array", "items": { "type": "string" } },
+    "license": { "type": "string" },
+    "car": { "type": "string", "description": "The car this skin is for, as a content reference." },
+    "body_color": {
+      "type": "array",
+      "items": { "type": "number", "minimum": 0, "maximum": 1 },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "description": { "type": "string" },
+    "textures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slot": { "type": "string", "description": "Texture slot the car exposes." },
+          "file": { "type": "string", "description": "Path to the texture inside the skin folder." }
+        },
+        "required": ["slot", "file"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["id", "name", "car"],
+  "additionalProperties": false
+}

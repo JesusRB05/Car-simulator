@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/mod.schema.json",
+  "title": "mod.toml",
+  "description": "Manifest of a content package (docs/MOD_FORMAT.md section 3).",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "integer",
+      "const": 2,
+      "description": "Manifest format. A missing value means a v1 manifest."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+      "description": "Mod id: <author>.<name>."
+    },
+    "name": { "type": "string", "minLength": 1 },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"
+    },
+    "authors": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "license": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "cover": { "type": "string", "description": "Path inside the package to a PNG/JPEG." },
+    "min_game_version": { "type": "string" },
+    "types": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "car", "track", "skins", "parts", "tyres", "sounds", "setups",
+          "weather", "apps", "modes", "visuals", "locale", "input",
+          "plugins", "patches", "collection"
+        ]
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Script permissions; required when types contains apps or modes."
+    },
+    "overrides": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Whole files this mod replaces (paths inside this package)."
+    },
+    "urls": {
+      "type": "object",
+      "properties": {
+        "website": { "type": "string" },
+        "source": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "collection": {
+      "type": "object",
+      "properties": {
+        "mods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "version": { "type": "string" }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "session": {
+          "type": "object",
+          "properties": {
+            "track": { "type": "string" },
+            "cars": { "type": "array", "items": { "type": "string" } },
+            "rules": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "description": "Present when types contains collection."
+    },
+    "entry_script": { "type": "string", "description": "Legacy (v1)." },
+    "priority": { "type": "integer", "description": "Legacy (v1)." }
+  },
+  "required": ["id", "name", "version", "authors", "license"],
+  "additionalProperties": false
+}

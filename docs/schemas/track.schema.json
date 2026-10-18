@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/track.schema.json",
+  "title": "track.toml",
+  "description": "Circuit descriptor, tracks/<track>/track.toml (docs/MOD_FORMAT.md section 5.2).",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+    "name": { "type": "string" },
+    "author": { "type": "string", "description": "Free text, e.g. a name and an email." },
+    "license": { "type": "string" },
+    "location": { "type": "string" },
+    "description": { "type": "string" },
+    "geometry": {
+      "type": "object",
+      "properties": {
+        "loop": { "type": "boolean" },
+        "sample_spacing": { "type": "number", "exclusiveMinimum": 0 },
+        "half_width": { "type": "number", "exclusiveMinimum": 0 },
+        "kerb_width": { "type": "number", "minimum": 0 },
+        "start_z": { "type": "number" },
+        "control_points": {
+          "type": "array",
+          "items": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+          "minItems": 2
+        }
+      },
+      "additionalProperties": false
+    },
+    "terrain": {
+      "type": "object",
+      "properties": {
+        "hills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": { "type": "number" },
+              "z": { "type": "number" },
+              "height": { "type": "number" },
+              "sigma": { "type": "number", "exclusiveMinimum": 0 }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "model": {
+      "type": "object",
+      "properties": {
+        "mesh": { "type": "string", "description": "Path to a glTF/GLB model." }
+      },
+      "additionalProperties": false
+    },
+    "start": {
+      "type": "object",
+      "properties": {
+        "position": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 2 },
+        "heading": { "type": "number", "description": "Radians; 0 faces -Z." }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "name"],
+  "additionalProperties": false
+}

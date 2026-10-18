@@ -10,6 +10,7 @@ add_executable(sim_tests
     test_fingerprint.cpp
     test_modinstaller.cpp
     test_modmeta.cpp
+    test_packagewriter.cpp
     test_physics.cpp
     test_render_math.cpp
     test_scripting.cpp

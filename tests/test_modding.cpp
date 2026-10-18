@@ -3,11 +3,16 @@
 #include <doctest/doctest.h>
 
 #include <algorithm>
+#include <filesystem>
+#include <fstream>
 
+#include "core/Config.hpp"
 #include "modding/DependencyResolver.hpp"
 #include "modding/Manifest.hpp"
+#include "modding/ModManager.hpp"
 #include "modding/Package.hpp"
 #include "modding/Version.hpp"
+#include "vfs/VirtualFileSystem.hpp"
 
 using namespace sim::modding;
 
@@ -216,4 +221,54 @@ TEST_CASE("A v2 manifest rejects unknown types, permissions and overrides") {
     const std::string badFormat = "format = 3\nid = \"a.b\"\nname = \"B\"\nversion = \"1.0.0\"\n"
                                   "authors = [\"A\"]\nlicense = \"MIT\"\ntypes = [\"car\"]\n";
     CHECK_FALSE(parseManifest(badFormat, "a.b").ok());
+}
+
+namespace {
+
+void writeText(const std::filesystem::path& path, const std::string& text) {
+    std::filesystem::create_directories(path.parent_path());
+    std::ofstream out(path, std::ios::binary);
+    out << text;
+}
+
+} // namespace
+
+TEST_CASE("developer mode notices a saved file, once, and only when enabled") {
+    namespace fs = std::filesystem;
+    const fs::path root = fs::temp_directory_path() / "sim_tests_developermode";
+    fs::remove_all(root);
+    writeText(root / "content" / "base" / "mod.toml",
+              "format = 2\nid = \"base.core\"\nname = \"Base\"\nversion = \"0.1.0\"\n"
+              "authors = [\"A\"]\nlicense = \"MIT\"\ntypes = [\"car\"]\n");
+    writeText(root / "mods" / "ana.karts" / "mod.toml",
+              "format = 2\nid = \"ana.karts\"\nname = \"Karts\"\nversion = \"1.0.0\"\n"
+              "authors = [\"A\"]\nlicense = \"MIT\"\ntypes = [\"car\"]\n");
+
+    sim::vfs::VirtualFileSystem vfs;
+    sim::core::Config config((root / "config.toml").string());
+    ModManager::Paths paths;
+    paths.baseContent = root / "content" / "base";
+    paths.modsDirectory = root / "mods";
+
+    ModManager manager(vfs, config, paths);
+    manager.reload();
+
+    // Disabled by default, and a disabled watcher never reports a change.
+    CHECK_FALSE(manager.developer());
+    CHECK_FALSE(manager.pollDevelopment());
+
+    manager.setDeveloper(true);
+    CHECK(manager.developer());
+    // Enabling takes a baseline, so nothing has changed yet.
+    CHECK_FALSE(manager.pollDevelopment());
+
+    // Adding any file to a watched source is one change, reported exactly once.
+    writeText(root / "mods" / "ana.karts" / "cars" / "kart" / "car.toml", "id = \"kart\"\n");
+    CHECK(manager.pollDevelopment());
+    CHECK_FALSE(manager.pollDevelopment());
+
+    manager.setDeveloper(false);
+    CHECK_FALSE(manager.pollDevelopment());
+
+    fs::remove_all(root);
 }

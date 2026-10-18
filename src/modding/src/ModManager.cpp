@@ -58,6 +58,42 @@ std::vector<std::string> inferTypes(vfs::VirtualFileSystem& vfs, const std::stri
     return types;
 }
 
+// A cheap fingerprint of a source tree: the name, size and write time of every
+// file, mixed into one number. Enough to notice that a developer saved a file
+// (mtime), added or removed one (count), without hashing the bytes.
+std::uint64_t sourceStamp(const std::filesystem::path& source) {
+    std::uint64_t stamp = 1469598103934665603ull; // FNV-1a offset basis
+    const auto mix = [&stamp](std::uint64_t value) {
+        stamp ^= value;
+        stamp *= 1099511628211ull;
+    };
+
+    std::error_code ec;
+    if (std::filesystem::is_directory(source, ec)) {
+        std::vector<std::filesystem::path> files;
+        for (auto it = std::filesystem::recursive_directory_iterator(source, ec);
+             !ec && it != std::filesystem::recursive_directory_iterator(); it.increment(ec)) {
+            std::error_code fileEc;
+            if (it->is_regular_file(fileEc)) {
+                files.push_back(it->path());
+            }
+        }
+        std::sort(files.begin(), files.end());
+        for (const std::filesystem::path& file : files) {
+            std::error_code fileEc;
+            const auto time = std::filesystem::last_write_time(file, fileEc);
+            mix(static_cast<std::uint64_t>(time.time_since_epoch().count()));
+            mix(static_cast<std::uint64_t>(std::filesystem::file_size(file, fileEc)));
+        }
+        mix(static_cast<std::uint64_t>(files.size()));
+    } else {
+        const auto time = std::filesystem::last_write_time(source, ec);
+        mix(static_cast<std::uint64_t>(time.time_since_epoch().count()));
+        mix(static_cast<std::uint64_t>(std::filesystem::file_size(source, ec)));
+    }
+    return stamp;
+}
+
 } // namespace
 
 bool ModReport::ok() const {
@@ -115,6 +151,9 @@ void ModManager::reload() {
     activeIds_ = config_.getStringArray(kActiveKey);
     discover();
     mountActive();
+    if (developer_) {
+        refreshWatch();
+    }
 }
 
 void ModManager::discover() {
@@ -377,6 +416,53 @@ std::vector<ContentSource> ModManager::contentSources() const {
 
 ContentFingerprint ModManager::contentFingerprint() const {
     return fingerprintOf(contentSources());
+}
+
+void ModManager::setDeveloper(bool enabled) {
+    developer_ = enabled;
+    if (developer_) {
+        refreshWatch();
+    } else {
+        watch_.clear();
+    }
+}
+
+void ModManager::refreshWatch() {
+    watch_.clear();
+    watch_.reserve(discovered_.size());
+    for (const Discovered& discovered : discovered_) {
+        watch_.emplace_back(discovered.status.source, sourceStamp(discovered.status.source));
+    }
+}
+
+bool ModManager::pollDevelopment() {
+    if (!developer_) {
+        return false;
+    }
+
+    bool changed = false;
+    std::vector<std::pair<std::filesystem::path, std::uint64_t>> next;
+    next.reserve(discovered_.size());
+    for (const Discovered& discovered : discovered_) {
+        const std::uint64_t stamp = sourceStamp(discovered.status.source);
+        next.emplace_back(discovered.status.source, stamp);
+        const auto previous = std::find_if(watch_.begin(), watch_.end(), [&discovered](const auto& entry) {
+            return entry.first == discovered.status.source;
+        });
+        // A source we have never seen (a mod dropped into the folder) counts as
+        // a change; so does a different stamp on a source we already watch.
+        if (previous == watch_.end() || previous->second != stamp) {
+            changed = true;
+        }
+    }
+    if (next.size() != watch_.size()) {
+        changed = true;
+    }
+    watch_ = std::move(next);
+    if (changed) {
+        core::Log::get("modding")->info("developer mode: a mod source changed");
+    }
+    return changed;
 }
 
 std::string ModManager::modIdFor(std::string_view virtualPath) const {

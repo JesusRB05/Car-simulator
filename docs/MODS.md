@@ -207,7 +207,9 @@ sim mod skin-template base.core/voyager        # UV template PNG with guides
 
 - **Developer mode** — an unpacked mods folder with hot reload when
   `car.toml`, `track.toml`, a skin or a script is saved (no session restart
-  when it is safe).
+  when it is safe). Enable it with `mods.developer = true` in `config.toml`;
+  the app then watches the mod folders and reloads the content when one
+  changes.
 - **JSON schemas** for `mod.toml`, `car.toml`, `track.toml`, `livery.toml`,
   `part.toml`, `setup.toml`, `patches` and the index, in `docs/schemas/`, so
   Taplo and *Even Better TOML* autocomplete and validate in the editor.

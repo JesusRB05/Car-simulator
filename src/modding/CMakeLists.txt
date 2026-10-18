@@ -10,6 +10,7 @@ add_library(sim_modding STATIC
     src/ModInstaller.cpp
     src/ModManager.cpp
     src/Package.cpp
+    src/PackageWriter.cpp
     src/Profile.cpp
     src/Registry.cpp
     src/Version.cpp)

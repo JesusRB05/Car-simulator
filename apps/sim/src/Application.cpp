@@ -161,6 +161,7 @@ bool Application::initialise() {
     installer_ = std::make_unique<modding::ModInstaller>(*vfs_, modPaths.modsDirectory);
     mods_ = std::make_unique<modding::ModManager>(*vfs_, *config_, modPaths);
     mods_->reload();
+    mods_->setDeveloper(config_->getBool("mods.developer", false));
     log->info("mods: {}", mods_->report().toString());
 
     // ModManager rebuilds the mount table from scratch (base + mods), so the
@@ -779,6 +780,18 @@ void Application::handleCameraKeys() {
 }
 
 void Application::updateModInstall() {
+    // Developer mode: watch the unpacked mods and reload when one is saved. The
+    // scan is throttled to roughly twice a second at 60 fps.
+    if (mods_->developer()) {
+        if (developerPollCountdown_ <= 0) {
+            developerPollCountdown_ = 30;
+            if (mods_->pollDevelopment()) {
+                reloadContentPending_ = true;
+            }
+        } else {
+            --developerPollCountdown_;
+        }
+    }
     // A finished install is applied here, at a frame boundary, so no descriptor
     // pointer handed out during the previous frame is still in use.
     if (reloadContentPending_) {

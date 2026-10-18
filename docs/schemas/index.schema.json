@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/index.schema.json",
+  "title": "mod index",
+  "description": "A static catalogue file served over HTTPS, a plain list of available mod versions (docs/MOD_FORMAT.md section 8).",
+  "type": "object",
+  "properties": {
+    "format": { "type": "integer", "const": 1 },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "version": {
+      "type": "array",
+      "description": "One entry per published mod version.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string" },
+          "download": { "type": "string", "description": "HTTPS URL of the .simmod file." },
+          "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" },
+          "size": { "type": "integer", "minimum": 0 },
+          "license": { "type": "string" },
+          "changelog": { "type": "string" },
+          "cover": { "type": "string" },
+          "types": { "type": "array", "items": { "type": "string" } },
+          "dependencies": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Each entry is a mod id and an optional version range, e.g. \"base.core ^0.1.0\"."
+          }
+        },
+        "required": ["id", "version", "download", "sha256"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["version"],
+  "additionalProperties": false
+}

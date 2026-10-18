@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/patch.schema.json",
+  "title": "patches/*.toml",
+  "description": "A descriptor patch, patches/<name>.toml (docs/MOD_FORMAT.md section 5.6).",
+  "type": "object",
+  "properties": {
+    "target": {
+      "type": "string",
+      "description": "Full content reference the patch applies to, e.g. base.core/voyager."
+    },
+    "patch": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Dotted key inside the target descriptor, e.g. aero.lift_coefficient."
+          },
+          "op": { "enum": ["set", "add", "multiply", "remove"] },
+          "value": { "type": ["number", "string"] }
+        },
+        "required": ["path", "op"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["target", "patch"],
+  "additionalProperties": false
+}

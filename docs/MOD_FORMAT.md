@@ -145,7 +145,7 @@ plausible range is an error naming the file, key, value and allowed range.
 ```toml
 id = "voyager"                  # content id (folder name must match)
 name = "Voyager"
-authors = ["Car Simulator contributors"]
+author = "Car Simulator contributors"
 license = "CC-BY-SA-4.0"
 category = "Sports car / RWD"
 description = "..."
@@ -246,7 +246,7 @@ length as `torque_curve_torque`; `rev_limit > idle_speed`; `mass > 0`;
 ```toml
 id = "sunset_circuit"
 name = "Sunset Circuit"
-authors = ["Car Simulator contributors"]
+author = "Car Simulator contributors"
 license = "CC-BY-SA-4.0"
 location = "Procedural test loop"
 description = "..."
@@ -433,66 +433,68 @@ an open, plain list — no accounts, no queries, only GET.
 ```toml
 # mod-index format (tools/mod-index/README.md)
 format = 1
+name = "Community index"
+description = "Everything published by the community."
 
-[[mod]]
+[[version]]
 id = "ana.karts"
 name = "Ana's Karts"
 version = "1.2.0"
-authors = ["Ana Pérez"]
-license = "CC-BY-SA-4.0"
-types = ["car", "skins"]
-description = "..."
-url = "https://…/ana-karts-1.2.0.simmod"
+download = "https://…/ana-karts-1.2.0.simmod"
 sha256 = "…64 hex…"
 size = 4823910
+license = "CC-BY-SA-4.0"
+changelog = "First public release."
 cover = "https://…/karts-cover.png"
-min_game_version = "0.1.0"
-
-[[mod.dependencies]]
-id = "base.core"
-version = "^0.1.0"
+types = ["car", "skins"]
+dependencies = ["base.core ^0.1.0"]
 ```
 
-Every `url` must be HTTPS; every download is verified against `sha256` before
-installation. Multiple sources may be configured; an entry is keyed by
-`(id, version)`.
+Every `download` URL must be HTTPS; every download is verified against
+`sha256` before installation. Multiple sources may be configured; an entry is
+keyed by `(id, version)`.
 
 ## 9. Collections (modpacks and championships) — M6
 
 ```toml
-format = 2
 id = "liga-2026.round1"
 name = "Liga 2026 — Round 1"
-version = "1.0.0"
-authors = ["Liga 2026"]
-license = "CC-BY-SA-4.0"
-types = ["collection"]
+description = "Round one of the 2026 championship."
+session = "ana.tracks/cart_circuit"
 
-[[collection.mods]]
+[[mod]]
 id = "ana.karts"
 version = "=1.2.0"
 
-[[collection.mods]]
+[[mod]]
 id = "base.core"
 version = "^0.1.0"
 
-[collection.session]
-track = "ana.tracks/cart_circuit"
-cars = ["ana.karts/kart"]
-rules = "free-practice"
+[[mod]]
+id = "ana.paintpack"
+version = "*"
+optional = true
+reason = "extra skins, nice but not required"
 ```
 
-Installing a collection installs every listed mod at the requested version.
+Installing a collection installs every listed mod at the requested version. An
+entry with `optional = true` is reported but does not stop the install when it
+is missing; `reason` explains why it is optional.
 
 ## 10. Profiles (M6)
 
-A profile is a small file listing active mods and their order; it is exported
-and imported to share a league setup.
+A profile is a small file listing the active mods and their order; it is
+exported and imported to share a league setup. One file holds every profile,
+each an entry in `[profiles]` (the name maps to the ordered list of mod ids);
+`last` records the one applied last. An exported single profile is the same
+shape with one entry, so a hand-written file imports with no second parser.
 
 ```toml
-format = 1
-name = "League round 1"
-order = ["base.core", "ana.karts", "liga-2026.round1"]
+last = "League round 1"
+
+[profiles]
+"League round 1" = ["base.core", "ana.karts", "liga-2026.round1"]
+"Free practice" = ["base.core"]
 ```
 
 ## 11. Required-content message (M8)
@@ -532,5 +534,10 @@ Editor autocompletion schemas live in `docs/schemas/`:
 `mod.schema.json`, `car.schema.json`, `track.schema.json`, `livery.schema.json`,
 `part.schema.json`, `setup.schema.json`, `patch.schema.json`,
 `collection.schema.json`, `profile.schema.json`, `index.schema.json`.
-They are generated/checked in CI and referenced from the format docs so Taplo
-and *Even Better TOML* offer completion and inline validation.
+Taplo and *Even Better TOML* reference them by name for completion and inline
+validation.
+
+They are hand-maintained against this document, and the repository hygiene
+check (`tools/ci/check_schemas.py`, run by `tools/ci/hygiene.sh`) fails if a key
+used by any descriptor in `content/` or `mods/` is not declared by its schema,
+so the schemas cannot drift from the format.

@@ -105,6 +105,15 @@ int main(int argc, char** argv) {
     }
 
     try {
+        // `sim mod <verb> ...`: the creator and manager commands (docs/MODS.md
+        // section 9). They never create a window either.
+        if (argc > 1 && matches(argv[1], "mod")) {
+            sim::app::ModCommandOptions subcommand;
+            for (int i = 2; i < argc; ++i) {
+                subcommand.args.emplace_back(argv[i]);
+            }
+            return sim::app::runModCommand(subcommand);
+        }
         // A mod command never creates a window: it is what a file association,
         // a `simmod://` link or an IPC hand-off ends up running.
         if (!modCommand.install.empty() || !modCommand.updatesIndex.empty() || !modCommand.contentCheck.empty() ||

@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/collection.schema.json",
+  "title": "collection",
+  "description": "A modpack or championship: a list of mods with version ranges, plus an optional session (docs/MOD_FORMAT.md section 9).",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "session": { "type": "string", "description": "Content reference of the session the pack is for." },
+    "mod": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string", "description": "Version range; defaults to *." },
+          "optional": { "type": "boolean" },
+          "reason": { "type": "string", "description": "Why an optional entry is optional." }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["id", "mod"],
+  "additionalProperties": false
+}

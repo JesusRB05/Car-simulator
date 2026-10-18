@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://car-simulator.example/schemas/part.schema.json",
+  "title": "part.toml",
+  "description": "Slot part, parts/<car-mod>/<car>/<slot>/<part>.toml (docs/MOD_FORMAT.md section 5.4). The numeric keys a part may set are the parameters the car declares for the slot; they are open here.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9_-]+$" },
+    "name": { "type": "string" },
+    "authors": { "type": "array", "items": { "type": "string" } },
+    "license": { "type": "string" },
+    "slot": { "type": "string", "description": "The slot this part fills." }
+  },
+  "required": ["id", "slot"],
+  "additionalProperties": { "type": ["number", "string", "boolean"] }
+}

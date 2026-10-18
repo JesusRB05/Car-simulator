@@ -51,6 +51,15 @@ while IFS= read -r f; do
 done < <(git ls-files | grep -E '\.(c|cc|cpp|cxx|h|hpp|hxx|inl|ipp|slang|ps1|bat|sh|cmake|yml|yaml)$|(^|/)CMakeLists\.txt$' || true)
 [[ "$header_ok" -eq 1 ]] && note "all present"
 
+echo "hygiene: editor JSON schemas"
+# The schemas in docs/schemas/ must stay in step with the descriptors in
+# content/ and mods/ (see docs/MOD_FORMAT.md section 13).
+if command -v python3 >/dev/null 2>&1; then
+    python3 tools/ci/check_schemas.py || fail=1
+else
+    err "python3 is required to check the JSON schemas"
+fi
+
 if [[ "$fail" -ne 0 ]]; then
     echo "hygiene: FAILED" >&2
     exit 1

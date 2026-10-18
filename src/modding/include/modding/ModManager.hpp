@@ -2,9 +2,11 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "modding/DependencyResolver.hpp"
@@ -95,6 +97,14 @@ public:
     std::vector<ContentSource> contentSources() const;
     ContentFingerprint contentFingerprint() const;
 
+    // Developer mode (docs/MODS.md section 9): watch the sources of unpacked
+    // mods and report when one changed, so the app can reload without a restart.
+    void setDeveloper(bool enabled);
+    bool developer() const { return developer_; }
+    // True once after a watched source changed since the previous call (and the
+    // first call after enabling, when the baseline is taken).
+    bool pollDevelopment();
+
     // The id of the mod that provides a virtual file, used to build namespaced
     // content references (`<mod-id>/<content-id>`). Empty when the file comes
     // from the base content or cannot be resolved.
@@ -108,6 +118,8 @@ private:
 
     void discover();
     void mountActive();
+    // File stamps of every watched source, used to detect a change.
+    void refreshWatch();
 
     vfs::VirtualFileSystem& vfs_;
     core::Config& config_;
@@ -117,6 +129,8 @@ private:
     std::vector<std::string> activeIds_;
     ModReport report_;
     ProfileStore profiles_;
+    bool developer_ = false;
+    std::vector<std::pair<std::filesystem::path, std::uint64_t>> watch_;
 };
 
 } // namespace sim::modding

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace sim::app {
 
@@ -12,6 +13,9 @@ namespace sim::app {
 // depend on how the user got here.
 struct ModCommandOptions {
     std::string install; // a `.simmod`, `.zip` or folder; empty means none
+    // `sim mod <verb> ...`: the creator and manager commands (docs/MODS.md
+    // section 9). When `args` is not empty it takes precedence over the flags.
+    std::vector<std::string> args;
     // An index (a `file://` URL or a path) to check the installed mods against.
     std::string updatesIndex;
     // A required-content file to check the installed mods against (the check a
