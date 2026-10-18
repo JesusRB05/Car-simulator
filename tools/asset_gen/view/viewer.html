@@ -1,0 +1,98 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Asset preview</title>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#9fb7d4}canvas{display:block}</style>
+</head><body>
+<script type="module">
+import * as THREE from './lib/three.module.js';
+import { GLTFLoader } from './lib/GLTFLoader.js';
+import { OrbitControls } from './lib/OrbitControls.js';
+import { RoomEnvironment } from './lib/RoomEnvironment.js';
+
+const q = new URLSearchParams(location.search);
+const num = (k, d) => q.has(k) ? q.get(k).split(',').map(Number) : d;
+const W = +(q.get('w') || innerWidth), H = +(q.get('h') || innerHeight);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setSize(W, H);
+renderer.setPixelRatio(1);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = +(q.get('exposure') || 1.0);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+// Sky gradient
+const c = document.createElement('canvas'); c.width = 2; c.height = 256;
+const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 256);
+gr.addColorStop(0, '#3d6fb6'); gr.addColorStop(0.55, '#8fb4dd'); gr.addColorStop(1, '#dfe8ef');
+g.fillStyle = gr; g.fillRect(0, 0, 2, 256);
+const sky = new THREE.CanvasTexture(c); sky.colorSpace = THREE.SRGBColorSpace;
+scene.background = sky;
+const pm = new THREE.PMREMGenerator(renderer);
+scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = +(q.get('env') || 0.6);
+if (q.has('fog')) scene.fog = new THREE.Fog(0xc9d6e2, 60, +q.get('fog'));
+
+scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x5a5a40, 0.6));
+const sun = new THREE.DirectionalLight(0xfff3e0, 2.6);
+const sd = num('sun', [-0.5, 0.8, 0.35]);
+const shadowSize = +(q.get('shadow') || 6);
+sun.position.set(sd[0], sd[1], sd[2]).multiplyScalar(60);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.camera.left = -shadowSize; sun.shadow.camera.right = shadowSize;
+sun.shadow.camera.top = shadowSize; sun.shadow.camera.bottom = -shadowSize;
+sun.shadow.camera.near = 1; sun.shadow.camera.far = 200;
+sun.shadow.bias = -0.0003; sun.shadow.normalBias = 0.02;
+const target = num('target', [0, 0.5, 0]);
+sun.target.position.set(target[0], target[1], target[2]);
+sun.position.add(sun.target.position);
+scene.add(sun); scene.add(sun.target);
+
+if (q.has('floor')) {
+  const fl = new THREE.Mesh(new THREE.CircleGeometry(40, 64), new THREE.MeshStandardMaterial({ color: 0x6d6f72, roughness: 0.85 }));
+  fl.rotation.x = -Math.PI / 2; fl.receiveShadow = true; scene.add(fl);
+}
+
+const cam = new THREE.PerspectiveCamera(+(q.get('fov') || 35), W / H, 0.05, 5000);
+const cp = num('cam', [4.5, 1.6, -5.5]);
+cam.position.set(cp[0], cp[1], cp[2]);
+const controls = new OrbitControls(cam, renderer.domElement);
+controls.target.set(target[0], target[1], target[2]);
+controls.update();
+
+new GLTFLoader().load(q.get('model'), (gltf) => {
+  gltf.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  scene.add(gltf.scene);
+  if (q.has('stats')) {
+    let tris = 0; gltf.scene.traverse(o => { if (o.isMesh) tris += o.geometry.index ? o.geometry.index.count / 3 : 0; });
+    window.__stats = { tris };
+  }
+  const extras = (q.get('add') || '').split('|').filter(Boolean);
+  let pending = extras.length;
+  const finish = () => {
+  controls.update();
+  if (q.has('interactive')) {
+    const loop = () => { controls.update(); renderer.render(scene, cam); requestAnimationFrame(loop); };
+    loop(); window.__ready = true;
+  } else {
+    renderer.render(scene, cam);
+    requestAnimationFrame(() => { renderer.render(scene, cam); window.__ready = true; });
+  }
+  };
+  if (!pending) finish();
+  for (const e of extras) {
+    const [url, pos, yaw] = e.split('@');
+    new GLTFLoader().load(url, (g2) => {
+      g2.scene.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      const p = pos.split(',').map(Number); g2.scene.position.set(p[0], p[1], p[2]);
+      g2.scene.rotation.y = (+yaw || 0) * Math.PI / 180;
+      scene.add(g2.scene);
+      if (--pending === 0) finish();
+    });
+  }
+}, undefined, (e) => { window.__error = String(e); window.__ready = true; });
+</script>
+</body></html>

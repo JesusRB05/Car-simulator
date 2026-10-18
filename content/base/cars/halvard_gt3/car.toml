@@ -1,0 +1,84 @@
+# Halvard GT3 - base car descriptor (CC BY-SA 4.0).
+#
+# A fictional GT3-class race car (no real manufacturer). Same schema as the
+# Voyager descriptor. Figures are plausible for the class and have NOT been
+# tuned against the simulator yet: expect to adjust springs, aero and brakes
+# after driving it. SI units; speeds in rad/s.
+
+id = "halvard_gt3"
+name = "Halvard GT3"
+author = "Car Simulator contributors"
+license = "CC BY-SA 4.0"
+category = "GT3 / RWD"
+description = "Fictional GT3 race car: ~1300 kg, 405 kW, 6-speed sequential, slick tyres and a large rear wing."
+color = [0.92, 0.92, 0.95]
+model = "model/car.glb"              # visual model (glTF), see README.md for the node names
+
+[chassis]
+mass = 1300.0
+inertia = [1950.0, 2150.0, 520.0]    # pitch (X), yaw (Y), roll (Z)
+half_extents = [1.00, 0.50, 2.30]
+
+[geometry]
+front_axle_z = -1.38                 # body -Z is forward; 48/52 weight split
+rear_axle_z = 1.32
+half_track = 0.835
+mount_y = 0.0
+rest_length = 0.12
+
+[suspension]
+spring_stiffness_front = 95000.0
+spring_stiffness_rear = 85000.0
+damper_bump = 4500.0
+damper_rebound = 7500.0
+bump_stop_length = 0.04
+bump_stop_stiffness = 350000.0
+bump_stop_damping = 1200.0
+bump_stop_exponent = 2.0
+
+[wheels]
+radius = 0.345                       # front 0.340 / rear 0.355 in the model
+inertia = 1.6
+
+[tyres]
+peak_friction_longitudinal = 1.75    # slick
+peak_friction_lateral = 1.80
+nominal_load = 4500.0
+
+[engine]
+idle_speed = 95.0                    # ~900 rpm
+rev_limit = 785.0                    # ~7500 rpm
+torque_curve_speed = [100.0, 200.0, 300.0, 400.0, 524.0, 640.0, 712.0, 785.0]
+torque_curve_torque = [330.0, 430.0, 520.0, 580.0, 620.0, 600.0, 568.0, 480.0]  # 405 kW at 712 rad/s
+friction_constant = 14.0
+friction_linear = 0.06
+
+[drivetrain]
+gear_ratios = [3.00, 2.20, 1.75, 1.45, 1.22, 1.05]
+reverse_ratio = 3.20
+final_drive = 3.70
+efficiency = 0.93
+upshift_speed = 760.0
+downshift_speed = 420.0
+
+[brakes]
+max_brake_pressure = 1.40e7
+brake_bias = 0.64
+handbrake_pressure = 0.0
+pad_friction = 0.45
+piston_area = 0.0028
+effective_radius = 0.16
+
+[steering]
+max_steer_angle = 0.42
+min_steer_angle = 0.07
+steer_speed_scale = 18.0
+steer_input_rate = 3.0
+steer_return_rate = 5.0
+
+[aero]
+drag_coefficient = 0.40              # Cd*A = 0.80 m^2
+lift_coefficient = 1.20              # + = downforce, Cl*A = 2.4 m^2
+frontal_area = 2.0
+centre_of_pressure = [0.0, 0.35, 0.24]   # 40/60 front/rear balance
+air_density = 1.225

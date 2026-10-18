@@ -15,3 +15,13 @@
 # Windows scripts may want CRLF, but LF still works with PowerShell/cmd.
 *.ps1 text eol=crlf
 *.bat text eol=crlf
+
+# Large art in Git LFS (see docs/CONTRIBUTING.md): a clone stays small for
+# people who only build the engine. These rules come last so filter=lfs wins
+# over a plain `binary` rule.
+*.glb filter=lfs diff=lfs merge=lfs -text
+*.gltf filter=lfs diff=lfs merge=lfs -text
+content/**/*.png filter=lfs diff=lfs merge=lfs -text
+content/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+content/**/*.jpeg filter=lfs diff=lfs merge=lfs -text
+content/**/*.bin filter=lfs diff=lfs merge=lfs -text

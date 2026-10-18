@@ -60,6 +60,31 @@ else
     err "python3 is required to check the JSON schemas"
 fi
 
+echo "hygiene: large art through Git LFS"
+# Every model and every content texture over 1 MiB must be tracked by Git LFS,
+# so a clone stays small (see .gitattributes and docs/CONTRIBUTING.md). A file
+# added without the filter shows up here as a plain blob.
+lfs_ok=1
+while IFS= read -r f; do
+    [[ -z "$f" ]] && continue
+    need_lfs=0
+    case "$f" in
+        *.glb) need_lfs=1 ;;
+        *.png | *.jpg | *.jpeg)
+            size=$(wc -c <"$f" 2>/dev/null || echo 0)
+            if [[ "$size" -gt 1048576 ]]; then need_lfs=1; fi
+            ;;
+    esac
+    if [[ "$need_lfs" -eq 1 ]]; then
+        filter=$(git check-attr filter -- "$f" | sed 's/.*: //')
+        if [[ "$filter" != "lfs" ]]; then
+            err "large art is not tracked by Git LFS: $f"
+            lfs_ok=0
+        fi
+    fi
+done < <(git ls-files 'content/**/*.glb' 'content/**/*.png' 'content/**/*.jpg' 'content/**/*.jpeg' || true)
+[[ "$lfs_ok" -eq 1 ]] && note "all models and large content textures use LFS"
+
 if [[ "$fail" -ne 0 ]]; then
     echo "hygiene: FAILED" >&2
     exit 1

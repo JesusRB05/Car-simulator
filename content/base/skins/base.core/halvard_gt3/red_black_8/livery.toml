@@ -1,0 +1,16 @@
+# CC BY-SA 4.0
+id = "red_black_8"
+name = "8 Red/Black"
+authors = ["Car Simulator contributors"]
+license = "CC-BY-SA-4.0"
+car = "base.core/halvard_gt3"
+body_color = [0.08,0.08,0.09]
+description = "Black with red lower body and yellow accents."
+
+[[textures]]
+slot = "body"
+file = "livery.png"
+
+[[textures]]
+slot = "emissive"
+file = "livery_emissive.png"

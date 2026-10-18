@@ -116,6 +116,21 @@ contribute to the official content (`content/base`), respect the
 **CC BY-SA 4.0** license and do not use real brands. More details in
 [`MODS.md`](MODS.md) and [`CONTENT.md`](CONTENT.md).
 
+### Large files use Git LFS
+
+Models (`*.glb`, `*.gltf`) and the textures in `content/` (`*.png`, `*.jpg`,
+`*.jpeg`, `*.bin`) are stored with **Git LFS**; the rules are in
+[`.gitattributes`](../.gitattributes).
+
+- One-time setup, per machine: install Git LFS (`git lfs install`). Git for
+  Windows ships it; on Debian/Ubuntu it is the `git-lfs` package.
+- Cloning then pulls the real files automatically. If a clone was made without
+  LFS (or an LFS download was skipped), fetch the content with `git lfs pull`.
+- A file committed without the filter (a "pointer" of a few lines) means LFS was
+  not installed when it was added: run `git lfs install` and re-add the file.
+- The hygiene check fails when a tracked `*.glb` or a `content/` image over
+  1 MiB is not tracked by LFS, so this cannot slip through CI.
+
 ## License of contributions
 
 By submitting code changes you agree that they are distributed under

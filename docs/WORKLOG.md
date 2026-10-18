@@ -42,7 +42,7 @@ pushed, and a line here.
 | M6 | Collections (modpacks) and profiles, plus working enable/disable | `0828cfd` | DONE |
 | M7 | The catalog: index format, update check, verified download, `tools/mod-index/`, `--mod-updates` | `4bcd8f1` | DONE |
 | M8 | Content fingerprint and required-content comparison (`--mod-fingerprint`, `--content-check`) | `f6c6b5d` | DONE |
-| M9 | Creator tools: `sim mod <command>`, `docs/schemas/` + hygiene check, developer hot reload | (this commit) | DONE |
+| M9 | Creator tools: `sim mod <command>`, `docs/schemas/` + hygiene check, developer hot reload | `8bf14dd` | DONE |
 | M10 | In-game mod manager UI | — | TODO |
 | M11 | Example mods in `mods/examples/` | — | TODO |
 | M12 | End-to-end tests + README/guide | — | TODO |
@@ -55,7 +55,7 @@ commit, tests green, pushed, and a line here.
 
 | Point | What | Commit | State |
 |---|---|---|---|
-| I1 | Git LFS for `*.glb` and large textures, docs, hygiene check | — | TODO |
+| I1 | Git LFS for `*.glb` and content textures, docs, hygiene check | (this commit) | DONE |
 | I2 | glTF 2.0 loader (cgltf, VFS, materials, tangents, textures) | — | TODO |
 | I3 | PBR rendering, sun shadows, sky ambient, tone mapping, transparencies | — | TODO |
 | I4 | Halvard GT3 `car.toml`, visual wheels, selectable skins | — | TODO |
