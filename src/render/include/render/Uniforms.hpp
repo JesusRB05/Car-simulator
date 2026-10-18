@@ -15,14 +15,22 @@ namespace sim::render {
 // There is no transpose anywhere. See docs/CONVENTIONS.md.
 struct FrameUniforms {
     alignas(16) glm::mat4 viewProjection;
+    alignas(16) glm::mat4 lightViewProjection;
+    alignas(16) glm::mat4 shadowMatrix;
     alignas(16) glm::vec4 cameraPosition;
-    alignas(16) glm::vec4 lightDirection;
-    alignas(16) glm::vec4 lightColor;
+    alignas(16) glm::vec4 lightDirection; // xyz: direction the light travels
+    alignas(16) glm::vec4 lightColor;     // rgb intensity
+    alignas(16) glm::vec4 ambientSky;     // rgb sky ambient, a exposure
+    alignas(16) glm::vec4 ambientGround;  // rgb ground ambient
 };
 
+// Per-drawable data. Kept inside the guaranteed 128-byte push-constant budget
+// (64 + 3 * 16 = 112).
 struct ObjectPushConstants {
     alignas(16) glm::mat4 model;
-    alignas(16) glm::vec4 baseColor;
+    alignas(16) glm::vec4 baseColor; // rgb albedo, a opacity
+    alignas(16) glm::vec4 emissive;  // rgb emissive, a strength
+    alignas(16) glm::vec4 params;    // x metallic, y roughness, z clearcoat, w alphaCutoff
 };
 
 // Writes a GLM matrix verbatim into a shader structure. GLM stores matrices

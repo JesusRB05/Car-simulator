@@ -65,6 +65,10 @@ public:
     void writeBuffer(std::uint32_t binding, VkBuffer buffer, VkDeviceSize size, VkDeviceSize offset = 0) const;
     void writeImage(std::uint32_t binding, VkSampler sampler, VkImageView view,
                     VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const;
+    // Writes a standalone sampled image (no sampler) and a standalone sampler.
+    void writeSampledImage(std::uint32_t binding, VkImageView view,
+                           VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const;
+    void writeSampler(std::uint32_t binding, VkSampler sampler) const;
 
 private:
     Device* device_ = nullptr;

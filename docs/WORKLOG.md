@@ -56,8 +56,8 @@ commit, tests green, pushed, and a line here.
 | Point | What | Commit | State |
 |---|---|---|---|
 | I1 | Git LFS for `*.glb` and content textures, docs, hygiene check | `947ac97` | DONE |
-| I2 | glTF 2.0 loader (cgltf, VFS, materials, tangents, textures) | — | DONE |
-| I3 | PBR rendering, sun shadows, sky ambient, tone mapping, transparencies | — | TODO |
+| I2 | glTF 2.0 loader (cgltf, VFS, materials, tangents, textures) | `679e899` | DONE |
+| I3 | PBR rendering, sun shadows, sky ambient, tone mapping, transparencies | — | DONE |
 | I4 | Halvard GT3 `car.toml`, visual wheels, selectable skins | — | TODO |
 | I5 | Sierra Verde `track.toml`, collision extras, `track.json`, tiling | — | TODO |
 | I6 | Import-time LODs, frustum culling, 60 fps measurement | — | TODO |

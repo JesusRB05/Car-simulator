@@ -90,7 +90,7 @@ void GarageScene::buildScene(sim::render::Scene& scene, float aspect) {
     scene.setSkyColor(glm::vec4(0.055f, 0.06f, 0.075f, 1.0f));
     scene.add(floor_, glm::mat4(1.0f), kFloorColor);
     for (const sim::render::Drawable& part : carParts_) {
-        scene.add(part.mesh, part.transform, part.baseColor);
+        scene.add(part.mesh, part.transform, part.material);
     }
     camera_.apply(scene.camera(), aspect);
 }

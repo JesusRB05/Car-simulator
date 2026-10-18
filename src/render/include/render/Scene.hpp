@@ -12,10 +12,27 @@
 
 namespace sim::render {
 
+// A physically-based material as the renderer needs it: factor-only for now
+// (textures are a later step). `alphaBlend` selects the sorted transparent pass;
+// `alphaMask` discards on `alphaCutoff` in the opaque pass.
+struct Material {
+    glm::vec4 baseColor{0.8f, 0.8f, 0.8f, 1.0f};
+    glm::vec3 emissive{0.0f};
+    float emissiveStrength = 1.0f;
+    float metallic = 0.0f;
+    float roughness = 0.5f;
+    float clearcoat = 0.0f;
+    float clearcoatRoughness = 0.03f;
+    float alphaCutoff = 0.5f;
+    bool doubleSided = false;
+    bool alphaBlend = false;
+    bool alphaMask = false;
+};
+
 struct Drawable {
     std::shared_ptr<Mesh> mesh;
     glm::mat4 transform{1.0f};
-    glm::vec4 baseColor{0.8f, 0.8f, 0.8f, 1.0f};
+    Material material{};
 };
 
 // A flat, renderer-facing description of what should be drawn. The simulation
@@ -23,7 +40,9 @@ struct Drawable {
 class Scene {
 public:
     void clear() { drawables_.clear(); }
+    // Convenience overload for the many untextured demo/primitive call sites.
     void add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, const glm::vec4& color);
+    void add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, const Material& material);
 
     std::vector<Drawable>& drawables() { return drawables_; }
     const std::vector<Drawable>& drawables() const { return drawables_; }
@@ -36,9 +55,14 @@ public:
     const glm::vec4& lightColor() const { return lightColor_; }
 
     // Background (clear) colour. It doubles as the sky: the orientation checks
-    // expect the top of a horizontal view to be this colour.
+    // expect the top of a horizontal view to be this colour, and the renderer
+    // derives its hemispheric ambient fill from it.
     void setSkyColor(const glm::vec4& color) { skyColor_ = color; }
     const glm::vec4& skyColor() const { return skyColor_; }
+
+    // Exposure applied before the ACES tone map (1 = neutral).
+    void setExposure(float exposure) { exposure_ = exposure; }
+    float exposure() const { return exposure_; }
 
 private:
     std::vector<Drawable> drawables_;
@@ -46,6 +70,7 @@ private:
     glm::vec4 skyColor_{0.42f, 0.58f, 0.80f, 1.0f};
     glm::vec4 lightDirection_{-0.4f, -1.0f, -0.3f, 0.0f};
     glm::vec4 lightColor_{1.0f, 1.0f, 1.0f, 1.0f};
+    float exposure_ = 1.0f;
 };
 
 } // namespace sim::render

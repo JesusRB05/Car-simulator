@@ -150,6 +150,10 @@ struct ColorAttachment {
     ImageLayout layout = ImageLayout::ColorAttachment;
     LoadOp loadOp = LoadOp::Clear;
     float clearColor[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    // Store the attachment at the end of the pass. A pass that only feeds the
+    // depth test for its own draws can set this false; an attachment that is
+    // later sampled (a shadow map) must keep it true.
+    bool store = true;
 };
 
 struct DepthAttachment {
@@ -158,12 +162,17 @@ struct DepthAttachment {
     LoadOp loadOp = LoadOp::Clear;
     float clearDepth = 1.0f;
     std::uint32_t clearStencil = 0;
+    bool store = true;
 };
 
 enum class DescriptorType {
     UniformBuffer,
     StorageBuffer,
     CombinedImageSampler,
+    // Separate texture and sampler descriptors (used when a shader declares them
+    // as two bindings, e.g. a depth image sampled with a custom sampler).
+    SampledImage,
+    Sampler,
 };
 
 std::string formatName(Format format);

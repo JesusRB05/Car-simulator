@@ -36,6 +36,9 @@ struct Image {
     std::uint32_t height = 0;
     bool srgb = false;
     std::vector<std::uint8_t> pixels; // RGBA8, width * height * 4 bytes
+    // Average RGB, in linear space (sRGB images are decoded first). Useful as a
+    // flat fallback colour for tools and for the untextured debug path.
+    glm::vec3 averageColor{0.0f};
 };
 
 // A glTF texture: which image it samples and how.

@@ -59,28 +59,56 @@ retries.
 
 - **`Camera`**: perspective, right-handed, with **-Z forward** and **+Y up**.
   It provides `view()`, `projection()` and `viewProjection()`.
-- **`Mesh`**: a CPU mesh (`position/normal/uv` vertices + indices) uploaded to
-  immutable buffers. It includes `makeCube` and `makeGroundPlane`.
-- **`Scene`**: a flat list of `Drawable` (mesh + transform + base colour), one
+- **`Mesh`**: a CPU mesh (`position/normal/uv/tangent/colour` vertices + indices)
+  uploaded to immutable buffers. It includes `makeCube`, `makeSphere`,
+  `makeCylinder` and `makeGroundPlane`.
+- **`Scene`**: a flat list of `Drawable` (mesh + transform + `Material`), one
   camera and one directional light. The simulator fills it every frame from the
   interpolated snapshot.
 - **`RenderGraph`**: a **linear** graph of passes. Each pass is registered with a
   name and a function, and they run in order. It exists to add and reorder passes
   without touching the frame loop.
-- **`Renderer`**: owns the scene pipeline, the per-frame UBOs, the descriptors and
-  the *depth target*. It exposes `ensureTargets`, `updateFrameUniforms` and
-  `renderScene`.
+- **`Renderer`**: owns the scene pipelines (opaque + transparent), the directional
+  shadow map, the per-frame UBOs, the descriptors and the *depth target*. It
+  exposes `ensureTargets`, `updateFrameUniforms` and `renderScene`.
 
 ### Scene pipeline
 
-- A single pass with **dynamic rendering** (`vkCmdBeginRendering`; **no**
-  `VkRenderPass`/`VkFramebuffer`).
-- `D32Sfloat` depth in **reversed-Z** (`depthCompare = GreaterEqual`, clear to
-  `0.0f`), cleared every frame.
-- `TriangleList`, back-face culling.
-- One UBO per frame (binding 0) with `viewProjection`, camera position, light
-  direction and colour.
-- Per object, **push constants** with the model matrix and the base colour.
+Two passes per frame, both with **dynamic rendering** (`vkCmdBeginRendering`;
+**no** `VkRenderPass`/`VkFramebuffer`):
+
+1. **Shadow pass** — a depth-only pass into a 2048² `D32Sfloat` map (one image per
+   frame in flight, so a frame's shadow pass never races another frame's shading).
+   Its view-projection is a reversed-Z **orthographic** box fitted around the
+   point the camera looks at (`reversedZOrtho` in `Renderer.cpp`).
+2. **Scene pass** — the colour attachment plus the scene `D32Sfloat` depth in
+   **reversed-Z** (`depthCompare = GreaterEqual`, clear to `0.0f`), cleared every
+   frame. Opaque drawables are drawn first (with alpha-test discard for masked
+   materials); alpha-blended drawables are sorted back-to-front and drawn last
+   with depth writes off.
+
+- `TriangleList`, **no** culling: both faces are drawn so open and thin (glass)
+  geometry reads correctly, and the shader flips the normal for back faces.
+- One UBO per frame (binding 0) with `viewProjection`, the light's
+  view-projection, the shadow matrix, camera position, light direction/colour and
+  the hemispheric ambient. Set 1 is the shadow map (a sampled image + a sampler).
+- Per object, **push constants** with the model matrix and the material factors.
+
+#### Materials
+
+`render::Material` is factor-only for now (textures are a later step): base
+colour, emissive colour and strength, metallic, roughness, clearcoat, alpha
+cutoff, and the `doubleSided` / `alphaBlend` / `alphaMask` flags. The fragment
+shader is **metallic-roughness** (GGX distribution, Smith-Schlick geometry,
+Schlick Fresnel) lit by one directional sun, plus a hemispheric ambient derived
+from the sky colour's luminance, an ACES tone map and an exposure scalar from
+`Scene::exposure()`. Emissive is game-driven (brake and rain lights). The sun's
+shadow lookup compares against the reversed-Z stored depth with a 3×3 PCF kernel
+and a small normal offset.
+
+The offscreen target is linear `R8G8B8A8_UNORM`; the window swapchain is
+`B8G8R8A8_SRGB`, so the hardware applies the sRGB encode there and the shaders
+always output **linear** colour.
 
 ### Depth precision (reversed-Z)
 
@@ -112,8 +140,12 @@ transpositions anywhere. The layout is std140: every member aligned to 16 bytes,
 and a matrix occupies 4 contiguous 16-byte columns.
 
 ```
-FrameUniforms:        viewProjection (mat4), cameraPosition, lightDirection, lightColor
-ObjectPushConstants:  model (mat4),           baseColor
+FrameUniforms:        viewProjection, lightViewProjection, shadowMatrix (mat4),
+                      cameraPosition, lightDirection, lightColor,
+                      ambientSky (rgb ambient + a exposure), ambientGround
+ObjectPushConstants:  model (mat4), baseColor (rgb + a opacity),
+                      emissive (rgb + a strength),
+                      params (metallic, roughness, clearcoat, alpha cutoff)
 ```
 
 ## Shaders (Slang)
@@ -122,15 +154,19 @@ ObjectPushConstants:  model (mat4),           baseColor
 
 - `vertexMain`: transforms to world space, then to clip space, and rotates the
   normal.
-- `fragmentMain`: classic **per-face** lighting: the normal is interpolated
-  *flat* (`nointerpolation`), so each triangle is uniform (faceted primitives),
-  and directional Lambert is combined with **hemispheric ambient** (brighter
-  towards the sky, darker towards the ground, plus a small contribution from the
-  piece's albedo).
+- `fragmentMain`: physically-based **metallic-roughness** shading of one
+  directional sun (GGX + Smith-Schlick + Schlick Fresnel, an approximate
+  clearcoat lobe and a hemispheric ambient), an ACES tone map and the exposure
+  scalar. The surface normal is interpolated (smooth); back faces flip it.
+
+`src/render/shaders/shadow.slang` is the depth-only shadow pass; it reuses the
+frame uniform buffer (set 0) and the same push constants, so the two pipelines
+share the vertex layout.
 
 They are compiled to SPIR-V during the build by the `sim_slang_shader` function,
-which generates `shaders/mesh.vertex.spv` and `shaders/mesh.fragment.spv` and
-copies them next to the executable.
+which generates `shaders/mesh.vertex.spv`, `shaders/mesh.fragment.spv`,
+`shaders/shadow.vertex.spv` and `shaders/shadow.fragment.spv` and copies them
+next to the executable.
 
 ### Compilation with `-emit-spirv-via-glsl`
 

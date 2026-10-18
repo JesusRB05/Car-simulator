@@ -18,6 +18,11 @@ public:
     glm::mat4 viewProjection() const { return projection_ * view_; }
     const glm::vec3& position() const { return position_; }
 
+    // World-space view direction. GLM's lookAt puts the camera's local +Z in
+    // world space in (view_[0][2], view_[1][2], view_[2][2]) -- the third column
+    // of the rotation -- so the view direction is right-handed -Z, its negation.
+    glm::vec3 forward() const { return -glm::vec3(view_[0][2], view_[1][2], view_[2][2]); }
+
 private:
     glm::mat4 view_{1.0f};
     glm::mat4 projection_{1.0f};

@@ -109,7 +109,7 @@ void CommandList::beginRendering(const std::vector<ColorAttachment>& colorAttach
         info.loadOp = attachment.loadOp == LoadOp::Load    ? VK_ATTACHMENT_LOAD_OP_LOAD
                       : attachment.loadOp == LoadOp::Clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                            : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        info.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        info.storeOp = attachment.store ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
         info.clearValue.color = {
             {attachment.clearColor[0], attachment.clearColor[1], attachment.clearColor[2], attachment.clearColor[3]}};
         colors.push_back(info);
@@ -123,7 +123,7 @@ void CommandList::beginRendering(const std::vector<ColorAttachment>& colorAttach
         depthInfo.loadOp = depth->loadOp == LoadOp::Load    ? VK_ATTACHMENT_LOAD_OP_LOAD
                            : depth->loadOp == LoadOp::Clear ? VK_ATTACHMENT_LOAD_OP_CLEAR
                                                             : VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthInfo.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        depthInfo.storeOp = depth->store ? VK_ATTACHMENT_STORE_OP_STORE : VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthInfo.clearValue.depthStencil = {depth->clearDepth, depth->clearStencil};
     }
 
@@ -216,7 +216,8 @@ void CommandList::dispatch(std::uint32_t groupX, std::uint32_t groupY, std::uint
     vkCmdDispatch(commandBuffer_, groupX, groupY, groupZ);
 }
 
-void CommandList::transitionImage(VkImage image, ImageLayout from, ImageLayout to, VkImageAspectFlags aspect) {
+void CommandList::transitionImage(VkImage image, ImageLayout from, ImageLayout to, VkImageAspectFlags aspect,
+                                  std::uint32_t levelCount) {
     VkImageMemoryBarrier2 barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
     barrier.srcStageMask = stageFor(from);
@@ -228,7 +229,7 @@ void CommandList::transitionImage(VkImage image, ImageLayout from, ImageLayout t
     barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barrier.image = image;
-    barrier.subresourceRange = {aspect, 0, 1, 0, 1};
+    barrier.subresourceRange = {aspect, 0, levelCount, 0, 1};
 
     VkDependencyInfo dependency{};
     dependency.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
@@ -242,6 +243,18 @@ void CommandList::copyBuffer(VkBuffer source, VkBuffer destination, VkDeviceSize
     VkBufferCopy region{};
     region.size = size;
     vkCmdCopyBuffer(commandBuffer_, source, destination, 1, &region);
+}
+
+void CommandList::copyBufferToImage(VkBuffer source, VkImage destination, Extent2D extent, std::uint32_t mipLevel,
+                                    VkDeviceSize bufferOffset) {
+    VkBufferImageCopy region{};
+    region.bufferOffset = bufferOffset;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mipLevel, 0, 1};
+    region.imageOffset = {0, 0, 0};
+    region.imageExtent = {extent.width, extent.height, 1};
+    vkCmdCopyBufferToImage(commandBuffer_, source, destination, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 }
 
 void CommandList::copyImageToBuffer(VkImage image, VkBuffer destination, Extent2D extent) {

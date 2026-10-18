@@ -94,13 +94,25 @@ Buffer::~Buffer() {
     release();
 }
 
-Image::Image(Device& device, Extent2D extent, Format format, ImageUsage usage, bool depthStencil)
-    : device_(&device), extent_(extent), format_(format) {
+Image::Image(Device& device, Extent2D extent, Format format, ImageUsage usage, bool depthStencil) : device_(&device) {
+    create(extent, format, usage, 1, depthStencil);
+}
+
+Image::Image(Device& device, Extent2D extent, Format format, ImageUsage usage, std::uint32_t mipLevels,
+             bool depthStencil)
+    : device_(&device) {
+    create(extent, format, usage, mipLevels < 1 ? 1 : mipLevels, depthStencil);
+}
+
+void Image::create(Extent2D extent, Format format, ImageUsage usage, std::uint32_t mipLevels, bool depthStencil) {
+    extent_ = extent;
+    format_ = format;
+    mipLevels_ = mipLevels;
     VkImageCreateInfo imageInfo{};
     imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     imageInfo.imageType = VK_IMAGE_TYPE_2D;
     imageInfo.extent = {extent.width, extent.height, 1};
-    imageInfo.mipLevels = 1;
+    imageInfo.mipLevels = mipLevels;
     imageInfo.arrayLayers = 1;
     imageInfo.format = toVkFormat(format);
     imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -112,7 +124,8 @@ Image::Image(Device& device, Extent2D extent, Format format, ImageUsage usage, b
     VmaAllocationCreateInfo allocationInfo{};
     allocationInfo.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
 
-    if (vmaCreateImage(device.allocator(), &imageInfo, &allocationInfo, &image_, &allocation_, nullptr) != VK_SUCCESS) {
+    if (vmaCreateImage(device_->allocator(), &imageInfo, &allocationInfo, &image_, &allocation_, nullptr) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create an image");
     }
 
@@ -122,11 +135,11 @@ Image::Image(Device& device, Extent2D extent, Format format, ImageUsage usage, b
     viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = imageInfo.format;
     viewInfo.subresourceRange.aspectMask = depthStencil ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
-    viewInfo.subresourceRange.levelCount = 1;
+    viewInfo.subresourceRange.levelCount = mipLevels;
     viewInfo.subresourceRange.layerCount = 1;
 
-    if (vkCreateImageView(device.handle(), &viewInfo, nullptr, &view_) != VK_SUCCESS) {
-        vmaDestroyImage(device.allocator(), image_, allocation_);
+    if (vkCreateImageView(device_->handle(), &viewInfo, nullptr, &view_) != VK_SUCCESS) {
+        vmaDestroyImage(device_->allocator(), image_, allocation_);
         image_ = VK_NULL_HANDLE;
         throw std::runtime_error("failed to create an image view");
     }

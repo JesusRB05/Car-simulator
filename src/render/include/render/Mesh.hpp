@@ -18,6 +18,10 @@ struct Vertex {
     glm::vec3 position{0.0f};
     glm::vec3 normal{0.0f, 1.0f, 0.0f};
     glm::vec2 uv{0.0f};
+    // Tangent basis (xyz unit, w = bitangent handedness) and a per-vertex tint.
+    // Layout-compatible with `asset::Vertex`, so glTF geometry uploads as-is.
+    glm::vec4 tangent{0.0f};
+    glm::vec4 color{1.0f};
 };
 
 // CPU-side geometry. Triangles are wound counter-clockwise when seen from

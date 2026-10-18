@@ -54,8 +54,12 @@ public:
 
     // Synchronisation2 image layout transition (the caller picks the aspect).
     void transitionImage(VkImage image, ImageLayout from, ImageLayout to,
-                         VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT);
+                         VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT, std::uint32_t levelCount = 1);
     void copyBuffer(VkBuffer source, VkBuffer destination, VkDeviceSize size);
+    // Uploads one mip level of an image from a host buffer laid out tightly
+    // (width * height * texelSize). The image must already be in TransferDst.
+    void copyBufferToImage(VkBuffer source, VkImage destination, Extent2D extent, std::uint32_t mipLevel,
+                           VkDeviceSize bufferOffset = 0);
     // Copies a colour image into host-visible memory. The image must already be
     // in the TransferSrc layout (transition it with transitionImage first).
     void copyImageToBuffer(VkImage image, VkBuffer destination, Extent2D extent);

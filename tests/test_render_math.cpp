@@ -24,8 +24,8 @@ TEST_CASE("glm column-major memory matches the shader column_major layout") {
     // columns, so a raw byte copy is the identity mapping between the C++
     // struct and the column_major shaders; no transpose must ever happen.
     CHECK(sizeof(glm::mat4) == 64);
-    CHECK(sizeof(FrameUniforms) == 16 * 7);
-    CHECK(sizeof(ObjectPushConstants) == 16 * 5);
+    CHECK(sizeof(FrameUniforms) == 16 * 17);
+    CHECK(sizeof(ObjectPushConstants) == 16 * 7);
     CHECK(offsetof(FrameUniforms, viewProjection) == 0);
     CHECK(offsetof(ObjectPushConstants, model) == 0);
 
@@ -42,6 +42,28 @@ TEST_CASE("glm column-major memory matches the shader column_major layout") {
             CHECK(value == doctest::Approx(column == row ? 1.0f : 0.0f));
         }
     }
+}
+
+TEST_CASE("Camera::forward() is the world-space view direction") {
+    // The shadow-map fitting places its orthographic box along the camera's
+    // forward vector, so this must be the third column of the view rotation
+    // negated (right-handed, -Z forward) and not its transpose.
+    Camera camera;
+    camera.setPerspective(60.0f, 16.0f / 9.0f, 0.1f, 1000.0f);
+
+    // Looking down -Z from the origin.
+    camera.lookAt({0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, -1.0f});
+    CHECK(std::abs(camera.forward().x) < 1e-6f);
+    CHECK(std::abs(camera.forward().y) < 1e-6f);
+    CHECK(std::abs(camera.forward().z + 1.0f) < 1e-6f);
+
+    // An off-axis pose: forward must point from the eye towards the target.
+    const glm::vec3 eye(6.0f, 4.0f, 12.0f);
+    const glm::vec3 target(0.0f, 0.8f, 0.0f);
+    camera.lookAt(eye, target);
+    const glm::vec3 expected = glm::normalize(target - eye);
+    CHECK(glm::length(camera.forward() - expected) < 1e-5f);
+    CHECK(camera.position() == eye);
 }
 
 TEST_CASE("a known world point projects to the expected pixel (column-major mul)") {

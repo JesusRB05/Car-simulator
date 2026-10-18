@@ -8,7 +8,21 @@ namespace sim::render {
 
 void Scene::add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, const glm::vec4& color) {
     if (mesh) {
-        drawables_.push_back(Drawable{mesh, transform, color});
+        Drawable drawable;
+        drawable.mesh = mesh;
+        drawable.transform = transform;
+        drawable.material.baseColor = color;
+        drawables_.push_back(std::move(drawable));
+    }
+}
+
+void Scene::add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, const Material& material) {
+    if (mesh) {
+        Drawable drawable;
+        drawable.mesh = mesh;
+        drawable.transform = transform;
+        drawable.material = material;
+        drawables_.push_back(std::move(drawable));
     }
 }
 

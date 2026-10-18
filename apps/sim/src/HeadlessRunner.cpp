@@ -148,7 +148,7 @@ std::vector<std::uint8_t> renderFrames(rhi::Device& device, render::Renderer& re
         const glm::vec4& sky = scene.skyColor();
         std::memcpy(attachment.clearColor, &sky.r, sizeof(attachment.clearColor));
 
-        renderer.updateFrameUniforms(0, scene.camera(), scene.lightDirection(), scene.lightColor());
+        renderer.updateFrameUniforms(0, scene);
         renderer.renderScene(commandList, scene, attachment, 0);
 
         if (debug != nullptr) {

@@ -125,6 +125,37 @@ void DescriptorSet::writeImage(std::uint32_t binding, VkSampler sampler, VkImage
     vkUpdateDescriptorSets(device_->handle(), 1, &write, 0, nullptr);
 }
 
+void DescriptorSet::writeSampledImage(std::uint32_t binding, VkImageView view, VkImageLayout layout) const {
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageView = view;
+    imageInfo.imageLayout = layout;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = set_;
+    write.dstBinding = binding;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    write.pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(device_->handle(), 1, &write, 0, nullptr);
+}
+
+void DescriptorSet::writeSampler(std::uint32_t binding, VkSampler sampler) const {
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.sampler = sampler;
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = set_;
+    write.dstBinding = binding;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    write.pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(device_->handle(), 1, &write, 0, nullptr);
+}
+
 namespace {
 
 VkPipelineLayout createPipelineLayout(VkDevice device, const std::vector<const DescriptorSetLayout*>& layouts,

@@ -777,6 +777,29 @@ GltfLoadResult loadGltf(const vfs::VirtualFileSystem& vfs, std::string_view virt
         markSrgb(material.clearcoatTexture);
     }
 
+    // Average colour per image, decoded to linear so it can be used directly as
+    // a flat base colour when a texture is not sampled.
+    const auto srgbToLinear = [](float value) {
+        return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
+    };
+    for (Image& image : asset.images) {
+        if (image.pixels.empty() || image.width == 0 || image.height == 0) {
+            continue;
+        }
+        const std::size_t texels = static_cast<std::size_t>(image.width) * image.height;
+        glm::dvec3 sum(0.0);
+        for (std::size_t i = 0; i < texels; ++i) {
+            sum += glm::dvec3(image.pixels[i * 4 + 0] / 255.0, image.pixels[i * 4 + 1] / 255.0,
+                              image.pixels[i * 4 + 2] / 255.0);
+        }
+        glm::dvec3 average = sum / static_cast<double>(texels);
+        if (image.srgb) {
+            average = {srgbToLinear(static_cast<float>(average.x)), srgbToLinear(static_cast<float>(average.y)),
+                       srgbToLinear(static_cast<float>(average.z))};
+        }
+        image.averageColor = glm::vec3(average);
+    }
+
     // --- Bounds -------------------------------------------------------------
     bool first = true;
     for (const Mesh& mesh : asset.meshes) {

@@ -1151,7 +1151,7 @@ int Application::run() {
 
         const double renderStart = wallNow();
         const double gpuMs = gpuTimer_->readMilliseconds(frame_->slot());
-        renderer_->updateFrameUniforms(frame_->slot(), scene_.camera(), scene_.lightDirection(), scene_.lightColor());
+        renderer_->updateFrameUniforms(frame_->slot(), scene_);
         gpuTimer_->begin(commandList, frame_->slot());
         const glm::vec4& sky = scene_.skyColor();
         renderer_->renderScene(commandList, scene_,

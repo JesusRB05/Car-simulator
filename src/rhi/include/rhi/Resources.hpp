@@ -53,6 +53,10 @@ private:
 class Image {
 public:
     Image(Device& device, Extent2D extent, Format format, ImageUsage usage, bool depthStencil = false);
+    // Sampled images may carry a mip chain (used by the texture upload path);
+    // the view exposes every level.
+    Image(Device& device, Extent2D extent, Format format, ImageUsage usage, std::uint32_t mipLevels,
+          bool depthStencil = false);
     ~Image();
 
     Image(const Image&) = delete;
@@ -62,8 +66,10 @@ public:
     VkImageView view() const { return view_; }
     Extent2D extent() const { return extent_; }
     Format format() const { return format_; }
+    std::uint32_t mipLevels() const { return mipLevels_; }
 
 private:
+    void create(Extent2D extent, Format format, ImageUsage usage, std::uint32_t mipLevels, bool depthStencil);
     void release();
 
     Device* device_ = nullptr;
@@ -72,6 +78,7 @@ private:
     VmaAllocation allocation_ = VK_NULL_HANDLE;
     Extent2D extent_{};
     Format format_ = Format::Undefined;
+    std::uint32_t mipLevels_ = 1;
 };
 
 // A texture sampler with sensible defaults.

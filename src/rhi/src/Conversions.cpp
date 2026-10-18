@@ -179,6 +179,10 @@ VkDescriptorType toVkDescriptorType(DescriptorType type) {
         return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     case DescriptorType::CombinedImageSampler:
         return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    case DescriptorType::SampledImage:
+        return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+    case DescriptorType::Sampler:
+        return VK_DESCRIPTOR_TYPE_SAMPLER;
     }
     return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 }
