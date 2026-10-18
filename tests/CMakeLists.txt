@@ -24,6 +24,7 @@ add_executable(sim_tests
     test_plugins.cpp
     test_vfs.cpp
     test_content.cpp
+    test_gltf.cpp
     # The drive scene and the content catalogs live in the app; their
     # simulation half is render-free and tested directly.
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
@@ -44,6 +45,7 @@ target_compile_definitions(sim_tests PRIVATE SIM_SOURCE_DIR="${_sim_source_dir}"
 target_link_libraries(sim_tests
     PRIVATE
         sim::core
+        sim::asset
         sim::input
         sim::modding
         sim::physics

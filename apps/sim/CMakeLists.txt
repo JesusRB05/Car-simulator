@@ -33,6 +33,7 @@ target_link_libraries(sim
         sim::core
         sim::platform
         sim::vfs
+        sim::asset
         sim::modding
         sim::scripting
         sim::plugin_api
