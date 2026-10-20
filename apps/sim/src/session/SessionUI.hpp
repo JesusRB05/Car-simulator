@@ -43,6 +43,7 @@ private:
 
     void drawCarCards(SessionState& state);
     void drawCarSpecs(const struct CarSpec& car);
+    void drawSkinPicker(SessionState& state, const struct CarSpec& car);
 
     ControlSetupWizard wizard_;
     bool wizardActive_ = false;

@@ -1,9 +1,12 @@
 # Halvard GT3 - base car descriptor (CC BY-SA 4.0).
 #
 # A fictional GT3-class race car (no real manufacturer). Same schema as the
-# Voyager descriptor. Figures are plausible for the class and have NOT been
-# tuned against the simulator yet: expect to adjust springs, aero and brakes
-# after driving it. SI units; speeds in rad/s.
+# Voyager descriptor. Every figure below is derived from the class's published
+# rules of thumb and from the car's own model (wheelbase, track, wheel radii), so
+# the physics and the bodywork agree. They have not been lap-timed against a real
+# GT3 yet: expect to fine-tune springs, aero balance and brakes after driving it.
+#
+# SI units; rotational speeds in rad/s (rpm = rad/s * 60 / (2 pi)).
 
 id = "halvard_gt3"
 name = "Halvard GT3"
@@ -12,64 +15,99 @@ license = "CC BY-SA 4.0"
 category = "GT3 / RWD"
 description = "Fictional GT3 race car: ~1300 kg, 405 kW, 6-speed sequential, slick tyres and a large rear wing."
 color = [0.92, 0.92, 0.95]
-model = "model/car.glb"              # visual model (glTF), see README.md for the node names
+# Visual model (glTF), relative to this file. The node names are documented in
+# README.md; a skin replaces the `paint_livery` material's maps.
+model = "model/car.glb"
 
 [chassis]
+# 1300 kg is the GT3 minimum weight including the driver and the fuel for a
+# sprint race.
 mass = 1300.0
-inertia = [1950.0, 2150.0, 520.0]    # pitch (X), yaw (Y), roll (Z)
-half_extents = [1.00, 0.50, 2.30]
+# Box approximation m/12 * (edge^2 + edge^2) for a 4.6 x 2.0 x 1.0 m body:
+# X (roll, about the right axis) 1950, Y (yaw) 2150, Z (pitch) 520. The mass sits
+# low, so roll is a little below the homogeneous box's 2130.
+inertia = [1950.0, 2150.0, 520.0]    # roll (X), yaw (Y), pitch (Z)
+half_extents = [1.00, 0.50, 2.30]    # 2.0 m wide, 1.0 m tall, 4.6 m long
 
 [geometry]
+# Taken from the model: `wheel_FL/FR` sit at z = -1.38 m and `wheel_RL/RR` at
+# z = +1.32 m, so the wheelbase is 2.70 m (the glTF's `extras.wheelbase`) and
+# the static split is 1.32 / 2.70 = 48.9 % front, 51.1 % rear.
 front_axle_z = -1.38                 # body -Z is forward; 48/52 weight split
 rear_axle_z = 1.32
-half_track = 0.835
-mount_y = 0.0
-rest_length = 0.12
+half_track = 0.835                   # model wheels at x = +/-0.835, 1.67 m track
+mount_y = 0.0                        # the struts meet the body at the CoM height
+rest_length = 0.12                   # strut at full droop; ~0.033 m compression at rest
 
 [suspension]
+# Forces are measured at the strut: at rest the front spring carries
+# 0.5 * 1300 kg * 9.81 m/s^2 * 0.489 = 3117 N and compresses 32.8 mm, the rear
+# carries 3252 N and compresses 38.3 mm. That puts the CoM 0.430 m above the
+# ground, which is where the model's 0.345 m wheel radius and the 0.08 m of
+# compression meet the bodywork.
 spring_stiffness_front = 95000.0
 spring_stiffness_rear = 85000.0
+# Damping ratios at the corner mass (~325 kg): bump 4500 / (2 * sqrt(95000 * 325))
+# = 0.40, rebound 0.67 - a race setup that keeps the platform settled over kerbs.
 damper_bump = 4500.0
 damper_rebound = 7500.0
+# The bump stop takes over for the last 40 mm of travel, quadratically.
 bump_stop_length = 0.04
 bump_stop_stiffness = 350000.0
 bump_stop_damping = 1200.0
 bump_stop_exponent = 2.0
 
 [wheels]
-radius = 0.345                       # front 0.340 / rear 0.355 in the model
+# The model has a 0.340 m front and a 0.355 m rear tyre; the physics uses one
+# radius, so this is the mean (0.345 m).
+radius = 0.345
+# A 18 kg wheel-and-tyre at 0.345 m: 0.6 * m * r^2 = 1.29 kg m^2, plus the disc
+# and rim flanges -> 1.6.
 inertia = 1.6
 
 [tyres]
-peak_friction_longitudinal = 1.75    # slick
+# Slick peak friction is 1.7-1.8 in the dry; the road tyre is ~1.0.
+peak_friction_longitudinal = 1.75
 peak_friction_lateral = 1.80
+# The Magic Formula saturates near 1.4x the static corner load (3250 N).
 nominal_load = 4500.0
 
 [engine]
 idle_speed = 95.0                    # ~900 rpm
 rev_limit = 785.0                    # ~7500 rpm
+# Measured at the crank: 620 Nm at 5000 rpm (524 rad/s) and 568 Nm at 6800 rpm
+# (712 rad/s), i.e. 405 kW at the top of the curve.
 torque_curve_speed = [100.0, 200.0, 300.0, 400.0, 524.0, 640.0, 712.0, 785.0]
 torque_curve_torque = [330.0, 430.0, 520.0, 580.0, 620.0, 600.0, 568.0, 480.0]  # 405 kW at 712 rad/s
+# Engine friction: 14 Nm constant plus 0.06 Nm per rad/s (61 Nm at the limiter).
 friction_constant = 14.0
 friction_linear = 0.06
 
 [drivetrain]
+# A six-speed sequential gearbox, close ratios, with a 3.70 final drive. In top
+# gear the limiter gives 785 / (1.05 * 3.70) * 0.345 = 69.7 m/s (251 km/h).
 gear_ratios = [3.00, 2.20, 1.75, 1.45, 1.22, 1.05]
 reverse_ratio = 3.20
 final_drive = 3.70
 efficiency = 0.93
+# Shift up just below the limiter; dropping below 420 rad/s (4000 rpm) means the
+# next gear down is too short.
 upshift_speed = 760.0
 downshift_speed = 420.0
 
 [brakes]
+# 14 MPa line pressure, 0.45 pad friction and 0.16 m effective radius give about
+# 2800 Nm per caliper, i.e. ~1.3 g of deceleration at the start of a stop.
 max_brake_pressure = 1.40e7
-brake_bias = 0.64
-handbrake_pressure = 0.0
+brake_bias = 0.64                    # 64 % front, typical for a rear-engined GT
+handbrake_pressure = 0.0             # a race car has none
 pad_friction = 0.45
 piston_area = 0.0028
 effective_radius = 0.16
 
 [steering]
+# 24 deg of lock at a standstill, 4 deg at speed; the rack slows down as the car
+# goes faster.
 max_steer_angle = 0.42
 min_steer_angle = 0.07
 steer_speed_scale = 18.0
@@ -77,7 +115,10 @@ steer_input_rate = 3.0
 steer_return_rate = 5.0
 
 [aero]
-drag_coefficient = 0.40              # Cd*A = 0.80 m^2
+# Cd * A = 0.80 m^2; at 69.7 m/s that is 2.4 kN of drag.
+drag_coefficient = 0.40
+# Cl * A = 2.4 m^2 of downforce, split 40/60 front/rear by the centre of
+# pressure at z = 0.24 m: (1.32 - 0.24) / 2.70 = 40 % on the front axle.
 lift_coefficient = 1.20              # + = downforce, Cl*A = 2.4 m^2
 frontal_area = 2.0
 centre_of_pressure = [0.0, 0.35, 0.24]   # 40/60 front/rear balance

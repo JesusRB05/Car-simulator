@@ -25,6 +25,10 @@ class Mesh;
 class Scene;
 } // namespace sim::render
 
+namespace sim::app {
+struct CarVisual;
+} // namespace sim::app
+
 namespace sim::app::drive {
 
 // Name of the drivable scene (`sim --scene drive`).
@@ -63,7 +67,11 @@ enum class DriveCamera {
 // (main) thread.
 class DriveScene {
 public:
-    explicit DriveScene(rhi::Device& device, const TrackDescription& track, const vehicle::VehicleSetup& car);
+    // `visual` is the car's uploaded glTF model (may be null: the scene then
+    // draws the primitive stand-in). It is shared so the garage and the scene
+    // can reuse one upload.
+    explicit DriveScene(rhi::Device& device, const TrackDescription& track, const vehicle::VehicleSetup& car,
+                        std::shared_ptr<CarVisual> visual = nullptr);
     ~DriveScene();
 
     DriveScene(const DriveScene&) = delete;
@@ -142,6 +150,11 @@ private:
     bool escEnabled_ = true;
     physics::PhysicsWorld world_;
     vehicle::VehicleModel* car_ = nullptr;
+    // The car's model, when the content ships one.
+    std::shared_ptr<CarVisual> visual_;
+    // Height of the centre of mass above the ground at rest: the model's origin
+    // sits on the ground, the physics origin is the centre of mass.
+    double cogHeight_ = 0.0;
     double remainder_ = 0.0;
     std::vector<Obstacle> obstacles_;
     std::vector<ObstacleBatch> obstacleBatches_;

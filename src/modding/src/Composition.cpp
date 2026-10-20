@@ -19,6 +19,31 @@ bool isKeyChar(char c) {
     return std::isalnum(uc) != 0 || c == '_';
 }
 
+// The folder part of a virtual path ("a/b/c.toml" -> "a/b"). Empty when the
+// path has no folder.
+std::string directoryOf(std::string_view path) {
+    const std::size_t slash = path.find_last_of('/');
+    return slash == std::string_view::npos ? std::string{} : std::string(path.substr(0, slash));
+}
+
+// Resolves a descriptor-relative file ("livery.png") to a virtual path. A
+// leading '/' resolves from the virtual root instead.
+std::string resolveRelative(std::string_view directory, std::string_view file) {
+    if (file.empty()) {
+        return {};
+    }
+    if (file.front() == '/') {
+        return std::string(file.substr(1));
+    }
+    if (directory.empty()) {
+        return std::string(file);
+    }
+    std::string result(directory);
+    result += '/';
+    result += file;
+    return result;
+}
+
 std::string readString(const toml::table& table, std::string_view key) {
     if (const toml::node* node = table.get(key)) {
         if (auto value = node->value<std::string>()) {
@@ -234,18 +259,32 @@ bool parseSkin(std::string_view text, const std::string& source, const std::stri
     }
 
     if (const toml::array* textures = table.get_as<toml::array>("textures")) {
+        const std::string directory = directoryOf(source);
         for (const toml::node& node : *textures) {
             const toml::table* texture = node.as_table();
             if (texture == nullptr) {
                 error = "every '[[textures]]' must be a table";
                 return false;
             }
-            const std::string slot = readString(*texture, "slot");
-            if (slot.empty()) {
+            SkinTexture entry;
+            entry.slot = readString(*texture, "slot");
+            if (entry.slot.empty()) {
                 error = "every '[[textures]]' needs a 'slot'";
                 return false;
             }
-            skin.textures.push_back(slot);
+            // A slot is `<material>.<channel>` or a bare `<channel>`.
+            const std::size_t dot = entry.slot.find('.');
+            if (dot == 0 || dot + 1 == entry.slot.size() || entry.slot.find('.', dot + 1) != std::string::npos) {
+                error = "texture slot '" + entry.slot + "' must be '<material>.<channel>' or '<channel>'";
+                return false;
+            }
+            const std::string file = readString(*texture, "file");
+            if (file.empty()) {
+                error = "the texture for slot '" + entry.slot + "' needs a 'file'";
+                return false;
+            }
+            entry.file = resolveRelative(directory, file);
+            skin.textures.push_back(std::move(entry));
         }
     }
     return true;

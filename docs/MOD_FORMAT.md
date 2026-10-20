@@ -287,13 +287,20 @@ name = "Rojo"
 authors = ["Another Author"]
 license = "CC-BY-SA-4.0"
 car = "base.core/voyager"        # the car this skin is for
-body_color = [0.75, 0.10, 0.10]
+body_color = [0.75, 0.10, 0.10]  # flat fallback, only used without a paint map
 description = "Matte red with white stripes."
 
 [[textures]]
-slot = "body"                    # texture slot the car exposes
-file = "body.png"
+slot = "paint_livery.base_color" # `<material>.<channel>` or just `<channel>`
+file = "body.png"                # resolved against this file's folder
 ```
+
+The slot names a map of the car's glTF: the material it belongs to and the
+channel to replace. The channels the renderer understands today are
+`base_color` (aliases `body`, `basecolor`, `albedo`) and `emissive` (alias
+`emission`); `slot = "base_color"` without a material replaces the map on every
+material that has the channel. A skin may also ship only `body_color`, which is
+applied to the car's paint material when that material has no base-colour map.
 
 Skins are cosmetic and never take part in the physics fingerprint (M8). A skin
 whose `car` cannot be resolved is reported as a non-fatal error in the manager

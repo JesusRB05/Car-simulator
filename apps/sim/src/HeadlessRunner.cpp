@@ -25,6 +25,7 @@
 #include "core/Log.hpp"
 #include "core/Version.hpp"
 #include "drive/DriveScene.hpp"
+#include "modding/Composition.hpp"
 #include "modding/Package.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "render/DebugDraw.hpp"
@@ -36,6 +37,7 @@
 #include "rhi/Resources.hpp"
 #include "rhi/Types.hpp"
 #include "session/CarCatalog.hpp"
+#include "session/CarVisual.hpp"
 #include "session/ContentOwner.hpp"
 #include "session/TrackCatalog.hpp"
 #include "vfs/VirtualFileSystem.hpp"
@@ -576,7 +578,13 @@ int runHeadless(const HeadlessOptions& options) {
         vfs.mount(root / "content" / "base", "/", false);
     }
     const ContentOwner owner = [](std::string_view) { return std::string(modding::kBaseModId); };
-    CarCatalog::instance().reload(vfs, owner);
+    // Skins are additive content: without the composition the cars would only
+    // ever wear their model's own materials.
+    const modding::Composition composition = modding::loadComposition(vfs, owner);
+    for (const std::string& error : composition.errors) {
+        log->warn("headless: composition: {}", error);
+    }
+    CarCatalog::instance().reload(vfs, owner, &composition);
     TrackCatalog::instance().reload(vfs, owner);
 
     rhi::DeviceConfig deviceConfig;
@@ -625,9 +633,20 @@ int runHeadless(const HeadlessOptions& options) {
             const CarSpec* car = CarCatalog::instance().defaultCar();
             const TrackSpec* track = TrackCatalog::instance().defaultTrack();
             static const drive::TrackDescription kReferenceTrack = drive::defaultTrackDescription();
-            driveScene =
-                std::make_unique<drive::DriveScene>(*device, track != nullptr ? track->track : kReferenceTrack,
-                                                    car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup());
+            std::shared_ptr<CarVisual> visual;
+            if (car != nullptr && !car->modelPath.empty()) {
+                std::vector<std::string> warnings;
+                // Headless captures show the car in its first livery, so the
+                // screenshots match what the menu offers.
+                const CarSkin* skin = car->skins.empty() ? nullptr : &car->skins.front();
+                visual = loadCarVisual(*device, vfs, car->modelPath, carVisualOptions(skin), &warnings);
+                for (const std::string& warning : warnings) {
+                    log->warn("car: {}", warning);
+                }
+            }
+            driveScene = std::make_unique<drive::DriveScene>(
+                *device, track != nullptr ? track->track : kReferenceTrack,
+                car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup(), std::move(visual));
             driveScene->simulate(1.0);
             if (options.time > 0.0) {
                 driveScene->autopilot(options.time);

@@ -12,9 +12,14 @@
 
 namespace sim::render {
 
-// A physically-based material as the renderer needs it: factor-only for now
-// (textures are a later step). `alphaBlend` selects the sorted transparent pass;
-// `alphaMask` discards on `alphaCutoff` in the opaque pass.
+class Texture;
+
+// A physically-based material. The PBR factors are what the shaders consume; the
+// two texture handles carry the content's colour and emissive maps. Both are
+// optional: the renderer substitutes a white 1x1 for the base colour and a black
+// 1x1 for the emissive, so the shader can always sample. `alphaBlend` selects the
+// sorted transparent pass; `alphaMask` discards on `alphaCutoff` in the opaque
+// pass.
 struct Material {
     glm::vec4 baseColor{0.8f, 0.8f, 0.8f, 1.0f};
     glm::vec3 emissive{0.0f};
@@ -27,6 +32,8 @@ struct Material {
     bool doubleSided = false;
     bool alphaBlend = false;
     bool alphaMask = false;
+    std::shared_ptr<Texture> baseColorTexture;
+    std::shared_ptr<Texture> emissiveTexture;
 };
 
 struct Drawable {

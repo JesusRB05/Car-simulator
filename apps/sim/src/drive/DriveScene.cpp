@@ -8,10 +8,12 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Scenes.hpp"
@@ -20,6 +22,7 @@
 #include "render/Mesh.hpp"
 #include "render/Scene.hpp"
 #include "rhi/Device.hpp"
+#include "session/CarVisual.hpp"
 
 namespace sim::app::drive {
 
@@ -156,10 +159,16 @@ std::string formatLap(double seconds) {
 
 } // namespace
 
-DriveScene::DriveScene(rhi::Device& device, const TrackDescription& description, const vehicle::VehicleSetup& car)
-    : description_(description), track_(description_), trackMesh_(track_), ground_(track_, trackMesh_) {
+DriveScene::DriveScene(rhi::Device& device, const TrackDescription& description, const vehicle::VehicleSetup& car,
+                       std::shared_ptr<CarVisual> visual)
+    : description_(description),
+      track_(description_),
+      trackMesh_(track_),
+      ground_(track_, trackMesh_),
+      visual_(std::move(visual)) {
     world_.fixedStep = 1.0 / 1000.0;
     car_ = &VehicleModel::spawn(world_, car, ground_);
+    cogHeight_ = vehicle::staticRideHeight(car);
     // Driver aids (ABS/TCS/ESC) are attached to the car here and enabled by the
     // app from the session setting (all three are on by default). The unit is
     // sampled by the model every fixed step.
@@ -602,28 +611,49 @@ void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelt
               boxAt(beamFrame, glm::vec3(0.0f), {2.0f * static_cast<float>(track_.halfWidth()) + 4.3f, 0.6f, 0.3f}),
               kKerbRed);
 
-    // Car: body, cabin, lights and four wheels.
+    // Car: the content model when it ships one, the primitive stand-in
+    // otherwise.
     const physics::RigidBody& body = car_->chassis();
     const glm::mat4 frame = bodyMatrix(body);
-    scene.add(cube_, boxAt(frame, {0.0f, -0.07f, 0.0f}, {1.76f, 0.52f, 4.30f}), kBodyColor);
-    scene.add(cube_, boxAt(frame, {0.0f, 0.40f, 0.25f}, {1.45f, 0.44f, 2.0f}), kCabinColor);
-    for (const float side : {-1.0f, 1.0f}) {
-        scene.add(cube_, boxAt(frame, {side * 0.60f, -0.02f, -2.16f}, {0.32f, 0.12f, 0.04f}), kHeadlightColor);
-        scene.add(cube_, boxAt(frame, {side * 0.62f, 0.00f, 2.16f}, {0.30f, 0.10f, 0.04f}), kTaillightColor);
-    }
+    if (visual_ && visual_->valid()) {
+        // The model's origin is on the ground; the physics origin is the centre
+        // of mass, so drop the model by the resting ride height.
+        const glm::mat4 chassis = glm::translate(frame, glm::vec3(0.0f, -static_cast<float>(cogHeight_), 0.0f));
+        const glm::mat4 rotation = glm::mat4_cast(glm::quat(body.orientation));
+        std::array<glm::mat4, 4> hubs;
+        std::array<float, 4> spin{};
+        for (std::size_t i = 0; i < hubs.size(); ++i) {
+            const VehicleCorner& corner = car_->corners()[i];
+            // The physical hub: where the contact patch puts the wheel, the
+            // body's attitude and the steer angle, times the model's own pivot
+            // orientation.
+            hubs[i] = glm::translate(glm::mat4(1.0f), toVec3(corner.wheelCentre)) * rotation *
+                      glm::rotate(glm::mat4(1.0f), static_cast<float>(corner.steerAngle), glm::vec3(0.0f, 1.0f, 0.0f)) *
+                      glm::mat4(visual_->wheels[i].rotation);
+            spin[i] = static_cast<float>(corner.spinAngle);
+        }
+        addCarVisual(scene, *visual_, chassis, hubs, spin);
+    } else {
+        scene.add(cube_, boxAt(frame, {0.0f, -0.07f, 0.0f}, {1.76f, 0.52f, 4.30f}), kBodyColor);
+        scene.add(cube_, boxAt(frame, {0.0f, 0.40f, 0.25f}, {1.45f, 0.44f, 2.0f}), kCabinColor);
+        for (const float side : {-1.0f, 1.0f}) {
+            scene.add(cube_, boxAt(frame, {side * 0.60f, -0.02f, -2.16f}, {0.32f, 0.12f, 0.04f}), kHeadlightColor);
+            scene.add(cube_, boxAt(frame, {side * 0.62f, 0.00f, 2.16f}, {0.30f, 0.10f, 0.04f}), kTaillightColor);
+        }
 
-    const glm::mat4 chassisRotation = glm::mat4_cast(glm::quat(body.orientation));
-    for (const VehicleCorner& corner : car_->corners()) {
-        const float radius = static_cast<float>(corner.wheelRadius);
-        const glm::mat4 wheelFrame =
-            glm::translate(glm::mat4(1.0f), toVec3(corner.wheelCentre)) * chassisRotation *
-            glm::rotate(glm::mat4(1.0f), static_cast<float>(corner.steerAngle), glm::vec3(0.0f, 1.0f, 0.0f)) *
-            glm::rotate(glm::mat4(1.0f), -static_cast<float>(corner.spinAngle), glm::vec3(1.0f, 0.0f, 0.0f));
-        const glm::mat4 tyre = wheelFrame * glm::rotate(glm::mat4(1.0f), 1.5707963f, glm::vec3(0.0f, 0.0f, 1.0f)) *
-                               glm::scale(glm::mat4(1.0f), glm::vec3(radius, kTyreHalfWidth, radius));
-        scene.add(cylinder_, tyre, kTyreColor);
-        const float outer = corner.left ? -(kTyreHalfWidth + 0.01f) : (kTyreHalfWidth + 0.01f);
-        scene.add(cube_, boxAt(wheelFrame, {outer, 0.0f, 0.0f}, {0.02f, 0.40f, 0.08f}), kHubColor);
+        const glm::mat4 chassisRotation = glm::mat4_cast(glm::quat(body.orientation));
+        for (const VehicleCorner& corner : car_->corners()) {
+            const float radius = static_cast<float>(corner.wheelRadius);
+            const glm::mat4 wheelFrame =
+                glm::translate(glm::mat4(1.0f), toVec3(corner.wheelCentre)) * chassisRotation *
+                glm::rotate(glm::mat4(1.0f), static_cast<float>(corner.steerAngle), glm::vec3(0.0f, 1.0f, 0.0f)) *
+                glm::rotate(glm::mat4(1.0f), -static_cast<float>(corner.spinAngle), glm::vec3(1.0f, 0.0f, 0.0f));
+            const glm::mat4 tyre = wheelFrame * glm::rotate(glm::mat4(1.0f), 1.5707963f, glm::vec3(0.0f, 0.0f, 1.0f)) *
+                                   glm::scale(glm::mat4(1.0f), glm::vec3(radius, kTyreHalfWidth, radius));
+            scene.add(cylinder_, tyre, kTyreColor);
+            const float outer = corner.left ? -(kTyreHalfWidth + 0.01f) : (kTyreHalfWidth + 0.01f);
+            scene.add(cube_, boxAt(wheelFrame, {outer, 0.0f, 0.0f}, {0.02f, 0.40f, 0.08f}), kHubColor);
+        }
     }
 
     updateCamera(aspect, frameDelta, scene);

@@ -223,14 +223,32 @@ void SessionUI::drawMainMenu(SessionState& state, bool haveWheel, Action& action
 void SessionUI::drawCarCards(SessionState& state) {
     const CarCatalog& cars = CarCatalog::instance();
     for (const CarSpec& car : cars.cars()) {
-        ImGui::PushID(car.id.c_str());
-        const bool selected = car.id == state.selection.carId;
+        ImGui::PushID(car.ref().c_str());
+        const bool selected = car.ref() == state.selection.carId;
         if (ImGui::Selectable((" " + car.manufacturer + " " + car.model).c_str(), selected, 0, ImVec2(0.0f, 34.0f))) {
-            state.selection.carId = car.id;
+            state.selection.carId = car.ref();
         }
         ImGui::SameLine();
         ImGui::TextDisabled("%s", car.category.c_str());
         ImGui::PopID();
+    }
+}
+
+void SessionUI::drawSkinPicker(SessionState& state, const CarSpec& car) {
+    if (car.skins.empty()) {
+        return;
+    }
+    ImGui::Separator();
+    ImGui::TextDisabled("Livery");
+    for (const CarSkin& skin : car.skins) {
+        const bool selected = skin.id == state.selection.skinId;
+        if (ImGui::RadioButton(skin.name.c_str(), selected)) {
+            state.selection.skinId = skin.id;
+        }
+        if (!skin.description.empty()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", skin.description.c_str());
+        }
     }
 }
 
@@ -295,6 +313,7 @@ void SessionUI::drawCarSelect(SessionState& state, Action& action) {
     const CarSpec* car = CarCatalog::instance().find(state.selection.carId);
     if (car != nullptr) {
         drawCarSpecs(*car);
+        drawSkinPicker(state, *car);
     }
 
     ImGui::SetCursorPosY(ImGui::GetWindowHeight() - 44.0f);

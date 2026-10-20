@@ -51,6 +51,15 @@ struct Patch {
     std::vector<PatchEntry> entries;
 };
 
+// One texture a skin substitutes into the car's model. `slot` is
+// `<material>.<channel>` or just `<channel>`; the channels the renderer
+// understands are `base_color` (aliases `body`, `basecolor`, `albedo`) and
+// `emissive` (alias `emission`).
+struct SkinTexture {
+    std::string slot;
+    std::string file; // virtual path, resolved against the descriptor's folder
+};
+
 // A cosmetic skin for a car of any mod. Addressed as `<car-mod>/<car>/<skin>`;
 // the folder mirrors the reference so skins from several mods compose
 // additively, and a skin never copies the car.
@@ -62,7 +71,7 @@ struct Skin {
     std::string name;
     std::string description;
     std::vector<double> bodyColor;     // optional, three or four numbers in [0, 1]
-    std::vector<std::string> textures; // texture slot names the skin replaces
+    std::vector<SkinTexture> textures; // the maps the skin replaces
 };
 
 // A part that fills a slot of a car of any mod. Addressed as

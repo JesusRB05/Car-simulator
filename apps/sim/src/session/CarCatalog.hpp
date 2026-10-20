@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -19,6 +20,25 @@ class VirtualFileSystem;
 }
 
 namespace sim::app {
+
+// One map a skin replaces in the car's model. `slot` is `<material>.<channel>`
+// or a bare `<channel>`; `file` is the resolved virtual path of the image.
+struct CarSkinTexture {
+    std::string slot;
+    std::string file;
+};
+
+// A selectable livery for a car. Skins are additive content: they are scanned
+// from `skins/<car-mod>/<car>/<skin>/livery.toml` and never copy the model.
+struct CarSkin {
+    std::string id;  // folder name, e.g. "red_black_8"
+    std::string ref; // "<car-mod>/<car>/<skin>"
+    std::string name;
+    std::string description;
+    std::vector<CarSkinTexture> textures;
+    bool hasBodyColor = false; // flat fallback when the skin ships no map
+    glm::vec4 bodyColor{1.0f};
+};
 
 // One selectable car. The setup is the actual vehicle the physics spawns; the
 // display fields are derived from the descriptor and are never invented.
@@ -39,11 +59,23 @@ struct CarSpec {
     std::string category;
     std::string description;
 
+    // Virtual path of the car's glTF model, resolved against the descriptor's
+    // folder. Empty when the car ships no model (the garage then falls back to
+    // primitives).
+    std::string modelPath;
+
     // The physics setup actually used when the car is spawned.
     vehicle::VehicleSetup setup{};
 
     // Visual identity for the garage preview and cards.
     glm::vec4 bodyColor{0.10f, 0.35f, 0.80f, 1.0f};
+
+    // Liveries available for this car, sorted by name. An empty list means the
+    // car wears its model's materials unchanged.
+    std::vector<CarSkin> skins;
+
+    // The skin with this id, or nullptr.
+    const CarSkin* skin(std::string_view id) const;
 
     // Progression hook. No progression system exists yet, so every registered
     // car is unlocked; the flag is here so a future career mode can fill it in.

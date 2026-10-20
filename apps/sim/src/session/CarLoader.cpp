@@ -44,13 +44,26 @@ bool readColor(const toml::table& root, glm::vec4& out, ParseContext& context) {
     return true;
 }
 
-std::optional<CarSpec> parseCarSpecImpl(const toml::table& root, ParseContext& context) {
+std::optional<CarSpec> parseCarSpecImpl(const toml::table& root, std::string_view sourcePath, ParseContext& context) {
     CarSpec car;
     car.id = content::readString(root, "id", {});
     car.model = content::readString(root, "name", car.id);
     car.manufacturer = content::readString(root, "author", "Unknown");
     car.category = content::readString(root, "category", "Data-defined car");
     car.description = content::readString(root, "description", "");
+
+    // `model` is the car's glTF, relative to the descriptor's folder. A car may
+    // ship none (the garage then shows primitives), but a path that is not a
+    // glTF is a mistake worth reporting at load time.
+    const std::string modelFile = content::readString(root, "model", {});
+    if (!modelFile.empty()) {
+        if (modelFile.size() < 5 || (modelFile.compare(modelFile.size() - 4, 4, ".glb") != 0 &&
+                                     modelFile.compare(modelFile.size() - 5, 5, ".gltf") != 0)) {
+            context.fail("'model' must point at a .glb or .gltf file (got '" + modelFile + "')");
+        } else {
+            car.modelPath = content::resolveRelative(sourcePath, modelFile);
+        }
+    }
     if (const toml::node* idNode = root.get("id")) {
         if (!content::isValidId(car.id)) {
             context.failAt(*idNode, "id",
@@ -261,7 +274,7 @@ std::optional<CarSpec> parseCarSpec(std::string_view text, std::string_view sour
     }
 
     ParseContext context{std::string(sourcePath), {}};
-    std::optional<CarSpec> car = parseCarSpecImpl(root, context);
+    std::optional<CarSpec> car = parseCarSpecImpl(root, sourcePath, context);
     if (!car) {
         error = context.joined();
     }
@@ -272,7 +285,7 @@ std::optional<CarSpec> parseCarSpec(std::string_view text, std::string_view sour
 // to it first).
 std::optional<CarSpec> parseCarSpecTable(const toml::table& root, std::string_view sourcePath, std::string& error) {
     ParseContext context{std::string(sourcePath), {}};
-    std::optional<CarSpec> car = parseCarSpecImpl(root, context);
+    std::optional<CarSpec> car = parseCarSpecImpl(root, sourcePath, context);
     if (!car) {
         error = context.joined();
     }

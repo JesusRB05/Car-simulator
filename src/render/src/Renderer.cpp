@@ -19,6 +19,10 @@ namespace {
 // coverage and memory for a single sun.
 constexpr std::uint32_t kShadowSize = 2048;
 
+// Ceiling on distinct (base colour, emissive) texture pairs. Each car or track
+// material contributes one; a whole circuit plus a field of cars fits easily.
+constexpr std::uint32_t kMaxMaterialSets = 1024;
+
 // Reversed-Z orthographic projection for Vulkan's [0, 1] clip depth: the near
 // plane maps to depth 1 and the far plane to 0, matching Camera::setPerspective
 // and the GreaterEqual depth test.
@@ -85,6 +89,18 @@ Renderer::Renderer(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32
         shadowImages_.push_back(std::move(image));
         shadowSets_.push_back(set);
     }
+
+    // Set 2: the two material maps. The stand-ins are 1x1 so an untextured
+    // material costs one texel and no branch in the shader.
+    materialLayout_ = std::make_unique<rhi::DescriptorSetLayout>(
+        device_, std::vector<rhi::DescriptorBinding>{
+                    {0, rhi::DescriptorType::CombinedImageSampler, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
+                    {1, rhi::DescriptorType::CombinedImageSampler, 1, VK_SHADER_STAGE_FRAGMENT_BIT}});
+    materialPool_ = std::make_unique<rhi::DescriptorPool>(device_, kMaxMaterialSets, materialLayout_->bindings());
+    const std::uint8_t white[4] = {255, 255, 255, 255};
+    const std::uint8_t black[4] = {0, 0, 0, 255};
+    whitePixel_ = std::make_unique<Texture>(device_, 1, 1, white, /*srgb=*/false, /*repeat=*/false);
+    blackPixel_ = std::make_unique<Texture>(device_, 1, 1, black, /*srgb=*/false, /*repeat=*/false);
 }
 
 Renderer::~Renderer() = default;
@@ -138,7 +154,7 @@ void Renderer::ensurePipelines(rhi::Format colorFormat) {
     opaque.blendMode = rhi::BlendMode::Opaque;
     opaque.colorFormats = {colorFormat};
     opaque.depthFormat = rhi::Format::D32Sfloat;
-    opaque.descriptorLayouts = {frameLayout_.get(), shadowLayout_.get()};
+    opaque.descriptorLayouts = {frameLayout_.get(), shadowLayout_.get(), materialLayout_.get()};
     opaque.pushConstantSize = sizeof(ObjectPushConstants);
     pipeline_ = std::make_unique<rhi::GraphicsPipeline>(device_, opaque);
 
@@ -211,6 +227,43 @@ void Renderer::updateFrameUniforms(std::uint32_t slot, const Scene& scene) {
     uniforms.ambientGround = glm::vec4(glm::vec3(skyLuminance * 0.18f), 1.0f);
 
     frameBuffers_[slot]->upload(&uniforms, sizeof(uniforms));
+}
+
+void Renderer::releaseMaterialSets() {
+    materialSets_.clear();
+    if (materialPool_ != nullptr) {
+        materialPool_->reset();
+    }
+}
+
+const rhi::DescriptorSet& Renderer::materialSet(const Material& material) {
+    const VkImageView base =
+        material.baseColorTexture != nullptr ? material.baseColorTexture->view() : whitePixel_->view();
+    const VkImageView emissive =
+        material.emissiveTexture != nullptr ? material.emissiveTexture->view() : blackPixel_->view();
+    const std::pair<VkImageView, VkImageView> key{base, emissive};
+
+    const auto existing = materialSets_.find(key);
+    if (existing != materialSets_.end()) {
+        return existing->second;
+    }
+    if (materialSets_.size() >= kMaxMaterialSets) {
+        static bool warned = false;
+        if (!warned) {
+            warned = true;
+            core::Log::get("render")->warn("material texture sets exceeded {}; reusing the first", kMaxMaterialSets);
+        }
+        return materialSets_.begin()->second;
+    }
+
+    rhi::DescriptorSet set(&device_, materialPool_->allocate(*materialLayout_));
+    set.writeImage(0, material.baseColorTexture != nullptr ? material.baseColorTexture->sampler()
+                                                          : whitePixel_->sampler(),
+                   base);
+    set.writeImage(1, material.emissiveTexture != nullptr ? material.emissiveTexture->sampler()
+                                                         : blackPixel_->sampler(),
+                   emissive);
+    return materialSets_.emplace(key, set).first->second;
 }
 
 void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
@@ -307,6 +360,7 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
         const ObjectPushConstants push = makePushConstants(drawable);
         commandList.pushConstants(pipeline_->layout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                                   sizeof(push), &push);
+        commandList.bindDescriptorSet(pipeline_->layout(), 2, materialSet(drawable.material).handle());
         commandList.bindVertexBuffer(drawable.mesh->vertexBuffer());
         commandList.bindIndexBuffer(drawable.mesh->indexBuffer());
         commandList.drawIndexed(drawable.mesh->indexCount());
@@ -329,6 +383,7 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
             commandList.pushConstants(transparentPipeline_->layout(),
                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push),
                                       &push);
+            commandList.bindDescriptorSet(transparentPipeline_->layout(), 2, materialSet(drawable->material).handle());
             commandList.bindVertexBuffer(drawable->mesh->vertexBuffer());
             commandList.bindIndexBuffer(drawable->mesh->indexBuffer());
             commandList.drawIndexed(drawable->mesh->indexCount());

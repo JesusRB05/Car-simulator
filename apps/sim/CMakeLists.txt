@@ -18,6 +18,8 @@ add_executable(sim
     src/drive/TrackCollisionMesh.cpp
     src/session/CarCatalog.cpp
     src/session/CarLoader.cpp
+    src/session/CarRig.cpp
+    src/session/CarVisual.cpp
     src/session/ControlSetupWizard.cpp
     src/session/GarageScene.cpp
     src/session/SessionState.cpp

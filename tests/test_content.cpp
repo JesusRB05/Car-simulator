@@ -125,6 +125,59 @@ TEST_CASE("content: the official car and circuit load through the VFS") {
     CHECK(tracks.tracks[0].aspect == expectedTrack.aspect);
 }
 
+TEST_CASE("content: the car model path and the liveries resolve through the VFS") {
+    sim::vfs::VirtualFileSystem vfs;
+    REQUIRE(vfs.mount(sourceDir() / "content" / "base"));
+    REQUIRE(vfs.mount(sourceDir() / "mods" / "example_mod"));
+
+    const sim::app::ContentOwner owner = ownerFor(vfs);
+    const sim::modding::Composition composition = sim::modding::loadComposition(vfs, owner);
+    for (const std::string& error : composition.errors) {
+        MESSAGE("composition error: " << error);
+    }
+    REQUIRE(composition.errors.empty());
+
+    sim::app::CarCatalog& cars = sim::app::CarCatalog::instance();
+    cars.reload(vfs, owner, &composition);
+    for (const std::string& error : cars.errors()) {
+        MESSAGE("car error: " << error);
+    }
+    REQUIRE(cars.errors().empty());
+
+    // `model` is relative to the descriptor's folder and is a glTF.
+    const sim::app::CarSpec* gt3 = cars.find("base.core/halvard_gt3");
+    REQUIRE(gt3 != nullptr);
+    CHECK(gt3->modelPath == "cars/halvard_gt3/model/car.glb");
+    CHECK(vfs.exists(gt3->modelPath));
+
+    // Both shipped liveries attach to the car, with their maps already resolved.
+    REQUIRE(gt3->skins.size() == 2);
+    const sim::app::CarSkin* red = gt3->skin("red_black_8");
+    REQUIRE(red != nullptr);
+    CHECK(red->ref == "base.core/halvard_gt3/red_black_8");
+    CHECK(red->name == "8 Red/Black");
+    REQUIRE(red->textures.size() == 2);
+    CHECK(red->textures[0].slot == "paint_livery.base_color");
+    CHECK(red->textures[0].file == "skins/base.core/halvard_gt3/red_black_8/livery.png");
+    CHECK(vfs.exists(red->textures[0].file));
+    CHECK(red->textures[1].slot == "paint_livery.emissive");
+    CHECK(vfs.exists(red->textures[1].file));
+    CHECK(red->hasBodyColor);
+    CHECK(red->bodyColor.r == doctest::Approx(0.08).epsilon(1e-4));
+    CHECK(red->bodyColor.b == doctest::Approx(0.09).epsilon(1e-4));
+
+    // The skins are sorted by display name, so the menu order is stable.
+    CHECK(gt3->skins[0].id == "green_44");
+    CHECK(gt3->skins[1].id == "red_black_8");
+    CHECK(gt3->skin("does_not_exist") == nullptr);
+
+    // A car without a glTF keeps the primitive fallback, and no skin.
+    const sim::app::CarSpec* voyager = cars.find("base.core/voyager");
+    REQUIRE(voyager != nullptr);
+    CHECK(voyager->modelPath.empty());
+    CHECK(voyager->skins.empty());
+}
+
 TEST_CASE("content: the catalog resolves namespaced references and rejects ambiguity") {
     sim::vfs::VirtualFileSystem vfs;
     REQUIRE(vfs.mount(sourceDir() / "content" / "base"));

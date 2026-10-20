@@ -36,6 +36,10 @@ ConstantBuffer<FrameUniforms> frame : register(b0);
 // renderer's shadowLayout_).
 [[vk::binding(0, 1)]] Texture2D<float> shadowMap;
 [[vk::binding(1, 1)]] SamplerState shadowSampler;
+// Set 2: the material's colour and emissive maps. A material without them is
+// bound to a white / black 1x1, so the sample is always valid.
+[[vk::binding(0, 2)]] Sampler2D baseColorMap;
+[[vk::binding(1, 2)]] Sampler2D emissiveMap;
 [[vk::push_constant]] ConstantBuffer<PushConstants> push;
 
 struct VSOutput
@@ -133,8 +137,9 @@ float sampleShadow(float3 worldPosition, float3 normal, float nDotL)
 [shader("fragment")]
 float4 fragmentMain(VSOutput input, bool isFrontFace : SV_IsFrontFace) : SV_Target
 {
-    float3 albedo = push.baseColor.rgb * input.color.rgb;
-    float alpha = push.baseColor.a * input.color.a;
+    const float4 baseSample = baseColorMap.Sample(input.uv);
+    float3 albedo = push.baseColor.rgb * input.color.rgb * baseSample.rgb;
+    float alpha = push.baseColor.a * input.color.a * baseSample.a;
     if (push.params.w > 0.0 && alpha < push.params.w)
     {
         discard;
@@ -185,7 +190,7 @@ float4 fragmentMain(VSOutput input, bool isFrontFace : SV_IsFrontFace) : SV_Targ
         ambient += fC * ambientColor * clearcoat * 0.35;
     }
 
-    const float3 emissive = push.emissive.rgb * push.emissive.a;
+    const float3 emissive = push.emissive.rgb * push.emissive.a * emissiveMap.Sample(input.uv).rgb;
     float3 color = direct + ambient + emissive;
     color *= frame.ambientSky.a; // exposure
     color = acesToneMap(color);

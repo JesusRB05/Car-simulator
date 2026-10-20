@@ -30,6 +30,9 @@ const char* gameScreenName(GameScreen screen);
 // catalog defaults.
 struct SessionSelection {
     std::string carId = "base.core/voyager";
+    // Livery of the selected car (a bare skin id, resolved against the car).
+    // Empty means the car's own materials.
+    std::string skinId = "red_black_8";
     std::string trackId = "base.core/sunset_circuit";
     std::string modeId = "practice";
     std::string weatherId = "clear";

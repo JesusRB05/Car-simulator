@@ -3,11 +3,15 @@
 #include "session/GarageScene.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <utility>
 
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "core/Log.hpp"
 #include "session/CarCatalog.hpp"
+#include "session/CarVisual.hpp"
 
 namespace sim::app {
 namespace {
@@ -27,8 +31,9 @@ glm::mat4 boxAt(const glm::mat4& frame, const glm::vec3& centre, const glm::vec3
 
 } // namespace
 
-GarageScene::GarageScene(sim::rhi::Device& device)
+GarageScene::GarageScene(sim::rhi::Device& device, const sim::vfs::VirtualFileSystem& vfs)
     : device_(device),
+      vfs_(vfs),
       cube_(sim::render::Mesh::makeCube(device)),
       cylinder_(sim::render::Mesh::makeCylinder(device)),
       floor_(sim::render::Mesh::makeGroundPlane(device, 12.0f)) {
@@ -37,7 +42,42 @@ GarageScene::GarageScene(sim::rhi::Device& device)
     camera_.fovDegrees = 40.0f;
 }
 
-void GarageScene::setCar(const CarSpec& car) {
+void GarageScene::setCar(const CarSpec& car, const CarSkin* skin) {
+    const std::string carRef = car.ref();
+    const std::string skinRef = skin != nullptr ? skin->ref : std::string{};
+    if (carRef == carRef_ && skinRef == skinRef_) {
+        return; // already showing this exact car and livery
+    }
+    carRef_ = carRef;
+    skinRef_ = skinRef;
+
+    carParts_.clear();
+    visual_.reset();
+    carCenter_ = glm::vec3(0.0f, 0.6f, 0.0f);
+    carRadius_ = 3.2f;
+
+    if (!car.modelPath.empty()) {
+        std::vector<std::string> warnings;
+        visual_ = loadCarVisual(device_, vfs_, car.modelPath, carVisualOptions(skin), &warnings);
+        for (const std::string& warning : warnings) {
+            core::Log::get("render")->warn("garage: {}", warning);
+        }
+        if (visual_ && visual_->valid()) {
+            const glm::vec3 size = visual_->boundsMax - visual_->boundsMin;
+            carCenter_ = 0.5f * (visual_->boundsMin + visual_->boundsMax);
+            carRadius_ = std::max(0.5f * glm::length(size), 1.5f);
+        } else {
+            visual_.reset();
+        }
+    }
+
+    if (!visual_) {
+        buildPrimitives(car);
+    }
+    frameCamera();
+}
+
+void GarageScene::buildPrimitives(const CarSpec& car) {
     const vehicle::VehicleSetup& setup = car.setup;
     const float wheelRadius = static_cast<float>(setup.wheelRadius);
     const float halfTrack = static_cast<float>(setup.halfTrack);
@@ -48,7 +88,6 @@ void GarageScene::setCar(const CarSpec& car) {
     const float bodyCenterY = wheelRadius + restLength;
     const glm::mat4 frame = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, bodyCenterY, 0.0f));
 
-    carParts_.clear();
     // Body and cabin, with the same proportions the drive scene uses.
     carParts_.push_back({cube_, boxAt(frame, {0.0f, -0.07f, 0.0f}, {1.76f, 0.52f, 4.30f}), car.bodyColor});
     carParts_.push_back({cube_, boxAt(frame, {0.0f, 0.40f, 0.25f}, {1.45f, 0.44f, 2.0f}), kCabinColor});
@@ -72,7 +111,6 @@ void GarageScene::setCar(const CarSpec& car) {
 
     carCenter_ = glm::vec3(0.0f, bodyCenterY + 0.1f, 0.0f);
     carRadius_ = 3.1f;
-    frameCamera();
 }
 
 void GarageScene::resetView() {
@@ -89,8 +127,15 @@ void GarageScene::buildScene(sim::render::Scene& scene, float aspect) {
     scene.clear();
     scene.setSkyColor(glm::vec4(0.055f, 0.06f, 0.075f, 1.0f));
     scene.add(floor_, glm::mat4(1.0f), kFloorColor);
-    for (const sim::render::Drawable& part : carParts_) {
-        scene.add(part.mesh, part.transform, part.material);
+    if (visual_ && visual_->valid()) {
+        // The model's origin is the ground plane, which is the showroom floor.
+        const glm::mat4 chassis(1.0f);
+        const std::array<float, 4> spin{0.0f, 0.0f, 0.0f, 0.0f};
+        addCarVisual(scene, *visual_, chassis, restHubFrames(*visual_, chassis), spin);
+    } else {
+        for (const sim::render::Drawable& part : carParts_) {
+            scene.add(part.mesh, part.transform, part.material);
+        }
     }
     camera_.apply(scene.camera(), aspect);
 }

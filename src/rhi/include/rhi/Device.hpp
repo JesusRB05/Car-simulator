@@ -16,6 +16,8 @@
 
 namespace sim::rhi {
 
+class CommandList;
+
 struct DeviceConfig {
     bool enableValidation = false;
     // Headless mode renders entirely offscreen: no surface is created, no
@@ -77,6 +79,11 @@ public:
     std::uint32_t validationMessageCount() const { return validationMessages_.load(std::memory_order_relaxed); }
 
     void waitIdle() const;
+
+    // Submits an already-recorded (ended) command list on the graphics queue and
+    // waits for it. This is the one-shot path for load-time work that does not
+    // fit the per-frame `Frame`: uploading a texture, copying a buffer.
+    void submitImmediate(CommandList& commandList);
 
 private:
     void createInstance(const DeviceConfig& config);

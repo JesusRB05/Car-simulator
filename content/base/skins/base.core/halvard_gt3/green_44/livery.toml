@@ -8,9 +8,9 @@ body_color = [0.05,0.35,0.15]
 description = "Green with dark green lower body and white accents."
 
 [[textures]]
-slot = "body"
+slot = "paint_livery.base_color"
 file = "livery.png"
 
 [[textures]]
-slot = "emissive"
+slot = "paint_livery.emissive"
 file = "livery_emissive.png"

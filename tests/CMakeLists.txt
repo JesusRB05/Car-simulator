@@ -24,6 +24,7 @@ add_executable(sim_tests
     test_plugins.cpp
     test_vfs.cpp
     test_content.cpp
+    test_carvisual.cpp
     test_gltf.cpp
     # The drive scene and the content catalogs live in the app; their
     # simulation half is render-free and tested directly.
@@ -32,6 +33,7 @@ add_executable(sim_tests
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/TrackCollisionMesh.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/CarCatalog.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/CarLoader.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/session/CarRig.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/TrackCatalog.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/session/TrackLoader.cpp)
 

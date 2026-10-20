@@ -179,6 +179,13 @@ struct GltfLoadResult {
 GltfLoadResult loadGltf(const vfs::VirtualFileSystem& vfs, std::string_view virtualPath,
                         const GltfLoadOptions& options = {});
 
+// Decodes one PNG/JPEG through the VFS, through the same path the loader uses
+// for external images. `srgb` marks colour data (base colour, emissive); the
+// returned image carries its average linear colour. Skin ("livery") textures are
+// the reason this is public: they are not part of any glTF.
+std::optional<Image> loadImage(const vfs::VirtualFileSystem& vfs, std::string_view virtualPath, bool srgb,
+                               std::uint64_t maxPixels = 4096ull * 4096ull);
+
 // Generates per-vertex tangents (xyz) and handedness (w) for a primitive from
 // its positions, normals and UVs, using the standard per-triangle accumulation
 // averaged over shared vertices (the MikkTSpace convention). Vertices whose

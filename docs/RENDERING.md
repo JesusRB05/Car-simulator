@@ -96,15 +96,30 @@ Two passes per frame, both with **dynamic rendering** (`vkCmdBeginRendering`;
 
 #### Materials
 
-`render::Material` is factor-only for now (textures are a later step): base
-colour, emissive colour and strength, metallic, roughness, clearcoat, alpha
-cutoff, and the `doubleSided` / `alphaBlend` / `alphaMask` flags. The fragment
-shader is **metallic-roughness** (GGX distribution, Smith-Schlick geometry,
-Schlick Fresnel) lit by one directional sun, plus a hemispheric ambient derived
+A `render::Material` carries the glTF factors (base colour, emissive colour and
+strength, metallic, roughness, clearcoat, alpha cutoff, and the `doubleSided` /
+`alphaBlend` / `alphaMask` flags) plus two optional maps: the **base colour**
+(sRGB) and the **emissive** (sRGB). Everything else the two shipped assets use is
+still a factor: normal, metallic-roughness and occlusion maps are read by the
+loader but not sampled yet. The fragment shader is **metallic-roughness** (GGX
+distribution, Smith-Schlick geometry, Schlick Fresnel) with a clearcoat
+approximation, lit by one directional sun, plus a hemispheric ambient derived
 from the sky colour's luminance, an ACES tone map and an exposure scalar from
 `Scene::exposure()`. Emissive is game-driven (brake and rain lights). The sun's
 shadow lookup compares against the reversed-Z stored depth with a 3×3 PCF kernel
 and a small normal offset.
+
+Textures are uploaded by `render::Texture`: the images the VFS decodes are
+expanded to RGBA8, box-filtered down to a full mip chain (2×2 box per level) and
+sampled with anisotropic-enabled trilinear filtering. Colour maps get an sRGB
+view; the material factors stay linear. Missing maps resolve to a 1×1 white
+(base colour) / black (emissive) stand-in, so the shader always samples. The
+material's two views are cached in a descriptor set of their own (set 2), so the
+renderer does not rebuild one per drawable.
+
+Skin ("livery") maps are not part of the glTF: `render::loadModel` accepts a list
+of `MaterialOverride` (material, channel, image) and decodes them through the
+same image path, so a skin costs one texture and no shader work.
 
 The offscreen target is linear `R8G8B8A8_UNORM`; the window swapchain is
 `B8G8R8A8_SRGB`, so the hardware applies the sRGB encode there and the shaders

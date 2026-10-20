@@ -312,6 +312,32 @@ bool decodeImage(const vfs::VirtualFileSystem& vfs, const cgltf_options& options
     return true;
 }
 
+// The sRGB electro-optical transfer function, used to fold a colour texture's
+// average back into linear light.
+float srgbToLinear(float value) {
+    return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
+}
+
+// Averages the texels into `averageColor`, in linear space (sRGB images are
+// decoded first). Shared by the loader and `loadImage`.
+void computeAverageColor(Image& image) {
+    if (image.pixels.empty() || image.width == 0 || image.height == 0) {
+        return;
+    }
+    const std::size_t texels = static_cast<std::size_t>(image.width) * image.height;
+    glm::dvec3 sum(0.0);
+    for (std::size_t i = 0; i < texels; ++i) {
+        sum += glm::dvec3(image.pixels[i * 4 + 0] / 255.0, image.pixels[i * 4 + 1] / 255.0,
+                          image.pixels[i * 4 + 2] / 255.0);
+    }
+    glm::dvec3 average = sum / static_cast<double>(texels);
+    if (image.srgb) {
+        average = {srgbToLinear(static_cast<float>(average.x)), srgbToLinear(static_cast<float>(average.y)),
+                   srgbToLinear(static_cast<float>(average.z))};
+    }
+    image.averageColor = glm::vec3(average);
+}
+
 // ---------------------------------------------------------------------------
 // Accessor unpacking
 // ---------------------------------------------------------------------------
@@ -550,6 +576,36 @@ void generateTangents(const std::vector<std::uint32_t>& indices, std::vector<Ver
     }
 }
 
+std::optional<Image> loadImage(const vfs::VirtualFileSystem& vfs, std::string_view virtualPath, bool srgb,
+                              std::uint64_t maxPixels) {
+    const std::optional<std::vector<std::uint8_t>> bytes = vfs.readBinary(std::string(virtualPath));
+    if (!bytes || bytes->empty()) {
+        return std::nullopt;
+    }
+    int width = 0;
+    int height = 0;
+    int channels = 0;
+    stbi_uc* pixels = stbi_load_from_memory(bytes->data(), static_cast<int>(bytes->size()), &width, &height, &channels, 4);
+    if (pixels == nullptr) {
+        return std::nullopt;
+    }
+    if (width <= 0 || height <= 0 ||
+        static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) > maxPixels) {
+        stbi_image_free(pixels);
+        return std::nullopt;
+    }
+    Image image;
+    image.name = std::string(virtualPath);
+    image.width = static_cast<std::uint32_t>(width);
+    image.height = static_cast<std::uint32_t>(height);
+    image.srgb = srgb;
+    const std::size_t count = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 4u;
+    image.pixels.assign(pixels, pixels + count);
+    stbi_image_free(pixels);
+    computeAverageColor(image);
+    return image;
+}
+
 GltfLoadResult loadGltf(const vfs::VirtualFileSystem& vfs, std::string_view virtualPath,
                         const GltfLoadOptions& options) {
     GltfLoadResult result;
@@ -779,25 +835,8 @@ GltfLoadResult loadGltf(const vfs::VirtualFileSystem& vfs, std::string_view virt
 
     // Average colour per image, decoded to linear so it can be used directly as
     // a flat base colour when a texture is not sampled.
-    const auto srgbToLinear = [](float value) {
-        return value <= 0.04045f ? value / 12.92f : std::pow((value + 0.055f) / 1.055f, 2.4f);
-    };
     for (Image& image : asset.images) {
-        if (image.pixels.empty() || image.width == 0 || image.height == 0) {
-            continue;
-        }
-        const std::size_t texels = static_cast<std::size_t>(image.width) * image.height;
-        glm::dvec3 sum(0.0);
-        for (std::size_t i = 0; i < texels; ++i) {
-            sum += glm::dvec3(image.pixels[i * 4 + 0] / 255.0, image.pixels[i * 4 + 1] / 255.0,
-                              image.pixels[i * 4 + 2] / 255.0);
-        }
-        glm::dvec3 average = sum / static_cast<double>(texels);
-        if (image.srgb) {
-            average = {srgbToLinear(static_cast<float>(average.x)), srgbToLinear(static_cast<float>(average.y)),
-                       srgbToLinear(static_cast<float>(average.z))};
-        }
-        image.averageColor = glm::vec3(average);
+        computeAverageColor(image);
     }
 
     // --- Bounds -------------------------------------------------------------

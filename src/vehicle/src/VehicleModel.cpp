@@ -95,25 +95,28 @@ void VehicleModel::buildCorners() {
     }
 }
 
-void VehicleModel::reset(const Vec3& position, Real headingRadians) {
-    physics::RigidBody& body = *bodyA;
-    const Real gravity = gravity_;
-    const Real wheelbase = setup_.rearAxleZ - setup_.frontAxleZ;
-    const Real frontShare = setup_.rearAxleZ / wheelbase;
-    const Real frontLoad = 0.5 * setup_.mass * gravity * frontShare;
-    const Real rearLoad = 0.5 * setup_.mass * gravity * (1.0 - frontShare);
+Real staticRideHeight(const VehicleSetup& setup, Real gravity) {
+    const Real wheelbase = setup.rearAxleZ - setup.frontAxleZ;
+    const Real frontShare = setup.rearAxleZ / wheelbase;
+    const Real frontLoad = 0.5 * setup.mass * gravity * frontShare;
+    const Real rearLoad = 0.5 * setup.mass * gravity * (1.0 - frontShare);
 
-    // Static equilibrium height: the strut length at which the spring carries the
-    // corner load, so the car settles without a bounce.
-    const SpringDamperCoefficients& front = setup_.frontSpring;
-    const SpringDamperCoefficients& rear = setup_.rearSpring;
+    // The strut length at which the spring carries the corner load.
+    const SpringDamperCoefficients& front = setup.frontSpring;
+    const SpringDamperCoefficients& rear = setup.rearSpring;
     const Real frontStrut = front.restLength + (front.preload - frontLoad) / std::max(front.stiffness, 1e-6);
     const Real rearStrut = rear.restLength + (rear.preload - rearLoad) / std::max(rear.stiffness, 1e-6);
-    const Real frontDistance = frontStrut + setup_.wheelRadius;
-    const Real rearDistance = rearStrut + setup_.wheelRadius;
+    const Real frontDistance = frontStrut + setup.wheelRadius;
+    const Real rearDistance = rearStrut + setup.wheelRadius;
+    return 0.5 * (frontDistance + rearDistance) - setup.mountY;
+}
 
+void VehicleModel::reset(const Vec3& position, Real headingRadians) {
+    physics::RigidBody& body = *bodyA;
+
+    // Static equilibrium height, so the car settles without a bounce.
     const GroundSample ground = ground_->sample(position.x, position.z);
-    const Real bodyHeight = ground.height + 0.5 * (frontDistance + rearDistance) - setup_.mountY;
+    const Real bodyHeight = ground.height + staticRideHeight(setup_, gravity_);
 
     body.position = Vec3(position.x, bodyHeight, position.z);
     body.orientation = physics::quaternionFromAxisAngle(Vec3(0.0, 1.0, 0.0), headingRadians);

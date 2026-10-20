@@ -29,6 +29,7 @@
 #include "modding/ModInstaller.hpp"
 #include "modding/Package.hpp"
 #include "session/CarCatalog.hpp"
+#include "session/CarVisual.hpp"
 #include "session/GarageScene.hpp"
 #include "session/SessionUI.hpp"
 #include "session/TrackCatalog.hpp"
@@ -257,9 +258,9 @@ bool Application::initialise() {
     scene_.setDirectionalLight({-0.4f, -1.0f, -0.35f}, {1.0f, 0.98f, 0.95f});
 
     sessionUi_ = std::make_unique<SessionUI>();
-    garage_ = std::make_unique<GarageScene>(*device_);
+    garage_ = std::make_unique<GarageScene>(*device_, *vfs_);
     if (const CarSpec* car = CarCatalog::instance().find(session_.selection.carId)) {
-        garage_->setCar(*car);
+        garage_->setCar(*car, car->skin(session_.selection.skinId));
     }
     // A scene requested on the command line skips the menus and drives at once.
     if (!startupScene_.empty()) {
@@ -580,8 +581,18 @@ void Application::loadScene(const std::string& name) {
         // Fallbacks: the vehicle library default setup and the reference circuit
         // description, used only when no content loaded at all.
         static const drive::TrackDescription kReferenceTrack = drive::defaultTrackDescription();
+        std::shared_ptr<CarVisual> visual;
+        if (car != nullptr && !car->modelPath.empty()) {
+            std::vector<std::string> warnings;
+            visual = loadCarVisual(*device_, *vfs_, car->modelPath,
+                                   carVisualOptions(car->skin(session_.selection.skinId)), &warnings);
+            for (const std::string& warning : warnings) {
+                core::Log::get("render")->warn("car: {}", warning);
+            }
+        }
         drive_ = std::make_unique<drive::DriveScene>(*device_, track != nullptr ? track->track : kReferenceTrack,
-                                                     car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup());
+                                                     car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup(),
+                                                     std::move(visual));
         drive_->snapCamera();
         return;
     }
@@ -643,6 +654,13 @@ void Application::updateScene(const SimSnapshot& interpolated) {
 
     // Menu screens: the simulation is paused and the showroom fills the frame.
     if (session_.screen != GameScreen::Driving && garage_ != nullptr) {
+        const CarSpec* car = CarCatalog::instance().find(session_.selection.carId);
+        if (car == nullptr) {
+            car = CarCatalog::instance().defaultCar();
+        }
+        if (car != nullptr) {
+            garage_->setCar(*car, car->skin(session_.selection.skinId));
+        }
         garage_->buildScene(scene_, aspect);
         return;
     }

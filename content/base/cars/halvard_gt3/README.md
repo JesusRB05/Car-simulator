@@ -42,6 +42,20 @@ car_root                         extras: forward, up, units, wheelbase, name
 
 Wheel nodes carry `extras.radius`, `extras.width` and `extras.steered`.
 
+## How the game uses the model
+
+`car.toml`'s `model` key points at `model/car.glb`; the renderer uploads every
+primitive and rigs it by node name:
+
+- `wheel_FL` / `FR` / `RL` / `RR` are the steering pivots (only the front pair
+  follows the steering angle), placed at the physical wheel centre every frame.
+- `wheel_XX_spin` rolls about the wheel's local +X with the physics' spin angle.
+- `wheel_XX_caliper` steers with the hub and never spins.
+- Everything else is rigid with the body.
+
+The model's origin is the ground plane, so the game drops it by the resting ride
+height (0.43 m) to align it with the centre of mass the physics uses.
+
 ## Materials
 
 `paint_livery` (base colour + emissive textures, `KHR_materials_clearcoat`,

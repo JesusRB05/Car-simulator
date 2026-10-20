@@ -207,6 +207,26 @@ inline std::string readString(const toml::table& root, std::string_view key, std
     return fallback;
 }
 
+// Resolves a path written in a descriptor ("model/car.glb") against the
+// descriptor's own virtual path ("cars/halvard_gt3/car.toml"). A leading '/'
+// resolves from the virtual root instead.
+inline std::string resolveRelative(std::string_view descriptorPath, std::string_view file) {
+    if (file.empty()) {
+        return {};
+    }
+    if (file.front() == '/') {
+        return std::string{file.substr(1)};
+    }
+    const std::size_t slash = descriptorPath.find_last_of('/');
+    if (slash == std::string_view::npos) {
+        return std::string{file};
+    }
+    std::string result(descriptorPath.substr(0, slash));
+    result += '/';
+    result += file;
+    return result;
+}
+
 inline bool strictlyIncreasing(const std::vector<double>& values) {
     for (std::size_t i = 1; i < values.size(); ++i) {
         if (!(values[i] > values[i - 1])) {

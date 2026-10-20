@@ -26,6 +26,7 @@ const char* gameScreenName(GameScreen screen) {
 
 void SessionState::load(const core::Config& config) {
     selection.carId = config.getString("session.car", selection.carId);
+    selection.skinId = config.getString("session.skin", selection.skinId);
     selection.trackId = config.getString("session.track", selection.trackId);
     selection.modeId = config.getString("session.mode", selection.modeId);
     selection.weatherId = config.getString("session.weather", selection.weatherId);
@@ -39,6 +40,7 @@ void SessionState::load(const core::Config& config) {
 
 void SessionState::save(core::Config& config) const {
     config.setString("session.car", selection.carId);
+    config.setString("session.skin", selection.skinId);
     config.setString("session.track", selection.trackId);
     config.setString("session.mode", selection.modeId);
     config.setString("session.weather", selection.weatherId);

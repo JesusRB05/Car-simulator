@@ -255,4 +255,11 @@ private:
 // defaults, so a test or a scene can spawn one with a single call.
 VehicleSetup makeDefaultVehicleSetup();
 
+// Height of the centre of mass above the ground when the car rests on its
+// springs: the static strut compression plus the wheel radius, less the strut
+// mount height. `reset()` puts the body at exactly this height so the car
+// settles without a bounce; a scene that places the **visual** model uses it to
+// line the bodywork up with the physics.
+Real staticRideHeight(const VehicleSetup& setup, Real gravity = 9.80665);
+
 } // namespace sim::vehicle

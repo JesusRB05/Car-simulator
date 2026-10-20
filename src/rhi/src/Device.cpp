@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "core/Log.hpp"
+#include "rhi/CommandList.hpp"
 
 namespace sim::rhi {
 namespace {
@@ -393,6 +394,33 @@ void Device::setupDebugMessenger(const DeviceConfig& config) {
 void Device::waitIdle() const {
     if (device_ != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(device_);
+    }
+}
+
+void Device::submitImmediate(CommandList& commandList) {
+    VkFence fence = VK_NULL_HANDLE;
+    VkFenceCreateInfo fenceInfo{};
+    fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    if (vkCreateFence(device_, &fenceInfo, nullptr, &fence) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create a one-shot fence");
+    }
+
+    VkCommandBufferSubmitInfo commandInfo{};
+    commandInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO;
+    commandInfo.commandBuffer = commandList.handle();
+
+    VkSubmitInfo2 submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2;
+    submitInfo.commandBufferInfoCount = 1;
+    submitInfo.pCommandBufferInfos = &commandInfo;
+
+    const VkResult submit = vkQueueSubmit2(graphicsQueue_, 1, &submitInfo, fence);
+    if (submit == VK_SUCCESS) {
+        vkWaitForFences(device_, 1, &fence, VK_TRUE, UINT64_MAX);
+    }
+    vkDestroyFence(device_, fence, nullptr);
+    if (submit != VK_SUCCESS) {
+        throw std::runtime_error("failed to submit a one-shot command list");
     }
 }
 
