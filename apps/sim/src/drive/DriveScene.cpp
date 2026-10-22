@@ -160,14 +160,20 @@ std::string formatLap(double seconds) {
 } // namespace
 
 DriveScene::DriveScene(rhi::Device& device, const TrackDescription& description, const vehicle::VehicleSetup& car,
-                       std::shared_ptr<CarVisual> visual)
-    : description_(description),
-      track_(description_),
-      trackMesh_(track_),
-      ground_(track_, trackMesh_),
-      visual_(std::move(visual)) {
+                       std::shared_ptr<CarVisual> visual, std::shared_ptr<const DriveTrackAssets> circuit)
+    : description_(description), track_(description_), circuit_(std::move(circuit)), visual_(std::move(visual)) {
     world_.fixedStep = 1.0 / 1000.0;
-    car_ = &VehicleModel::spawn(world_, car, ground_);
+    // The wheels query the imported drivable surface when the circuit ships a
+    // model; otherwise they query the analytic collision mesh.
+    if (circuit_ && circuit_->model) {
+        surface_ = std::make_unique<TrackSurfaceQuery>(circuit_->model->collision, circuit_->model->triangleFriction);
+        fallbackGround_ = std::make_unique<TrackGroundQuery>(track_);
+        ground_ = std::make_unique<TrackSurfaceGroundQuery>(*surface_, *fallbackGround_);
+    } else {
+        trackMesh_ = std::make_unique<TrackCollisionMesh>(track_);
+        ground_ = std::make_unique<TrackMeshGroundQuery>(track_, *trackMesh_);
+    }
+    car_ = &VehicleModel::spawn(world_, car, *ground_);
     cogHeight_ = vehicle::staticRideHeight(car);
     // Driver aids (ABS/TCS/ESC) are attached to the car here and enabled by the
     // app from the session setting (all three are on by default). The unit is
@@ -182,12 +188,20 @@ DriveScene::DriveScene(rhi::Device& device, const TrackDescription& description,
 DriveScene::~DriveScene() = default;
 
 void DriveScene::reset() {
-    car_->reset(track_.startPosition(), track_.startHeading());
+    Vec3 position = track_.startPosition();
+    Real heading = track_.startHeading();
+    if (circuit_ && circuit_->hasStart) {
+        // The layout knows where the line is; reset samples the ground itself,
+        // so only x and z matter here.
+        position = circuit_->startPosition;
+        heading = static_cast<Real>(circuit_->startHeading);
+    }
+    car_->reset(position, heading);
     remainder_ = 0.0;
     lapStarted_ = false;
     halfwayReached_ = false;
     lapStartTime_ = 0.0;
-    previousAlong_ = track_.project(track_.startPosition().x, track_.startPosition().z).along;
+    previousAlong_ = track_.project(position.x, position.z).along;
     cameraSnap_ = true;
 }
 
@@ -369,15 +383,33 @@ void DriveScene::updateLapTimer() {
 }
 
 void DriveScene::buildMeshes(rhi::Device& device) {
-    const std::vector<TrackSample>& samples = track_.samples();
-    const std::size_t count = samples.size();
-    const double kerbWidth = track_.kerbWidth();
-
     // Shared unit primitives (cube +-0.5, cylinder radius 1 / half-height 1 on +Y)
     // for the car and the gantry. The flat terrain/track meshes below are built
     // single-sided.
     cube_ = render::Mesh::makeCube(device);
     cylinder_ = render::Mesh::makeCylinder(device);
+
+    // An imported circuit brings its own road, kerbs, run-off, terrain and
+    // scenery, so the procedural meshes are skipped; only the horizon plane is
+    // kept, dropped below the model so it never pokes through.
+    const bool imported = circuit_ && circuit_->visual;
+    const double farGroundY = imported ? static_cast<double>(circuit_->model->boundsMin.y) - 1.0 : -0.10;
+    {
+        MeshBuilder builder;
+        constexpr double kHalf = 2500.0;
+        const Vec3 up(0.0, 1.0, 0.0);
+        builder.quadUp(
+            builder.vertex(Vec3(-kHalf, farGroundY, -kHalf), up), builder.vertex(Vec3(kHalf, farGroundY, -kHalf), up),
+            builder.vertex(Vec3(kHalf, farGroundY, kHalf), up), builder.vertex(Vec3(-kHalf, farGroundY, kHalf), up));
+        farGround_ = builder.build(device);
+    }
+    if (imported) {
+        return;
+    }
+
+    const std::vector<TrackSample>& samples = track_.samples();
+    const std::size_t count = samples.size();
+    const double kerbWidth = track_.kerbWidth();
 
     // Terrain: a regular grid over the circuit, sampled from the analytic height.
     {
@@ -406,16 +438,6 @@ void DriveScene::buildMeshes(rhi::Device& device) {
             }
         }
         terrain_ = builder.build(device);
-    }
-
-    // Far ground out to the horizon, slightly lower than the terrain edge.
-    {
-        MeshBuilder builder;
-        constexpr double kHalf = 2500.0;
-        const Vec3 up(0.0, 1.0, 0.0);
-        builder.quadUp(builder.vertex(Vec3(-kHalf, -0.10, -kHalf), up), builder.vertex(Vec3(kHalf, -0.10, -kHalf), up),
-                       builder.vertex(Vec3(kHalf, -0.10, kHalf), up), builder.vertex(Vec3(-kHalf, -0.10, kHalf), up));
-        farGround_ = builder.build(device);
     }
 
     // Asphalt ribbon: two vertices per centreline sample, following the
@@ -537,6 +559,11 @@ void DriveScene::buildMeshes(rhi::Device& device) {
 }
 
 void DriveScene::buildObstacles(rhi::Device& device) {
+    // The imported circuit ships its own barriers and scenery as geometry, and
+    // their analytic placeholders would sit at the wrong elevation.
+    if (circuit_ && circuit_->visual) {
+        return;
+    }
     obstacles_ = buildObstacleLayout(track_);
     addObstaclesToWorld(world_, obstacles_);
 
@@ -582,34 +609,41 @@ void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelt
     scene.clear();
     setDefaultLight(scene);
     scene.add(farGround_, glm::mat4(1.0f), kFarGrassColor);
-    scene.add(terrain_, glm::mat4(1.0f), kGrassColor);
-    scene.add(verge_, glm::mat4(1.0f), kVergeColor);
-    scene.add(asphalt_, glm::mat4(1.0f), kAsphaltColor);
-    scene.add(edgeLines_, glm::mat4(1.0f), kLineWhite);
-    scene.add(kerbRed_, glm::mat4(1.0f), kKerbRed);
-    scene.add(kerbWhite_, glm::mat4(1.0f), kKerbWhite);
-    scene.add(startLine_, glm::mat4(1.0f), kLineWhite);
-    scene.add(startLineDark_, glm::mat4(1.0f), kCheckerDark);
+    if (circuit_ && circuit_->visual) {
+        // The content's circuit: road, kerbs, run-off, terrain, barriers,
+        // grandstands and trees, all from its glTF.
+        addTrackVisual(scene, *circuit_->visual);
+    } else {
+        scene.add(terrain_, glm::mat4(1.0f), kGrassColor);
+        scene.add(verge_, glm::mat4(1.0f), kVergeColor);
+        scene.add(asphalt_, glm::mat4(1.0f), kAsphaltColor);
+        scene.add(edgeLines_, glm::mat4(1.0f), kLineWhite);
+        scene.add(kerbRed_, glm::mat4(1.0f), kKerbRed);
+        scene.add(kerbWhite_, glm::mat4(1.0f), kKerbWhite);
+        scene.add(startLine_, glm::mat4(1.0f), kLineWhite);
+        scene.add(startLineDark_, glm::mat4(1.0f), kCheckerDark);
 
-    // Static collision scenery (barrier walls + the run-off test yard).
-    for (const ObstacleBatch& batch : obstacleBatches_) {
-        scene.add(batch.mesh, glm::mat4(1.0f), batch.color);
-    }
+        // Static collision scenery (barrier walls + the run-off test yard).
+        for (const ObstacleBatch& batch : obstacleBatches_) {
+            scene.add(batch.mesh, glm::mat4(1.0f), batch.color);
+        }
 
-    // Start gantry posts, so the line reads from a distance.
-    const TrackSample& start = track_.samples()[track_.startIndex()];
-    for (const double side : {-1.0, 1.0}) {
-        const Vec3 base = onTerrain(track_, start.position + start.right * (side * (track_.halfWidth() + 2.0)), 0.0);
-        scene.add(cube_, boxAt(glm::mat4(1.0f), toVec3(base) + glm::vec3(0.0f, 2.5f, 0.0f), {0.3f, 5.0f, 0.3f}),
-                  kLineWhite);
+        // Start gantry posts, so the line reads from a distance.
+        const TrackSample& start = track_.samples()[track_.startIndex()];
+        for (const double side : {-1.0, 1.0}) {
+            const Vec3 base =
+                onTerrain(track_, start.position + start.right * (side * (track_.halfWidth() + 2.0)), 0.0);
+            scene.add(cube_, boxAt(glm::mat4(1.0f), toVec3(base) + glm::vec3(0.0f, 2.5f, 0.0f), {0.3f, 5.0f, 0.3f}),
+                      kLineWhite);
+        }
+        const Vec3 beam = onTerrain(track_, start.position, 0.0);
+        const glm::mat4 beamFrame =
+            glm::translate(glm::mat4(1.0f), toVec3(beam) + glm::vec3(0.0f, 5.0f, 0.0f)) *
+            glm::rotate(glm::mat4(1.0f), static_cast<float>(track_.startHeading()), glm::vec3(0.0f, 1.0f, 0.0f));
+        scene.add(cube_,
+                  boxAt(beamFrame, glm::vec3(0.0f), {2.0f * static_cast<float>(track_.halfWidth()) + 4.3f, 0.6f, 0.3f}),
+                  kKerbRed);
     }
-    const Vec3 beam = onTerrain(track_, start.position, 0.0);
-    const glm::mat4 beamFrame =
-        glm::translate(glm::mat4(1.0f), toVec3(beam) + glm::vec3(0.0f, 5.0f, 0.0f)) *
-        glm::rotate(glm::mat4(1.0f), static_cast<float>(track_.startHeading()), glm::vec3(0.0f, 1.0f, 0.0f));
-    scene.add(cube_,
-              boxAt(beamFrame, glm::vec3(0.0f), {2.0f * static_cast<float>(track_.halfWidth()) + 4.3f, 0.6f, 0.3f}),
-              kKerbRed);
 
     // Car: the content model when it ships one, the primitive stand-in
     // otherwise.

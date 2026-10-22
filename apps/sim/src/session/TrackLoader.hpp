@@ -36,8 +36,11 @@ void fillTrackGeometry(TrackSpec& spec, const drive::Track& track);
 
 // Parses one track descriptor (the text of a track.toml). Returns std::nullopt
 // and fills `error` when the document is malformed or a value is out of range.
-// All values are SI: metres and seconds.
-std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view sourcePath, std::string& error);
+// All values are SI: metres and seconds. When `vfs` is given, the `model` and
+// `layout` files named by the descriptor are resolved (relative to its folder),
+// checked and, for the layout, parsed.
+std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view sourcePath, std::string& error,
+                                        const vfs::VirtualFileSystem* vfs = nullptr);
 
 // Loads every `tracks/<id>/track.toml` reachable through the VFS. The optional
 // `owner` gives each circuit its owning mod so its content reference is

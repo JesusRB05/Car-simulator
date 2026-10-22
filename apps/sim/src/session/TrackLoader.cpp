@@ -10,6 +10,7 @@
 #include <toml++/toml.hpp>
 
 #include "drive/Track.hpp"
+#include "drive/TrackLayout.hpp"
 #include "modding/Composition.hpp"
 #include "modding/Package.hpp"
 #include "session/ContentToml.hpp"
@@ -19,6 +20,78 @@ namespace sim::app {
 namespace {
 
 using content::ParseContext;
+
+// How many centreline points of a layout become Catmull-Rom control points. The
+// layout is authored every few metres; keeping one of every four (about 16 m)
+// reproduces the real path to the centimetre while keeping the analytic circuit
+// small. The driven surface comes from the collision mesh, not from this spline.
+constexpr std::size_t kLayoutControlStride = 4;
+
+// Reads `model` (a glTF) and `layout` (a track.json), both relative to the
+// descriptor folder, and resolves them against the VFS.
+bool readCircuitFiles(const toml::table& root, std::string_view sourcePath, const vfs::VirtualFileSystem* vfs,
+                      std::string& modelPath, std::string& layoutPath, ParseContext& context) {
+    const std::string directory = std::string(sourcePath.substr(0, sourcePath.find_last_of('/')));
+    const auto resolve = [&](const std::string& relative) { return directory + "/" + relative; };
+
+    if (const toml::node* node = root.get("model")) {
+        const auto value = node->value<std::string>();
+        if (!value || value->empty()) {
+            context.fail("'model' must be a non-empty string");
+            return false;
+        }
+        if (value->size() < 5 ||
+            (value->compare(value->size() - 4, 4, ".glb") != 0 && value->compare(value->size() - 5, 5, ".gltf") != 0)) {
+            context.fail("'model' must name a .glb or .gltf file (got '" + *value + "')");
+            return false;
+        }
+        modelPath = resolve(*value);
+        if (vfs != nullptr && !vfs->exists(modelPath)) {
+            context.fail("'model' names a missing file: " + modelPath);
+            return false;
+        }
+    }
+
+    if (const toml::node* node = root.get("layout")) {
+        const auto value = node->value<std::string>();
+        if (!value || value->empty()) {
+            context.fail("'layout' must be a non-empty string");
+            return false;
+        }
+        if (value->size() < 5 || value->compare(value->size() - 5, 5, ".json") != 0) {
+            context.fail("'layout' must name a .json file (got '" + *value + "')");
+            return false;
+        }
+        layoutPath = resolve(*value);
+        if (vfs != nullptr && !vfs->exists(layoutPath)) {
+            context.fail("'layout' names a missing file: " + layoutPath);
+            return false;
+        }
+    }
+    return true;
+}
+
+// Derives the analytic fallback circuit from a layout: the centreline becomes
+// control points and the start line sets `startZ`, so lap timing, the minimap
+// and the autopilot all follow the authored path.
+void describeFromLayout(const drive::TrackLayout& layout, drive::TrackDescription& description) {
+    if (layout.centreline.size() >= 3) {
+        description.controlPoints.clear();
+        const std::size_t stride = layout.centreline.size() >= 8 ? kLayoutControlStride : 1;
+        for (std::size_t i = 0; i < layout.centreline.size(); i += stride) {
+            const drive::TrackLayout::Point& point = layout.centreline[i];
+            description.controlPoints.push_back({point.x, point.z});
+        }
+    }
+    if (layout.halfWidthMeters > 0.0) {
+        description.nominalHalfWidth = layout.halfWidthMeters;
+    }
+    if (layout.hasStart) {
+        description.startZ = layout.start.z;
+    }
+    // The kerbs are part of the model; the analytic fallback does not need them.
+    description.kerbWidth = 0.0;
+}
 
 // Reads the `control_points = [[x, z], ...]` array of the geometry table.
 bool readControlPoints(const toml::table& geometry, std::vector<drive::TrackDescription::ControlPoint>& out,
@@ -96,7 +169,8 @@ bool readHills(const toml::table& root, std::vector<drive::TrackHill>& out, Pars
     return context.ok();
 }
 
-std::optional<TrackSpec> parseTrackSpecImpl(const toml::table& root, ParseContext& context) {
+std::optional<TrackSpec> parseTrackSpecImpl(const toml::table& root, std::string_view sourcePath,
+                                            const vfs::VirtualFileSystem* vfs, ParseContext& context) {
     TrackSpec spec;
     spec.id = content::readString(root, "id", {});
     spec.name = content::readString(root, "name", spec.id);
@@ -111,10 +185,29 @@ std::optional<TrackSpec> parseTrackSpecImpl(const toml::table& root, ParseContex
         context.fail("missing required field 'id'");
     }
 
+    if (!readCircuitFiles(root, sourcePath, vfs, spec.modelPath, spec.layoutPath, context)) {
+        return std::nullopt;
+    }
+    if (!spec.layoutPath.empty() && vfs != nullptr) {
+        std::string layoutError;
+        std::optional<drive::TrackLayout> layout = drive::loadTrackLayout(*vfs, spec.layoutPath, layoutError);
+        if (!layout) {
+            context.fail(layoutError);
+        } else {
+            spec.layout = std::move(*layout);
+        }
+    }
+    const bool hasLayout = spec.layout.has_value();
+
     drive::TrackDescription description;
+    if (hasLayout) {
+        describeFromLayout(*spec.layout, description);
+    }
     const toml::table* geometry = root["geometry"].as_table();
     if (geometry == nullptr) {
-        context.fail("missing required '[geometry]' table");
+        if (!hasLayout) {
+            context.fail("missing required '[geometry]' table (a 'layout' replaces it)");
+        }
     } else {
         if (const toml::node* loop = geometry->get("loop")) {
             const auto value = loop->value<bool>();
@@ -128,7 +221,11 @@ std::optional<TrackSpec> parseTrackSpecImpl(const toml::table& root, ParseContex
         content::readNumber(*geometry, "half_width", 1.0, 20.0, description.nominalHalfWidth, context);
         content::readNumber(*geometry, "kerb_width", 0.0, 10.0, description.kerbWidth, context);
         content::readNumber(*geometry, "start_z", -1.0e4, 1.0e4, description.startZ, context);
-        readControlPoints(*geometry, description.controlPoints, context);
+        if (geometry->get("control_points") != nullptr) {
+            readControlPoints(*geometry, description.controlPoints, context);
+        } else if (!hasLayout) {
+            context.fail("missing required 'control_points' (or a 'layout')");
+        }
     }
     description.loop = true;
     readHills(root, description.hills, context);
@@ -144,6 +241,11 @@ std::optional<TrackSpec> parseTrackSpecImpl(const toml::table& root, ParseContex
     const drive::Track track(description);
     spec.variants = {"Full circuit"};
     fillTrackGeometry(spec, track);
+    if (spec.layout && spec.layout->lengthMeters > 0.0) {
+        // The authored length is authoritative: the spline is an approximation of
+        // the same path, and a lap is timed against the layout's sectors.
+        spec.lengthMeters = spec.layout->lengthMeters;
+    }
     return spec;
 }
 
@@ -188,7 +290,8 @@ void fillTrackGeometry(TrackSpec& spec, const drive::Track& track) {
     }
 }
 
-std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view sourcePath, std::string& error) {
+std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view sourcePath, std::string& error,
+                                        const vfs::VirtualFileSystem* vfs) {
     toml::table root;
     try {
         root = toml::parse(text, sourcePath);
@@ -198,7 +301,7 @@ std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view 
     }
 
     ParseContext context{std::string(sourcePath), {}};
-    std::optional<TrackSpec> spec = parseTrackSpecImpl(root, context);
+    std::optional<TrackSpec> spec = parseTrackSpecImpl(root, sourcePath, vfs, context);
     if (!spec) {
         error = context.joined();
     }
@@ -207,9 +310,10 @@ std::optional<TrackSpec> parseTrackSpec(std::string_view text, std::string_view 
 
 // Same as parseTrackSpec, on an already-parsed table (so patches can be applied
 // to it first).
-std::optional<TrackSpec> parseTrackSpecTable(const toml::table& root, std::string_view sourcePath, std::string& error) {
+std::optional<TrackSpec> parseTrackSpecTable(const toml::table& root, std::string_view sourcePath, std::string& error,
+                                             const vfs::VirtualFileSystem* vfs) {
     ParseContext context{std::string(sourcePath), {}};
-    std::optional<TrackSpec> spec = parseTrackSpecImpl(root, context);
+    std::optional<TrackSpec> spec = parseTrackSpecImpl(root, sourcePath, vfs, context);
     if (!spec) {
         error = context.joined();
     }
@@ -253,9 +357,9 @@ TrackLoadResult loadTracks(const vfs::VirtualFileSystem& vfs, const ContentOwner
                 continue;
             }
             modding::applyPatches(composition->patchesFor(ref), table, &result.errors);
-            spec = parseTrackSpecTable(table, path, error);
+            spec = parseTrackSpecTable(table, path, error, &vfs);
         } else {
-            spec = parseTrackSpec(*text, path, error);
+            spec = parseTrackSpec(*text, path, error, &vfs);
         }
 
         if (spec) {

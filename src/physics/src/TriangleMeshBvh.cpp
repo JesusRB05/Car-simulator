@@ -20,15 +20,26 @@ Aabb joined(const Aabb& a, const Aabb& b) {
 // Robust slab test (Barnes): `std::fmin`/`std::fmax` ignore the NaN a zero
 // direction component produces at an axis-aligned boundary, so a ray parallel
 // to a slab is still handled correctly. `maxDistance` bounds the far end.
+//
+// The two entry/exit values are ordered with a comparison instead of
+// `fmin`/`fmax`: when the origin lies exactly on a slab boundary and the
+// direction is parallel to it, one of them is NaN (`0 * inf`), and comparing is
+// the only order that keeps the NaN out of the way. Taking `fmin(NaN, +inf)`
+// would report `+inf` and wrongly prune a box the ray is inside.
 bool slabHit(const Aabb& box, const Vec3& origin, const Vec3& direction, Real maxDistance) {
     Real tMin = 0.0;
     Real tMax = maxDistance;
     for (int axis = 0; axis < 3; ++axis) {
         const Real inverse = 1.0 / component(direction, axis); // IEEE: +-inf on a zero component
-        const Real t1 = (component(box.min, axis) - component(origin, axis)) * inverse;
-        const Real t2 = (component(box.max, axis) - component(origin, axis)) * inverse;
-        tMin = std::fmax(tMin, std::fmin(t1, t2));
-        tMax = std::fmin(tMax, std::fmax(t1, t2));
+        Real t1 = (component(box.min, axis) - component(origin, axis)) * inverse;
+        Real t2 = (component(box.max, axis) - component(origin, axis)) * inverse;
+        if (t1 > t2) {
+            const Real swap = t1;
+            t1 = t2;
+            t2 = swap;
+        }
+        tMin = std::fmax(tMin, t1);
+        tMax = std::fmin(tMax, t2);
         if (tMax < tMin) {
             return false;
         }

@@ -75,4 +75,10 @@ std::shared_ptr<Model> loadModel(rhi::Device& device, const vfs::VirtualFileSyst
 // Translates a glTF material into the renderer's material. Exposed for tests.
 Material toRenderMaterial(const asset::Material& source);
 
+// Uploads one mipmapped texture per image the materials reference and returns
+// the render materials. `asset.images` keeps its pixels; the textures are owned
+// by the returned materials. `loadModel` and the circuit importer share this, so
+// a texture is uploaded through exactly one path.
+std::vector<Material> uploadMaterials(rhi::Device& device, const asset::GltfAsset& asset);
+
 } // namespace sim::render

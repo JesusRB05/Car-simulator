@@ -2,12 +2,14 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #pragma once
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <glm/glm.hpp>
 
 #include "drive/Track.hpp"
+#include "drive/TrackLayout.hpp"
 #include "session/ContentOwner.hpp"
 
 namespace sim::modding {
@@ -41,6 +43,15 @@ struct TrackSpec {
     // The description the drive scene rebuilds the real circuit from, so what is
     // driven is exactly the data that was loaded.
     drive::TrackDescription track;
+
+    // A circuit may ship its geometry as glTF (visuals and collision) plus a
+    // `track.json` layout instead of analytic control points. Both paths are
+    // resolved against the descriptor folder and are empty for a purely
+    // procedural circuit (the two may coexist: the glTF draws, the control
+    // points remain the analytic fallback).
+    std::string modelPath;
+    std::string layoutPath;
+    std::optional<drive::TrackLayout> layout;
 
     double lengthMeters = 0.0;
     double widthMeters = 0.0;

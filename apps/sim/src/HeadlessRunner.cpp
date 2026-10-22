@@ -646,7 +646,8 @@ int runHeadless(const HeadlessOptions& options) {
             }
             driveScene = std::make_unique<drive::DriveScene>(
                 *device, track != nullptr ? track->track : kReferenceTrack,
-                car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup(), std::move(visual));
+                car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup(), std::move(visual),
+                track != nullptr ? drive::loadDriveTrackAssets(device.get(), vfs, *track) : nullptr);
             driveScene->simulate(1.0);
             if (options.time > 0.0) {
                 driveScene->autopilot(options.time);

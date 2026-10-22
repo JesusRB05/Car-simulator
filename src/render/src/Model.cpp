@@ -50,6 +50,39 @@ glm::mat4 Model::nodeWorld(int nodeIndex) const {
     return source.nodes[static_cast<std::size_t>(nodeIndex)].world;
 }
 
+std::vector<Material> uploadMaterials(rhi::Device& device, const asset::GltfAsset& asset) {
+    // One texture per referenced image, created on demand, with an sRGB view when
+    // the image carries colour.
+    std::vector<std::shared_ptr<Texture>> imageTextures(asset.images.size());
+    const auto textureForImage = [&](int imageIndex) -> std::shared_ptr<Texture> {
+        if (imageIndex < 0 || static_cast<std::size_t>(imageIndex) >= asset.images.size()) {
+            return nullptr;
+        }
+        std::shared_ptr<Texture>& texture = imageTextures[static_cast<std::size_t>(imageIndex)];
+        const asset::Image& image = asset.images[static_cast<std::size_t>(imageIndex)];
+        if (texture == nullptr && !image.pixels.empty()) {
+            texture = std::make_shared<Texture>(device, image, /*repeat=*/true);
+        }
+        return texture;
+    };
+
+    std::vector<Material> materials(asset.materials.size());
+    for (std::size_t i = 0; i < asset.materials.size(); ++i) {
+        const asset::Material& source = asset.materials[i];
+        Material& material = materials[i];
+        material = toRenderMaterial(source);
+        if (source.baseColorTexture >= 0 && static_cast<std::size_t>(source.baseColorTexture) < asset.textures.size()) {
+            material.baseColorTexture =
+                textureForImage(asset.textures[static_cast<std::size_t>(source.baseColorTexture)].image);
+        }
+        if (source.emissiveTexture >= 0 && static_cast<std::size_t>(source.emissiveTexture) < asset.textures.size()) {
+            material.emissiveTexture =
+                textureForImage(asset.textures[static_cast<std::size_t>(source.emissiveTexture)].image);
+        }
+    }
+    return materials;
+}
+
 std::shared_ptr<Model> loadModel(rhi::Device& device, const vfs::VirtualFileSystem& vfs, std::string_view virtualPath,
                                  const std::vector<MaterialOverride>& overrides, std::vector<std::string>* warnings) {
     auto log = core::Log::get("render");
@@ -74,21 +107,8 @@ std::shared_ptr<Model> loadModel(rhi::Device& device, const vfs::VirtualFileSyst
     model->source = std::move(*loaded.asset);
     asset::GltfAsset& asset = model->source;
 
-    // ---- Textures ---------------------------------------------------------
-    // One texture per referenced image, created on demand, plus one per override
-    // image. Both are uploaded with an sRGB view when they carry colour.
-    std::vector<std::shared_ptr<Texture>> imageTextures(asset.images.size());
-    const auto textureForImage = [&](int imageIndex) -> std::shared_ptr<Texture> {
-        if (imageIndex < 0 || static_cast<std::size_t>(imageIndex) >= asset.images.size()) {
-            return nullptr;
-        }
-        std::shared_ptr<Texture>& texture = imageTextures[static_cast<std::size_t>(imageIndex)];
-        const asset::Image& image = asset.images[static_cast<std::size_t>(imageIndex)];
-        if (texture == nullptr && !image.pixels.empty()) {
-            texture = std::make_shared<Texture>(device, image, /*repeat=*/true);
-        }
-        return texture;
-    };
+    // ---- Materials --------------------------------------------------------
+    std::vector<Material> materials = uploadMaterials(device, asset);
 
     // The override images are decoded through the same path the loader uses for
     // external URIs, so a skin is just another PNG on the VFS.
@@ -104,23 +124,6 @@ std::shared_ptr<Model> loadModel(rhi::Device& device, const vfs::VirtualFileSyst
             continue;
         }
         overrideTextures[i] = std::make_shared<Texture>(device, *image, /*repeat=*/true);
-    }
-
-    // ---- Materials --------------------------------------------------------
-    std::vector<Material> materials(asset.materials.size());
-    for (std::size_t i = 0; i < asset.materials.size(); ++i) {
-        const asset::Material& source = asset.materials[i];
-        Material& material = materials[i];
-        material = toRenderMaterial(source);
-        if (source.baseColorTexture >= 0 &&
-            static_cast<std::size_t>(source.baseColorTexture) < asset.textures.size()) {
-            material.baseColorTexture =
-                textureForImage(asset.textures[static_cast<std::size_t>(source.baseColorTexture)].image);
-        }
-        if (source.emissiveTexture >= 0 && static_cast<std::size_t>(source.emissiveTexture) < asset.textures.size()) {
-            material.emissiveTexture =
-                textureForImage(asset.textures[static_cast<std::size_t>(source.emissiveTexture)].image);
-        }
     }
 
     for (std::size_t i = 0; i < overrides.size(); ++i) {
@@ -142,8 +145,8 @@ std::shared_ptr<Model> loadModel(rhi::Device& device, const vfs::VirtualFileSyst
             }
         }
         if (!applied) {
-            report(std::string(virtualPath) + ": no material matches the skin slot '" + override.slot +
-                   "' on '" + override.material + "'");
+            report(std::string(virtualPath) + ": no material matches the skin slot '" + override.slot + "' on '" +
+                   override.material + "'");
         }
     }
 

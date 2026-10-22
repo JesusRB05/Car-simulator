@@ -243,21 +243,30 @@ length as `torque_curve_torque`; `rev_limit > idle_speed`; `mass > 0`;
 
 ### 5.2 `tracks/<track>/track.toml`
 
+A circuit is either **procedural** (a spline through control points over a few
+analytic hills) or **modelled** (a glTF that carries the visuals and the
+collidable surface, plus a `track.json` layout). The two may be combined: the
+model draws and is driven, the control points remain the analytic fallback.
+
 ```toml
-id = "sunset_circuit"
-name = "Sunset Circuit"
+id = "sierra_verde"
+name = "Sierra Verde Circuit"
 author = "Car Simulator contributors"
 license = "CC-BY-SA-4.0"
-location = "Procedural test loop"
+location = "Sierra Verde"
 description = "..."
 
-[geometry]
+# Modelled circuit. Both paths are relative to this file's folder.
+model = "model/track.glb"       # .glb or .gltf
+layout = "track.json"           # centreline, start line, grid, sectors, pit lane
+
+[geometry]                      # optional when `layout` is given
 loop = true
 sample_spacing = 1.0
-half_width = 5.0
-kerb_width = 1.0
-start_z = 40.0
-control_points = [ [0.0, 120.0], [0.0, 20.0], ... ]
+half_width = 6.5
+kerb_width = 0.0
+start_z = 0.0
+control_points = [ [0.0, 120.0], [0.0, 20.0], ... ]  # optional with `layout`
 
 [[terrain.hills]]
 x = 90.0
@@ -265,13 +274,47 @@ z = -60.0
 height = 5.0
 sigma = 55.0
 
-[model]
-mesh = "model/track.gltf"       # optional
-
 [start]
 position = [0.0, 40.0]          # optional; defaults to the start line
 heading = 0.0                   # radians, 0 faces -Z
 ```
+
+A **procedural** circuit (no `model`) requires `[geometry].control_points`.
+A **modelled** circuit replaces them with the `layout`'s centreline: the game
+derives the analytic fallback from it so the minimap, the lap projection and
+the autopilot follow the authored path.
+
+#### `track.json` (the layout of a modelled circuit)
+
+| Key | Meaning |
+|---|---|
+| `name` | Display name of the layout |
+| `length_m` | Authored lap length, in metres |
+| `half_width_m` | Asphalt half-width, in metres |
+| `centerline` | `[[x, y, z], ...]` in travel order, every ~4 m. `y` is the real elevation |
+| `start_finish` | `{ position = [x, y, z], forward = [x, y, z], width_m }`; heading 0 faces -Z |
+| `grid_slots` | `[{ position = [x, y, z], heading_deg }]`; slot 0 is pole |
+| `sectors_m` | Arc lengths from the line at which each sector begins (the lap length closes the last one). `sectors_s` is accepted as a legacy spelling; the values are metres in both |
+| `pit_lane` | `{ speed_limit_kmh, polyline = [[x, y, z], ...], garages_x, garages_z }` |
+
+The `y` coordinates are informational: the driven height comes from the glTF's
+collision triangles, so the layout and the model can never disagree about where
+the ground is.
+
+#### What a modelled circuit's glTF must declare
+
+- Every node that the car can touch sets `extras.collision = true`. Nodes
+  without it are decorative (trees, banners, distance boards).
+- Every **drivable** material sets `extras.surface = "<name>"` and
+  `extras.friction = <mu>` (`asphalt` 1.00, `asphalt_runoff` 0.95, `kerb` 0.90,
+  `concrete` 0.90, `paint` 0.85, `grass` 0.55, `gravel` 0.45). A collidable
+  node whose material names no surface is an obstacle: it is never used to
+  support a wheel, so a car under a footbridge is not lifted onto its deck.
+- `extras.start_lights` on the start gantry lists the light positions.
+
+Large primitives (terrain, barriers) are split into tiles of about 48 m on
+import, so the renderer can cull them; the import is deterministic and does not
+modify the file.
 
 Alternative layouts live in `tracks/<track>/layouts/<layout>/track.toml` with
 the same schema. A layout is addressed as `<mod>/<track>:<layout>`

@@ -590,9 +590,18 @@ void Application::loadScene(const std::string& name) {
                 core::Log::get("render")->warn("car: {}", warning);
             }
         }
+        // The circuit's own model and layout (null for a procedural circuit).
+        std::shared_ptr<drive::DriveTrackAssets> circuit;
+        if (track != nullptr) {
+            std::vector<std::string> trackWarnings;
+            circuit = drive::loadDriveTrackAssets(device_.get(), *vfs_, *track, &trackWarnings);
+            for (const std::string& warning : trackWarnings) {
+                core::Log::get("content")->warn("circuit: {}", warning);
+            }
+        }
         drive_ = std::make_unique<drive::DriveScene>(*device_, track != nullptr ? track->track : kReferenceTrack,
                                                      car != nullptr ? car->setup : vehicle::makeDefaultVehicleSetup(),
-                                                     std::move(visual));
+                                                     std::move(visual), std::move(circuit));
         drive_->snapCamera();
         return;
     }

@@ -10,7 +10,10 @@
 
 #include "drive/Obstacles.hpp"
 #include "drive/Track.hpp"
+#include "drive/TrackAssets.hpp"
 #include "drive/TrackGroundQuery.hpp"
+#include "drive/TrackModel.hpp"
+#include "drive/TrackVisual.hpp"
 #include "physics/PhysicsWorld.hpp"
 #include "vehicle/Electronics.hpp"
 #include "vehicle/VehicleModel.hpp"
@@ -69,9 +72,11 @@ class DriveScene {
 public:
     // `visual` is the car's uploaded glTF model (may be null: the scene then
     // draws the primitive stand-in). It is shared so the garage and the scene
-    // can reuse one upload.
+    // can reuse one upload. `circuit` replaces the procedural road and terrain
+    // with the content's own model and moves the start line to its layout.
     explicit DriveScene(rhi::Device& device, const TrackDescription& track, const vehicle::VehicleSetup& car,
-                        std::shared_ptr<CarVisual> visual = nullptr);
+                        std::shared_ptr<CarVisual> visual = nullptr,
+                        std::shared_ptr<const DriveTrackAssets> circuit = nullptr);
     ~DriveScene();
 
     DriveScene(const DriveScene&) = delete;
@@ -138,10 +143,15 @@ private:
     // before the track so the track is built from it in the initialiser list.
     TrackDescription description_;
     Track track_;
-    // The wheels query this mesh (a per-triangle BVH raycast), not the analytic
-    // height field. Declared before the query, which borrows it.
-    TrackCollisionMesh trackMesh_; // built from track_
-    TrackMeshGroundQuery ground_;  // borrows track_ and trackMesh_
+    // The content's imported circuit, when it ships one.
+    std::shared_ptr<const DriveTrackAssets> circuit_;
+    // The wheels query a triangle mesh: the imported circuit's drivable surface
+    // when there is one, the analytic circuit otherwise. Declared before the
+    // queries, which borrow them.
+    std::unique_ptr<TrackCollisionMesh> trackMesh_;         // analytic, no model
+    std::unique_ptr<TrackSurfaceQuery> surface_;            // imported, with model
+    std::unique_ptr<vehicle::IGroundQuery> fallbackGround_; // analytic safety net
+    std::unique_ptr<vehicle::IGroundQuery> ground_;         // what the wheels use
     // The driver aids (ABS/TCS/ESC) attached to the car built into world_.
     // Declared before the world so it outlives the model that borrows it.
     vehicle::ElectronicControlUnit aids_{};

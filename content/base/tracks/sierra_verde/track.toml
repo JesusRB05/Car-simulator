@@ -1,0 +1,29 @@
+# Sierra Verde Circuit - base track descriptor (CC BY-SA 4.0).
+#
+# Unlike Sunset Circuit this circuit is not procedural: `model` is the glTF that
+# carries every visual and the collidable, drivable surface (each road-type
+# material declares `extras.surface` and `extras.friction`), and `layout` is the
+# authored centreline with the start line, the grid, the sector splits and the
+# pit lane. The drive scene draws the model, the wheels query its triangles and
+# the car starts on the grid.
+#
+# `[geometry]` is optional here and only tunes the analytic fallback the game
+# uses for the minimap, the autopilot and the lap projection. All values are SI:
+# metres and seconds.
+
+id = "sierra_verde"
+name = "Sierra Verde Circuit"
+author = "Car Simulator contributors"
+license = "CC BY-SA 4.0"
+location = "Sierra Verde"
+description = "A 2.78 km race circuit: a long main straight, a heavy-braking first corner, esses, a fast sweeper, a back straight under a footbridge and a tight hairpin, set in rolling green hills."
+
+# Both are resolved against this descriptor's folder.
+model = "model/track.glb"
+layout = "track.json"
+
+[geometry]
+loop = true
+sample_spacing = 1.0        # metres between resampled centreline points
+half_width = 6.5            # asphalt half-width, from the layout
+kerb_width = 0.0            # the model draws the kerbs

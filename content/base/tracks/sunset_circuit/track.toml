@@ -66,7 +66,3 @@ x = -40.0                    # beside the main straight
 z = 150.0
 height = 2.2
 sigma = 55.0
-
-[model]
-# Placeholder: the renderer grows a glTF/KTX2 path (cgltf + ktx are available).
-mesh = "model/track.gltf"

@@ -59,7 +59,7 @@ commit, tests green, pushed, and a line here.
 | I2 | glTF 2.0 loader (cgltf, VFS, materials, tangents, textures) | `679e899` | DONE |
 | I3 | PBR rendering, sun shadows, sky ambient, tone mapping, transparencies | — | DONE |
 | I4 | Halvard GT3 `car.toml`, visual wheels, selectable skins | — | DONE |
-| I5 | Sierra Verde `track.toml`, collision extras, `track.json`, tiling | — | TODO |
+| I5 | Sierra Verde `track.toml`, collision extras, `track.json`, tiling | — | DONE |
 | I6 | Import-time LODs, frustum culling, 60 fps measurement | — | TODO |
 | I7 | Engine-made captures into `screenshots/golden_candidates/` | — | TODO |
 | I8 | Halvard GT3 on Sierra Verde becomes the default; README captures | — | TODO |

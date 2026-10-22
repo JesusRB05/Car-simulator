@@ -108,21 +108,45 @@ TEST_CASE("content: the official car and circuit load through the VFS") {
         MESSAGE("track error: " << error);
     }
     REQUIRE(tracks.errors.empty());
-    REQUIRE(tracks.tracks.size() == 1);
-    CHECK(tracks.tracks[0].ref() == "base.core/sunset_circuit");
-    CHECK(tracks.tracks[0].lengthMeters > 100.0);
-    CHECK(tracks.tracks[0].minimap.size() > 10);
+    REQUIRE(tracks.tracks.size() == 2);
+    // Sorted by reference: the modelled circuit before the procedural one.
+    CHECK(tracks.tracks[0].ref() == "base.core/sierra_verde");
+    CHECK(tracks.tracks[1].ref() == "base.core/sunset_circuit");
+
+    // The modelled circuit resolves its glTF and its layout through the VFS and
+    // keeps the authored start line, grid and sectors.
+    const sim::app::TrackSpec& sierra = tracks.tracks[0];
+    CHECK(sierra.modelPath == "tracks/sierra_verde/model/track.glb");
+    CHECK(sierra.layoutPath == "tracks/sierra_verde/track.json");
+    REQUIRE(sierra.layout.has_value());
+    CHECK(sierra.layout->centreline.size() > 100);
+    CHECK(sierra.layout->hasStart);
+    CHECK(sierra.layout->grid.size() == 12);
+    CHECK(sierra.layout->sectorDistances.size() >= 3);
+    CHECK(sierra.layout->halfWidthMeters > 5.0);
+    CHECK(sierra.lengthMeters > 2000.0);
+    // The analytic fallback is derived from the layout, so the minimap and the
+    // autopilot follow the real circuit.
+    CHECK(sierra.track.controlPoints.size() > 100);
+    CHECK(sierra.track.controlPoints.size() < sierra.layout->centreline.size());
+    CHECK(sierra.minimap.size() > 10);
+
+    const sim::app::TrackSpec& sunset = tracks.tracks[1];
+    CHECK(sunset.lengthMeters > 100.0);
+    CHECK(sunset.minimap.size() > 10);
+    CHECK(sunset.modelPath.empty());
+    CHECK(!sunset.layout.has_value());
     // The spec keeps the description the drive scene rebuilds the circuit from.
-    CHECK(tracks.tracks[0].track.controlPoints.size() > 3);
+    CHECK(sunset.track.controlPoints.size() > 3);
 
     // The base track.toml must reproduce the compiled-in layout exactly, so the
     // circuit does not move when it comes from content.
     sim::app::TrackSpec expectedTrack;
     sim::app::fillTrackGeometry(expectedTrack, sim::app::drive::Track{});
-    CHECK(tracks.tracks[0].lengthMeters == expectedTrack.lengthMeters);
-    CHECK(tracks.tracks[0].widthMeters == expectedTrack.widthMeters);
-    CHECK(tracks.tracks[0].minimap == expectedTrack.minimap);
-    CHECK(tracks.tracks[0].aspect == expectedTrack.aspect);
+    CHECK(sunset.lengthMeters == expectedTrack.lengthMeters);
+    CHECK(sunset.widthMeters == expectedTrack.widthMeters);
+    CHECK(sunset.minimap == expectedTrack.minimap);
+    CHECK(sunset.aspect == expectedTrack.aspect);
 }
 
 TEST_CASE("content: the car model path and the liveries resolve through the VFS") {

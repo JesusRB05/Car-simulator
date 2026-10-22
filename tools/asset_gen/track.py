@@ -538,7 +538,7 @@ def main():
         "centerline_step_m": round(2 * L / n, 3), "centerline": cl,
         "half_width_m": HW,
         "start_finish": {"position": [0, 0, 0], "forward": [0, 0, -1], "width_m": 2 * HW},
-        "sectors_s": [0.0, round(float(s[third]), 1), round(float(s[2 * third]), 1)],
+        "sectors_m": [0.0, round(float(s[third]), 1), round(float(s[2 * third]), 1)],
         "grid_slots": slots,
         "pit_lane": {"speed_limit_kmh": 60, "polyline": [[HW + 6, -0.1, 140], [HW + 10, -0.1, pz1], [HW + 10, -0.1, pz0], [HW + 6, -0.1, -345]],
                      "garages_x": bx0, "garages_z": [bz0, bz1]},

@@ -56,4 +56,25 @@ trees and rolling terrain.
 ## Polygon budget
 
 About 330k triangles; textures 1024x1024 (JPEG colour, PNG for alpha), 17 MB in
-total. The terrain is one 5 m grid: split it into tiles and add LODs at import.
+total. The terrain is one 5 m grid; the import splits every primitive above 8192
+triangles into ~48 m tiles (about 130 for the terrain, the barriers and the
+trees), so the renderer can cull them independently.
+
+## In the game
+
+`track.toml` names `model/track.glb` and `track.json`, so the drive scene draws
+this circuit instead of the procedural one and the wheels query its triangles:
+
+- **Surface**: every triangle of a node with `extras.collision = true` whose
+  material names a surface becomes drivable ground, with that material's
+  friction. Roofs, grandstands, the footbridge deck and the trees name no
+  surface, so a downward wheel ray never lands on them.
+- **Start**: the car spawns on the `start_finish` line at the origin facing -Z,
+  settled on the springs at the height of the mesh.
+- **Fallback**: outside the mapped surface (a car that leaves the world) the
+  analytic circuit derived from `track.json` supports the wheels.
+
+Known limitation: the imported circuit supports the wheels but does not yet
+create collision volumes for the barriers and buildings, so the chassis can
+pass through a wall. The barriers' geometry and their `extras.collision` flags
+are already there for that step.

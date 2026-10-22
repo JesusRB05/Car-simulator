@@ -121,6 +121,32 @@ Skin ("livery") maps are not part of the glTF: `render::loadModel` accepts a lis
 of `MaterialOverride` (material, channel, image) and decodes them through the
 same image path, so a skin costs one texture and no shader work.
 
+### Circuits from glTF
+
+A modelled circuit (for example `base.core/sierra_verde`) is not drawn through
+`render::loadModel`: `drive/TrackModel` imports it device-free, because the same
+triangles have to serve two masters.
+
+- **Drawables**: every node with a mesh is transformed to world space and split
+  on a 48 m grid over XZ when a primitive has more than 8192 triangles. The
+  terrain (105k triangles), the armco (88k) and the tyre walls (58k) become some
+  130, 90 and 60 drawables with their own bounds, so a per-drawable frustum test
+  (next step) can drop the 90 % of the circuit that is behind the camera. The
+  tiles share the glTF's materials, and `render::uploadMaterials` uploads one
+  texture per image, so the whole circuit costs 28 textures, not one per tile.
+- **Drivable surface**: `TrackSurfaceQuery` builds a `physics::TriangleMesh` BVH
+  from the collision nodes' triangles whose material names a surface, plus a
+  per-triangle friction vector. A vertical ray gives the wheel the height, the
+  normal and the friction in one query. Materials without a surface (roofs,
+  glass, trees) never enter it, which keeps a downward ray from landing on the
+  footbridge above the road.
+- **Start pose**: the `track.json` layout, not the mesh, says where the line and
+  the grid are.
+
+The BVH slab test is written so a ray whose origin lies exactly on a node's
+face is not pruned: the road is generated as two halves that meet on the
+centreline, and a ray at `x = 0` used to fall through that seam.
+
 The offscreen target is linear `R8G8B8A8_UNORM`; the window swapchain is
 `B8G8R8A8_SRGB`, so the hardware applies the sRGB encode there and the shaders
 always output **linear** colour.
