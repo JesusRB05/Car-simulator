@@ -4,10 +4,14 @@
 
 #include <array>
 #include <cmath>
+#include <filesystem>
 #include <sstream>
+#include <string>
 #include <vector>
 
 // Every interface header is included so that it is compile-checked here.
+#include "session/CarCatalog.hpp"
+#include "session/CarLoader.hpp"
 #include "vehicle/Aerodynamics.hpp"
 #include "vehicle/AntiRollBar.hpp"
 #include "vehicle/Brake.hpp"
@@ -35,6 +39,7 @@
 #include "vehicle/TireVertical.hpp"
 #include "vehicle/VehicleModel.hpp"
 #include "vehicle/WheelSpin.hpp"
+#include "vfs/VirtualFileSystem.hpp"
 
 using namespace sim::vehicle;
 namespace physics = sim::physics;
@@ -1608,6 +1613,69 @@ TEST_CASE("ElectronicControlUnit: ESC brakes the outer front wheel when the car 
     CHECK_FALSE(ecu.escActive());
     CHECK(ecu.throttleScale() == doctest::Approx(1.0));
     CHECK(ecu.brakeModulation().torqueDelta == std::array<Real, 4>{});
+}
+
+TEST_CASE("VehicleModel: the automatic box shifts on the driveline, not on a slipping engine") {
+    // At a standing start the GT3's clutch slips and the engine can reach the
+    // upshift speed while the car is still at walking pace. Shifting on the
+    // engine's own speed then ran 1..6 in a second and a half; the box must
+    // instead wait until the gear's road speed is actually used up.
+    sim::vfs::VirtualFileSystem vfs;
+    REQUIRE(vfs.mount(std::filesystem::path(SIM_SOURCE_DIR) / "content" / "base"));
+    const sim::app::CarLoadResult catalog = sim::app::loadCars(vfs);
+    REQUIRE(catalog.errors.empty());
+    const sim::app::CarSpec* gt3 = nullptr;
+    for (const sim::app::CarSpec& spec : catalog.cars) {
+        if (spec.id == "halvard_gt3") {
+            gt3 = &spec;
+        }
+    }
+    REQUIRE(gt3 != nullptr);
+    const VehicleSetup& setup = gt3->setup;
+    REQUIRE(setup.automaticTransmission);
+
+    // Road speed at which a gear reaches the configured upshift speed.
+    const auto upshiftRoadSpeed = [&setup](int gear) {
+        return setup.upshiftSpeed * setup.wheelRadius / (setup.gearbox.ratio(gear) * setup.finalDrive);
+    };
+
+    physics::PhysicsWorld world;
+    FlatGroundQuery ground(0.0, 1.2);
+    VehicleModel& car = VehicleModel::spawn(world, setup, ground);
+    VehicleInput input;
+    input.throttle = 1.0;
+    car.setInput(input);
+
+    int gearAtTwoSeconds = 0;
+    int previousGear = car.gear();
+    std::string trace;
+    std::size_t earlyShifts = 0;
+    std::size_t downshifts = 0;
+    for (int i = 0; i < 20000; ++i) {
+        car.step(world.fixedStep);
+        if (gearAtTwoSeconds == 0 && static_cast<double>(i + 1) * world.fixedStep >= 2.0) {
+            gearAtTwoSeconds = car.gear();
+        }
+        if (car.gear() == previousGear) {
+            continue;
+        }
+        trace += "->" + std::to_string(car.gear()) + "@" + std::to_string(car.forwardSpeed()) + " ";
+        if (car.gear() < previousGear) {
+            ++downshifts;
+        } else if (car.forwardSpeed() < upshiftRoadSpeed(previousGear) * 0.95) {
+            // The old engine-speed criterion shifted to 2nd at 8 m/s, where the
+            // real answer is 23 m/s.
+            ++earlyShifts;
+        }
+        previousGear = car.gear();
+    }
+    MESSAGE("GT3 full-throttle shifts: " << trace);
+    CHECK(gearAtTwoSeconds == 1);
+    CHECK(earlyShifts == 0);
+    CHECK(downshifts == 0);
+    // The box does climb the gears as the car speeds up: it is not simply stuck
+    // in first.
+    CHECK(car.gear() >= 3);
 }
 
 TEST_CASE("VehicleModel: traction control tames a low-grip launch") {

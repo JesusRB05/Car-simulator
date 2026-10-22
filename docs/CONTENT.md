@@ -101,6 +101,16 @@ strictly increasing) and `torque_curve_torque` (N·m at wide-open throttle).
 exactly, and `mods/example_mod/cars/hatchback/car.toml` is a second, data-only
 car. (The vehicle model is rear-wheel drive only, so every car is RWD.)
 
+`upshift_speed` and `downshift_speed` are engine speeds (rad/s) compared against
+the speed the **driveline** would turn the engine at — wheel speed × gear ×
+final drive — not against the engine's own speed. At a standing start the clutch
+slips and the engine can sit at the limiter while the car crawls; shifting on
+the engine speed alone ran the whole box to top gear in a second, so the
+automatic transmission waits until the gear's road speed is actually used up.
+Keep the steps close enough that an upshift stays above the downshift speed,
+`upshift_speed * ratio(n+1) / ratio(n) > downshift_speed`, or the box will hunt
+between two gears.
+
 ### `track.toml`
 
 Metadata keys: `id` (required), `name`, `author`, `license`, `location`,

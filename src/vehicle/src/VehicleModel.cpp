@@ -242,12 +242,19 @@ void VehicleModel::updateDriver(Real dt) {
 }
 
 void VehicleModel::updateTransmission(Real dt) {
+    // Gear selection follows the driveline, not the engine's own speed: the
+    // speed the engine would turn at if the clutch were locked. At a standing
+    // start the clutch slips and the engine can sit at the limiter while the car
+    // crawls, so shifting on `engineSpeed_` ran the box from first to top gear in
+    // about a second. The driveline speed is zero there and only reaches the
+    // upshift threshold when the gear is actually used up.
+    const Real drivelineSpeed = std::abs(drivenWheelSpeed() * totalRatio());
     if (setup_.automaticTransmission && !shift_.shifting() && gear_ > 0) {
         const int top = static_cast<int>(setup_.gearbox.forwardRatios.size());
-        if (engineSpeed_ > setup_.upshiftSpeed && gear_ < top) {
+        if (drivelineSpeed > setup_.upshiftSpeed && gear_ < top) {
             ++gear_;
             shift_.request(gear_);
-        } else if (engineSpeed_ < setup_.downshiftSpeed && gear_ > 1) {
+        } else if (drivelineSpeed < setup_.downshiftSpeed && gear_ > 1) {
             --gear_;
             shift_.request(gear_);
         }
