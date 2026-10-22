@@ -2,8 +2,10 @@
 // Copyright (C) 2026 The Car Simulator contributors
 #include "drive/TrackAssets.hpp"
 
+#include <cstdint>
 #include <utility>
 
+#include "core/Log.hpp"
 #include "session/TrackCatalog.hpp"
 
 namespace sim::app::drive {
@@ -30,6 +32,20 @@ std::shared_ptr<DriveTrackAssets> loadDriveTrackAssets(rhi::Device* device, cons
     if (device != nullptr) {
         assets->visual = uploadTrackVisual(*device, *model);
     }
+
+    std::size_t triangles = 0;
+    std::size_t lodTriangles = 0;
+    for (const TrackTile& tile : model->tiles) {
+        triangles += tile.data.indices.size() / 3;
+        for (const std::vector<std::uint32_t>& lod : tile.lods) {
+            lodTriangles += lod.size() / 3;
+        }
+    }
+    core::Log::get("content")->info("circuit '{}': {} tile(s), {} triangle(s), {} in the LOD chain, {} collision "
+                                    "triangle(s)",
+                                    spec.modelPath, model->tiles.size(), triangles, lodTriangles,
+                                    model->collision.indices.size() / 3);
+
     assets->model = std::move(model);
     if (spec.layout && spec.layout->hasStart) {
         assets->hasStart = true;

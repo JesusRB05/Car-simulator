@@ -26,6 +26,20 @@ void Scene::add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, c
     }
 }
 
+void Scene::add(Drawable drawable) {
+    if (drawable.mesh) {
+        drawables_.push_back(std::move(drawable));
+    }
+}
+
+std::size_t selectLodLevel(const std::vector<float>& lodDistances, float distance) {
+    std::size_t level = 0;
+    while (level < lodDistances.size() && distance > lodDistances[level]) {
+        ++level;
+    }
+    return level;
+}
+
 void Scene::setDirectionalLight(const glm::vec3& direction, const glm::vec3& color) {
     lightDirection_ = glm::vec4(glm::normalize(direction), 0.0f);
     lightColor_ = glm::vec4(color, 1.0f);

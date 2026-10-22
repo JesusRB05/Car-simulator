@@ -690,7 +690,25 @@ void DriveScene::buildScene(render::Scene& scene, float aspect, double frameDelt
         }
     }
 
+    // Cars standing on the grid, drawn with the same model at rest. They have no
+    // physics: this fills a screenshot or a frame-time measurement.
+    if (visual_ && visual_->valid()) {
+        for (const ParkedCar& parked : parkedCars_) {
+            const vehicle::GroundSample ground = ground_->sample(parked.position.x, parked.position.z);
+            const glm::mat4 chassis =
+                glm::translate(glm::mat4(1.0f),
+                               glm::vec3(static_cast<float>(parked.position.x), static_cast<float>(ground.height),
+                                         static_cast<float>(parked.position.z))) *
+                glm::rotate(glm::mat4(1.0f), static_cast<float>(parked.headingRadians), glm::vec3(0.0f, 1.0f, 0.0f));
+            addCarVisual(scene, *visual_, chassis, restHubFrames(*visual_, chassis), std::array<float, 4>{});
+        }
+    }
+
     updateCamera(aspect, frameDelta, scene);
+}
+
+void DriveScene::setParkedCars(std::vector<ParkedCar> cars) {
+    parkedCars_ = std::move(cars);
 }
 
 void DriveScene::updateCamera(float aspect, double frameDelta, render::Scene& scene) {

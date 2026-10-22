@@ -146,6 +146,7 @@ bool loadTrackModel(const vfs::VirtualFileSystem& vfs, std::string_view path, co
                 TrackTile tile;
                 tile.material = primitive.material;
                 tile.data = std::move(data);
+                tile.lods = buildMeshLods(tile.data, options.lods);
                 for (const render::Vertex& vertex : tile.data.vertices) {
                     if (!haveBounds) {
                         out.boundsMin = vertex.position;

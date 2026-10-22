@@ -14,6 +14,7 @@ add_executable(sim
     src/SimUi.cpp
     src/drive/DriveScene.cpp
     src/drive/Json.cpp
+    src/drive/MeshLods.cpp
     src/drive/Obstacles.cpp
     src/drive/Track.cpp
     src/drive/TrackAssets.cpp
@@ -33,6 +34,7 @@ add_executable(sim
     src/session/TrackLoader.cpp)
 
 find_package(Stb REQUIRED)
+find_package(meshoptimizer CONFIG REQUIRED)
 target_include_directories(sim PRIVATE src ${Stb_INCLUDE_DIR})
 
 target_link_libraries(sim
@@ -54,6 +56,7 @@ target_link_libraries(sim
         sim::imgui_backends
         imgui::imgui
         sim::implot
+        meshoptimizer::meshoptimizer
         volk::volk
         glm::glm
         SDL3::SDL3

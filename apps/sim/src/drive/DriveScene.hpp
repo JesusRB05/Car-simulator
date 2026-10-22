@@ -63,6 +63,14 @@ enum class DriveCamera {
     Side,
 };
 
+// A car standing still on the circuit (no physics): used to fill the grid for a
+// screenshot or a frame-time measurement. The pose is a ground position and a
+// heading; the height comes from the circuit itself.
+struct ParkedCar {
+    physics::Vec3 position{0.0}; // only x and z matter
+    double headingRadians = 0.0;
+};
+
 // The keyboard-drivable test scene: a procedural circuit, the assembled
 // VehicleModel in its own PhysicsWorld stepped with the fixed 1 ms step, a
 // smoothed chase camera, an ImGui HUD and a debug overlay (suspension rays,
@@ -108,6 +116,10 @@ public:
     // Rebuilds `scene` (track, terrain, car) and positions the camera. The
     // chase camera eases towards its target over `frameDelta` seconds.
     void buildScene(render::Scene& scene, float aspect, double frameDelta);
+    // Cars standing still on the circuit, drawn with the same model as the
+    // player's (no physics). Empty by default: the grid is filled only for a
+    // screenshot or a frame-time measurement.
+    void setParkedCars(std::vector<ParkedCar> cars);
     // Places the camera exactly on its target (no smoothing) on the next build.
     void snapCamera() { cameraSnap_ = true; }
 
@@ -162,6 +174,8 @@ private:
     vehicle::VehicleModel* car_ = nullptr;
     // The car's model, when the content ships one.
     std::shared_ptr<CarVisual> visual_;
+    // Cars standing still on the grid (benchmark/screenshot only).
+    std::vector<ParkedCar> parkedCars_;
     // Height of the centre of mass above the ground at rest: the model's origin
     // sits on the ground, the physics origin is the centre of mass.
     double cogHeight_ = 0.0;

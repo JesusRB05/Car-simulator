@@ -40,7 +40,20 @@ struct Drawable {
     std::shared_ptr<Mesh> mesh;
     glm::mat4 transform{1.0f};
     Material material{};
+
+    // Optional lower levels of detail, drawn instead of `mesh` when the camera
+    // is farther than the corresponding distance (metres, to the drawable's
+    // bounds centre). `lodMeshes[i]` replaces `mesh` beyond `lodDistances[i]`,
+    // so the vector must be ordered from near to far. Most drawables leave both
+    // empty.
+    std::vector<std::shared_ptr<Mesh>> lodMeshes;
+    std::vector<float> lodDistances;
 };
+
+// The level of detail to draw at `distance` from a drawable: 0 selects the base
+// mesh, `i + 1` selects `lodMeshes[i]`. `lodDistances[i]` is the distance beyond
+// which level `i + 1` replaces the one before it, so the list is increasing.
+std::size_t selectLodLevel(const std::vector<float>& lodDistances, float distance);
 
 // A flat, renderer-facing description of what should be drawn. The simulation
 // fills this each frame from the interpolated physics snapshot.
@@ -50,6 +63,8 @@ public:
     // Convenience overload for the many untextured demo/primitive call sites.
     void add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, const glm::vec4& color);
     void add(const std::shared_ptr<Mesh>& mesh, const glm::mat4& transform, const Material& material);
+    // Adds a fully built drawable (with its LOD chain, if any).
+    void add(Drawable drawable);
 
     std::vector<Drawable>& drawables() { return drawables_; }
     const std::vector<Drawable>& drawables() const { return drawables_; }

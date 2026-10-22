@@ -31,8 +31,8 @@ Aabb meshBounds(const std::vector<Vertex>& vertices) {
 }
 
 Mesh::Mesh(rhi::Device& device, const std::vector<Vertex>& vertices, const std::vector<std::uint32_t>& indices)
-    : vertexBuffer_(device, vertices.data(), vertices.size() * sizeof(Vertex), vertexUsage(),
-                    rhi::MemoryUsage::CpuToGpu),
+    : vertexBuffer_(std::make_shared<rhi::Buffer>(device, vertices.data(), vertices.size() * sizeof(Vertex),
+                                                  vertexUsage(), rhi::MemoryUsage::CpuToGpu)),
       indexBuffer_(device, indices.data(), indices.size() * sizeof(std::uint32_t), indexUsage(),
                    rhi::MemoryUsage::CpuToGpu),
       indexCount_(static_cast<std::uint32_t>(indices.size())) {
@@ -40,6 +40,14 @@ Mesh::Mesh(rhi::Device& device, const std::vector<Vertex>& vertices, const std::
     boundsMin_ = bounds.lo;
     boundsMax_ = bounds.hi;
 }
+
+Mesh::Mesh(rhi::Device& device, const std::shared_ptr<const Mesh>& source, const std::vector<std::uint32_t>& indices)
+    : vertexBuffer_(source->vertexBuffer_),
+      indexBuffer_(device, indices.data(), indices.size() * sizeof(std::uint32_t), indexUsage(),
+                   rhi::MemoryUsage::CpuToGpu),
+      indexCount_(static_cast<std::uint32_t>(indices.size())),
+      boundsMin_(source->boundsMin_),
+      boundsMax_(source->boundsMax_) {}
 
 MeshData cubeData() {
     const glm::vec3 faceNormals[6] = {{0, 0, 1}, {0, 0, -1}, {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}};

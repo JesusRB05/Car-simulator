@@ -28,6 +28,14 @@ struct HeadlessOptions {
     bool verifyGolden = false;
     std::filesystem::path goldenDir;
 
+    // Frame-time measurement: render `frames` frames and report the mean frame
+    // time and the frame rate. Every frame is submitted and waited on, so the
+    // number is the full CPU + GPU cost of a frame (no present, no vsync).
+    bool benchmark = false;
+    // How many cars stand on the grid: the player's plus this many in total.
+    // Above 1 the extra cars are drawn at rest on the circuit's grid slots.
+    std::uint32_t gridCars = 1;
+
     // Semantic checks: project each scene probe to screen and require the
     // expected colour to appear at that pixel.
     bool semantic = false;

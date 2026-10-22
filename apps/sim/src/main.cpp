@@ -60,6 +60,11 @@ int main(int argc, char** argv) {
             headless.updateGolden = true;
         } else if (matches(arg, "--semantic")) {
             headless.semantic = true;
+        } else if (matches(arg, "--benchmark")) {
+            headless.benchmark = true;
+        } else if (matches(arg, "--grid-cars") && next != nullptr) {
+            headless.gridCars = static_cast<std::uint32_t>(std::strtoul(next, nullptr, 10));
+            ++i;
         } else if (matches(arg, "--debug-draw")) {
             headless.debugDraw = true;
         } else if (matches(arg, "--camera") && next != nullptr) {

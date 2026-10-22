@@ -46,12 +46,18 @@ class Mesh {
 public:
     Mesh(rhi::Device& device, const std::vector<Vertex>& vertices, const std::vector<std::uint32_t>& indices);
 
+    // A level of detail of `source`: the same vertex buffer with a subset of its
+    // indices. Sharing the vertices is what makes a LOD chain cheap: only the
+    // index buffer and the draw are smaller, the geometry is uploaded once.
+    // `indices` must index into the vertices `source` was built from.
+    Mesh(rhi::Device& device, const std::shared_ptr<const Mesh>& source, const std::vector<std::uint32_t>& indices);
+
     Mesh(const Mesh&) = delete;
     Mesh& operator=(const Mesh&) = delete;
     Mesh(Mesh&&) = default;
     Mesh& operator=(Mesh&&) = default;
 
-    const rhi::Buffer& vertexBuffer() const { return vertexBuffer_; }
+    const rhi::Buffer& vertexBuffer() const { return *vertexBuffer_; }
     const rhi::Buffer& indexBuffer() const { return indexBuffer_; }
     std::uint32_t indexCount() const { return indexCount_; }
 
@@ -67,7 +73,7 @@ public:
     static std::shared_ptr<Mesh> makeGroundPlane(rhi::Device& device, float halfSize);
 
 private:
-    rhi::Buffer vertexBuffer_;
+    std::shared_ptr<rhi::Buffer> vertexBuffer_;
     rhi::Buffer indexBuffer_;
     std::uint32_t indexCount_ = 0;
     glm::vec3 boundsMin_{0.0f};

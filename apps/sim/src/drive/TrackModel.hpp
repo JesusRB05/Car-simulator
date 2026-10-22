@@ -19,6 +19,7 @@
 #include <glm/glm.hpp>
 
 #include "asset/Gltf.hpp"
+#include "drive/MeshLods.hpp"
 #include "drive/Track.hpp"
 #include "physics/TriangleMesh.hpp"
 #include "physics/TriangleMeshBvh.hpp"
@@ -34,6 +35,10 @@ namespace sim::app::drive {
 // One uploaded drawable: a primitive, or a spatial slice of a large one.
 struct TrackTile {
     render::MeshData data;
+    // Lower levels of detail, as index lists into `data.vertices`. They share
+    // the vertex buffer, so a chain costs one copy of the geometry; empty when
+    // the tile is too small to be worth simplifying.
+    std::vector<std::vector<std::uint32_t>> lods;
     int material = -1; // index into TrackModel::source.materials
 };
 
@@ -60,6 +65,11 @@ struct TrackModelOptions {
     // the renderer can cull them independently.
     float tileSize = 48.0f;
     std::size_t tileThreshold = 8192;
+
+    // Lower levels of detail generated at import time (meshoptimizer). The
+    // border is locked, so a simplified tile never cracks against a neighbour
+    // still drawn in full detail; see `MeshLods.hpp`.
+    LodOptions lods;
 };
 
 // Reads and imports `path`. Returns false and fills `error` when the file is

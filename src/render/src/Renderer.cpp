@@ -46,6 +46,25 @@ ObjectPushConstants makePushConstants(const Drawable& drawable) {
     return push;
 }
 
+// The mesh to draw for `drawable`: the base mesh, or the coarsest level of
+// detail whose distance threshold the camera has already passed. The distance is
+// measured to the drawable's bounds centre, so a long tile switches LOD as a
+// whole and the chain is deterministic.
+const Mesh& lodMesh(const Drawable& drawable, const glm::vec3& cameraPosition) {
+    if (drawable.lodMeshes.empty() || drawable.lodDistances.empty()) {
+        return *drawable.mesh;
+    }
+    const glm::vec3 centre = glm::vec3(
+        drawable.transform * glm::vec4(0.5f * (drawable.mesh->boundsMin() + drawable.mesh->boundsMax()), 1.0f));
+    const float distance = glm::length(centre - cameraPosition);
+    const std::size_t level = selectLodLevel(drawable.lodDistances, distance);
+    if (level == 0) {
+        return *drawable.mesh;
+    }
+    const std::size_t index = std::min(level, drawable.lodMeshes.size());
+    return *drawable.lodMeshes[index - 1];
+}
+
 } // namespace
 
 Renderer::Renderer(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32_t framesInFlight)
@@ -94,8 +113,8 @@ Renderer::Renderer(rhi::Device& device, vfs::VirtualFileSystem& vfs, std::uint32
     // material costs one texel and no branch in the shader.
     materialLayout_ = std::make_unique<rhi::DescriptorSetLayout>(
         device_, std::vector<rhi::DescriptorBinding>{
-                    {0, rhi::DescriptorType::CombinedImageSampler, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
-                    {1, rhi::DescriptorType::CombinedImageSampler, 1, VK_SHADER_STAGE_FRAGMENT_BIT}});
+                     {0, rhi::DescriptorType::CombinedImageSampler, 1, VK_SHADER_STAGE_FRAGMENT_BIT},
+                     {1, rhi::DescriptorType::CombinedImageSampler, 1, VK_SHADER_STAGE_FRAGMENT_BIT}});
     materialPool_ = std::make_unique<rhi::DescriptorPool>(device_, kMaxMaterialSets, materialLayout_->bindings());
     const std::uint8_t white[4] = {255, 255, 255, 255};
     const std::uint8_t black[4] = {0, 0, 0, 255};
@@ -257,11 +276,10 @@ const rhi::DescriptorSet& Renderer::materialSet(const Material& material) {
     }
 
     rhi::DescriptorSet set(&device_, materialPool_->allocate(*materialLayout_));
-    set.writeImage(0, material.baseColorTexture != nullptr ? material.baseColorTexture->sampler()
-                                                          : whitePixel_->sampler(),
-                   base);
-    set.writeImage(1, material.emissiveTexture != nullptr ? material.emissiveTexture->sampler()
-                                                         : blackPixel_->sampler(),
+    set.writeImage(
+        0, material.baseColorTexture != nullptr ? material.baseColorTexture->sampler() : whitePixel_->sampler(), base);
+    set.writeImage(1,
+                   material.emissiveTexture != nullptr ? material.emissiveTexture->sampler() : blackPixel_->sampler(),
                    emissive);
     return materialSets_.emplace(key, set).first->second;
 }
@@ -299,8 +317,8 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
             if (!drawable.mesh || drawable.material.alphaBlend) {
                 continue;
             }
-            const Aabb world =
-                transformBounds(Aabb{drawable.mesh->boundsMin(), drawable.mesh->boundsMax()}, drawable.transform);
+            const Mesh& mesh = lodMesh(drawable, scene.camera().position());
+            const Aabb world = transformBounds(Aabb{mesh.boundsMin(), mesh.boundsMax()}, drawable.transform);
             if (!lightFrustum.contains(world)) {
                 continue;
             }
@@ -308,9 +326,9 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
             commandList.pushConstants(shadowPipeline_->layout(),
                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push),
                                       &push);
-            commandList.bindVertexBuffer(drawable.mesh->vertexBuffer());
-            commandList.bindIndexBuffer(drawable.mesh->indexBuffer());
-            commandList.drawIndexed(drawable.mesh->indexCount());
+            commandList.bindVertexBuffer(mesh.vertexBuffer());
+            commandList.bindIndexBuffer(mesh.indexBuffer());
+            commandList.drawIndexed(mesh.indexCount());
         }
     }
     commandList.endRendering();
@@ -347,8 +365,8 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
         if (!drawable.mesh) {
             continue;
         }
-        const Aabb world =
-            transformBounds(Aabb{drawable.mesh->boundsMin(), drawable.mesh->boundsMax()}, drawable.transform);
+        const Mesh& mesh = lodMesh(drawable, scene.camera().position());
+        const Aabb world = transformBounds(Aabb{mesh.boundsMin(), mesh.boundsMax()}, drawable.transform);
         if (!frustum.contains(world)) {
             continue;
         }
@@ -361,9 +379,9 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
         commandList.pushConstants(pipeline_->layout(), VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                                   sizeof(push), &push);
         commandList.bindDescriptorSet(pipeline_->layout(), 2, materialSet(drawable.material).handle());
-        commandList.bindVertexBuffer(drawable.mesh->vertexBuffer());
-        commandList.bindIndexBuffer(drawable.mesh->indexBuffer());
-        commandList.drawIndexed(drawable.mesh->indexCount());
+        commandList.bindVertexBuffer(mesh.vertexBuffer());
+        commandList.bindIndexBuffer(mesh.indexBuffer());
+        commandList.drawIndexed(mesh.indexCount());
     }
 
     if (transparentPipeline_ != nullptr && !transparent.empty()) {
@@ -384,9 +402,10 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
                                       VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push),
                                       &push);
             commandList.bindDescriptorSet(transparentPipeline_->layout(), 2, materialSet(drawable->material).handle());
-            commandList.bindVertexBuffer(drawable->mesh->vertexBuffer());
-            commandList.bindIndexBuffer(drawable->mesh->indexBuffer());
-            commandList.drawIndexed(drawable->mesh->indexCount());
+            const Mesh& mesh = lodMesh(*drawable, cameraPosition);
+            commandList.bindVertexBuffer(mesh.vertexBuffer());
+            commandList.bindIndexBuffer(mesh.indexBuffer());
+            commandList.drawIndexed(mesh.indexCount());
         }
     }
 

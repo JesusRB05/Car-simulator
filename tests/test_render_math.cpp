@@ -14,6 +14,7 @@
 #include "render/Camera.hpp"
 #include "render/Frustum.hpp"
 #include "render/Mesh.hpp"
+#include "render/Scene.hpp"
 #include "render/Uniforms.hpp"
 
 namespace sim::render {
@@ -399,6 +400,23 @@ TEST_CASE("frustum culling is conservative for transformed boxes") {
     MESSAGE("boxes drawn: " << kept << ", culled with a visible corner: " << culledVisible);
     CHECK(culledVisible == 0);
     CHECK(kept > 0);
+}
+
+TEST_CASE("LOD: the level is chosen by distance to the drawable") {
+    // Two levels: full detail up to 140 m, the first LOD to 380 m, the second
+    // beyond. The thresholds are inclusive, so a drawable exactly at a distance
+    // keeps the finer level (deterministic for a static camera).
+    const std::vector<float> distances{140.0f, 380.0f};
+    CHECK(selectLodLevel(distances, 0.0f) == 0);
+    CHECK(selectLodLevel(distances, 139.9f) == 0);
+    CHECK(selectLodLevel(distances, 140.0f) == 0);
+    CHECK(selectLodLevel(distances, 140.1f) == 1);
+    CHECK(selectLodLevel(distances, 380.0f) == 1);
+    CHECK(selectLodLevel(distances, 380.1f) == 2);
+    CHECK(selectLodLevel(distances, 5000.0f) == 2);
+
+    // A drawable with no LOD chain always stays at level 0.
+    CHECK(selectLodLevel({}, 1.0e6f) == 0);
 }
 
 } // namespace sim::render

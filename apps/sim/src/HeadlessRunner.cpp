@@ -10,6 +10,7 @@
 #include <stb_easy_font.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -652,6 +653,20 @@ int runHeadless(const HeadlessOptions& options) {
             if (options.time > 0.0) {
                 driveScene->autopilot(options.time);
             }
+            // A grid start: the player's car plus the other cars standing still
+            // on the layout's slots, so a capture or a measurement sees the
+            // circuit with three cars on it.
+            if (options.gridCars > 1 && track != nullptr && track->layout) {
+                const drive::TrackLayout& layout = *track->layout;
+                std::vector<drive::ParkedCar> parked;
+                for (std::size_t slot = 1; slot < layout.grid.size() && parked.size() + 1 < options.gridCars; ++slot) {
+                    drive::ParkedCar gridCar;
+                    gridCar.position = physics::Vec3(layout.grid[slot].x, 0.0, layout.grid[slot].z);
+                    gridCar.headingRadians = layout.grid[slot].headingRadians;
+                    parked.push_back(gridCar);
+                }
+                driveScene->setParkedCars(std::move(parked));
+            }
             driveScene->setOrbit(options.yaw, options.pitch);
             driveScene->setCamera(driveCameraFromName(options.camera));
             driveScene->snapCamera();
@@ -693,8 +708,25 @@ int runHeadless(const HeadlessOptions& options) {
                 driveScene->drawDebug(draw);
             }
         };
-        const std::vector<std::uint8_t> pixels =
-            renderFrames(*device, renderer, target, scene, frames, options.resizeFrame, true, debug.get(), decorate);
+        std::vector<std::uint8_t> pixels;
+        if (options.benchmark) {
+            // One warm-up frame (pipelines, descriptor sets), then `frames`
+            // frames, each submitted and waited on, so the mean is the full CPU
+            // plus GPU cost of a frame.
+            (void)renderFrames(*device, renderer, target, scene, 1, -1, false, debug.get(), decorate);
+            device->waitIdle();
+            const auto start = std::chrono::steady_clock::now();
+            pixels = renderFrames(*device, renderer, target, scene, frames, options.resizeFrame, true, debug.get(),
+                                  decorate);
+            const double seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+            const double meanMs = 1000.0 * seconds / static_cast<double>(frames);
+            std::printf("[headless] benchmark '%s': %u frame(s) in %.3f s, %.3f ms/frame, %.1f fps (%ux%u)\n",
+                        options.scene.c_str(), frames, seconds, meanMs, seconds > 0.0 ? frames / seconds : 0.0,
+                        target.extent.width, target.extent.height);
+        } else {
+            pixels = renderFrames(*device, renderer, target, scene, frames, options.resizeFrame, true, debug.get(),
+                                  decorate);
+        }
 
         if (!options.screenshot.empty()) {
             if (writePng(options.screenshot, pixels, target.extent)) {

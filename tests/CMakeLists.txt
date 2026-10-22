@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 The Car Simulator contributors
+find_package(meshoptimizer CONFIG REQUIRED)
+
 add_executable(sim_tests
     test_main.cpp
     test_collision.cpp
@@ -30,6 +32,7 @@ add_executable(sim_tests
     # The drive scene and the content catalogs live in the app; their
     # simulation half is render-free and tested directly.
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Json.cpp
+    ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/MeshLods.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Obstacles.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/Track.cpp
     ${CMAKE_SOURCE_DIR}/apps/sim/src/drive/TrackCollisionMesh.cpp
@@ -60,6 +63,7 @@ target_link_libraries(sim_tests
         sim::scripting
         sim::vfs
         sim::vehicle
+        meshoptimizer::meshoptimizer
         doctest::doctest)
 
 sim_configure_target(sim_tests)

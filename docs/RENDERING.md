@@ -147,6 +147,33 @@ The BVH slab test is written so a ray whose origin lies exactly on a node's
 face is not pruned: the road is generated as two halves that meet on the
 centreline, and a ray at `x = 0` used to fall through that seam.
 
+#### Level of detail and culling
+
+Every drawable carries its own world bounds and is frustum-culled per frame, so
+the part of the circuit behind the camera costs nothing. The large tiles also
+carry a LOD chain built once at import time with `meshoptimizer`
+(`drive/MeshLods`):
+
+- A tile with more than 512 triangles gets two simplified levels at 50 % and
+  25 % of its triangles (`targetError = 0.01`, `minSaving = 0.9`).
+- The level is chosen by the distance from the camera to the tile's bounds
+  centre: level 0 up to 140 m, level 1 up to 380 m and level 2 beyond
+  (`kLodDistances` in `drive/TrackVisual.cpp`; the choice itself is
+  `render::selectLodLevel`, device-free and unit-tested).
+- **Borders are locked by hand**, because `meshopt_SimplifyLockBorder` is not
+  enough for glTF: a texture seam is classified as `Kind_Seam` and may collapse.
+  `MeshLods` welds vertices by exact position bits, finds the edges that appear
+  once and passes those vertices as locked. A tile that is mostly border (an
+  armco rail, a painted line) gets no chain at all, since simplifying it would
+  open gaps against its neighbour.
+- The LOD meshes share the level-0 vertex buffer and only add an index buffer,
+  so the chain costs indices, not vertices; the shadow pass selects a level with
+  the same rule.
+
+On the reference machine (AMD Radeon integrated graphics, 1920x1080) Sierra
+Verde with three cars on the grid renders at **309 fps (3.2 ms/frame)**; the
+60 fps target has a wide margin, so the circuit keeps its full detail.
+
 The offscreen target is linear `R8G8B8A8_UNORM`; the window swapchain is
 `B8G8R8A8_SRGB`, so the hardware applies the sRGB encode there and the shaders
 always output **linear** colour.
@@ -260,6 +287,11 @@ sim --headless --frames N [--scene NAME] [--screenshot path.png]
   drives the car with the built-in autopilot for `S` seconds before the capture
   (`0` leaves it parked on the start/finish line). `tools\capture_readme_shots.bat`
   uses these to regenerate the README screenshots.
+- **Benchmark** (`--benchmark --frames N [--grid-cars C]`): renders one warm-up
+  frame, then `N` frames each submitted and waited on, and prints
+  `[headless] benchmark '<scene>': N frame(s) in X s, Y ms/frame, Z fps (WxH)`.
+  `--grid-cars C` fills the starting grid with `C` parked cars built from the
+  real car model, which is how the circuit is measured with traffic.
 - **Physics scenes** (`drop`, `oscillator`, `pendulum`, `double_pendulum`,
   `chain`, `dzhanibekov`, `gyro`, `masses`): they build a real `PhysicsWorld` and
   integrate it for **1.5 s with the deterministic fixed step** before capturing,

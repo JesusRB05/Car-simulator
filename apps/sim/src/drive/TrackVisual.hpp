@@ -29,7 +29,10 @@ struct TrackVisual {
     std::vector<render::Drawable> drawables; // transform is always the identity
     glm::vec3 boundsMin{0.0f};
     glm::vec3 boundsMax{0.0f};
+    // Triangles in the full-detail meshes and, summed over every tile, in the
+    // LOD index buffers (they share the vertices, not the triangles).
     std::size_t triangleCount = 0;
+    std::size_t lodTriangleCount = 0;
 
     bool valid() const { return !drawables.empty(); }
 };
