@@ -79,6 +79,15 @@ int main(int argc, char** argv) {
         } else if (matches(arg, "--pitch") && next != nullptr) {
             headless.pitch = static_cast<float>(std::strtod(next, nullptr));
             ++i;
+        } else if (matches(arg, "--orbit-distance") && next != nullptr) {
+            headless.orbitDistance = static_cast<float>(std::strtod(next, nullptr));
+            ++i;
+        } else if (matches(arg, "--car") && next != nullptr) {
+            headless.car = next;
+            ++i;
+        } else if (matches(arg, "--skin") && next != nullptr) {
+            headless.skin = next;
+            ++i;
         } else if (matches(arg, "--contact-sheet") && next != nullptr) {
             headless.contactSheet = next;
             runHeadless = true;

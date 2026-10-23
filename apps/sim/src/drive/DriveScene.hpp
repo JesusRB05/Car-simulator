@@ -98,6 +98,8 @@ public:
     void setCamera(DriveCamera mode);
     // Orbit camera angles (yaw around the car, pitch above it, both radians).
     void setOrbit(float yaw, float pitch);
+    // Orbit camera distance in metres (headless captures of the whole circuit).
+    void setOrbitDistance(float distance);
 
     void setKeys(const DriveKeys& keys);
     // Mouse look for the orbit camera (pixels, wheel notches).

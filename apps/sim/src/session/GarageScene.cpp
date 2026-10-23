@@ -23,7 +23,16 @@ const glm::vec4 kTyreColor{0.06f, 0.06f, 0.07f, 1.0f};
 const glm::vec4 kHubColor{0.75f, 0.76f, 0.80f, 1.0f};
 const glm::vec4 kHeadlightColor{1.0f, 0.95f, 0.70f, 1.0f};
 const glm::vec4 kTaillightColor{0.90f, 0.05f, 0.05f, 1.0f};
-const glm::vec4 kFloorColor{0.14f, 0.15f, 0.17f, 1.0f};
+const glm::vec4 kFloorColor{0.16f, 0.17f, 0.19f, 1.0f};
+
+// The showroom is a photographic studio rather than an outdoor scene: a light
+// neutral backdrop, a strong key from the upper front-left so the bodywork and
+// the wheel arches read, and no hard horizon. The sky colour doubles as the
+// hemispheric ambient of the scene, so it is the main fill here.
+const glm::vec4 kStudioSky{0.30f, 0.31f, 0.34f, 1.0f};
+const glm::vec3 kStudioKeyDirection{0.30f, -0.92f, 0.25f}; // the way the light travels
+const glm::vec3 kStudioKeyColor{3.0f, 2.95f, 2.85f};       // warm white
+constexpr float kStudioFloorSize = 60.0f;
 
 glm::mat4 boxAt(const glm::mat4& frame, const glm::vec3& centre, const glm::vec3& size) {
     return frame * glm::translate(glm::mat4(1.0f), centre) * glm::scale(glm::mat4(1.0f), size);
@@ -36,7 +45,7 @@ GarageScene::GarageScene(sim::rhi::Device& device, const sim::vfs::VirtualFileSy
       vfs_(vfs),
       cube_(sim::render::Mesh::makeCube(device)),
       cylinder_(sim::render::Mesh::makeCylinder(device)),
-      floor_(sim::render::Mesh::makeGroundPlane(device, 12.0f)) {
+      floor_(sim::render::Mesh::makeGroundPlane(device, kStudioFloorSize)) {
     camera_.yaw = 0.65f;
     camera_.pitch = 0.22f;
     camera_.fovDegrees = 40.0f;
@@ -120,13 +129,25 @@ void GarageScene::resetView() {
 }
 
 void GarageScene::frameCamera() {
-    camera_.frame(carCenter_ + glm::vec3(0.0f, 0.25f, 0.0f), carRadius_);
+    // A little tighter than the default fit: the showroom is about looking at
+    // the car, and the studio backdrop has nothing else to show.
+    camera_.frame(carCenter_ + glm::vec3(0.0f, 0.20f, 0.0f), carRadius_ * 0.78f);
 }
 
 void GarageScene::buildScene(sim::render::Scene& scene, float aspect) {
     scene.clear();
-    scene.setSkyColor(glm::vec4(0.055f, 0.06f, 0.075f, 1.0f));
-    scene.add(floor_, glm::mat4(1.0f), kFloorColor);
+    scene.setSkyColor(kStudioSky);
+    scene.setDirectionalLight(kStudioKeyDirection, kStudioKeyColor);
+    scene.setExposure(1.45f);
+    {
+        // The floor is a receiver: it must not cast (it would shadow nothing)
+        // and it must not stretch the fitted shadow box.
+        sim::render::Drawable floor;
+        floor.mesh = floor_;
+        floor.material.baseColor = kFloorColor;
+        floor.castsShadow = false;
+        scene.add(std::move(floor));
+    }
     if (visual_ && visual_->valid()) {
         // The model's origin is the ground plane, which is the showroom floor.
         const glm::mat4 chassis(1.0f);

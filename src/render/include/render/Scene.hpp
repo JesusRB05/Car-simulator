@@ -48,6 +48,12 @@ struct Drawable {
     // empty.
     std::vector<std::shared_ptr<Mesh>> lodMeshes;
     std::vector<float> lodDistances;
+
+    // Whether the drawable is rendered into the sun's shadow map. A ground
+    // plane is a receiver only: casting from it would only add self-shadowing,
+    // and it would stretch the fitted shadow box until its texels became
+    // visible.
+    bool castsShadow = true;
 };
 
 // The level of detail to draw at `distance` from a drawable: 0 selects the base

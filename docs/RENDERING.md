@@ -79,8 +79,19 @@ Two passes per frame, both with **dynamic rendering** (`vkCmdBeginRendering`;
 
 1. **Shadow pass** — a depth-only pass into a 2048² `D32Sfloat` map (one image per
    frame in flight, so a frame's shadow pass never races another frame's shading).
-   Its view-projection is a reversed-Z **orthographic** box fitted around the
-   point the camera looks at (`reversedZOrtho` in `Renderer.cpp`).
+   Its view-projection is a reversed-Z **orthographic** box (`reversedZOrtho` in
+   `Renderer.cpp`) fitted to the drawables that cast:
+   - On a circuit the casters span hundreds of metres, so the box is the fixed
+     190 m one around a point 55 m ahead of the camera: it keeps the kerbs and
+     barriers near the car sharp instead of spending texels on the far side of
+     the map.
+   - When everything that casts fits in 120 m (a car in the showroom, the drop
+     tests), the box is fitted **exactly** to those bounds. The showroom's
+     shadow is then 4 mm per texel instead of 9 cm, which is the difference
+     between a crisp contact shadow and a staircase.
+   - `Drawable::castsShadow` lets a scene exclude a receiver. The showroom floor
+     sets it to `false`: casting from a ground plane adds nothing but
+     self-shadowing, and it would stretch the fitted box by its own size.
 2. **Scene pass** — the colour attachment plus the scene `D32Sfloat` depth in
    **reversed-Z** (`depthCompare = GreaterEqual`, clear to `0.0f`), cleared every
    frame. Opaque drawables are drawn first (with alpha-test discard for masked
@@ -261,6 +272,7 @@ sim --headless --frames N [--scene NAME] [--screenshot path.png]
     [--verify-golden|--update-golden] [--golden-dir DIR] [--semantic]
     [--contact-sheet path.png] [--debug-draw]
     [--camera chase|cockpit|orbit|side] [--time SECONDS] [--yaw RAD] [--pitch RAD]
+    [--orbit-distance M] [--car REF|ID] [--skin ID] [--grid-cars N]
 ```
 
 - **No window or swapchain**: it creates an `R8G8B8A8Unorm` colour image and a
@@ -270,7 +282,11 @@ sim --headless --frames N [--scene NAME] [--screenshot path.png]
 - **`--resize N`**: recreates the *targets* at half size on frame `N` to exercise
   the recreation path (the offscreen equivalent of a window resize).
 - **`--screenshot`**: writes the last frame as a PNG (stb) through an
-  image→buffer copy.
+  image→buffer copy. The buffer is **linear** (the renderer works in linear
+  radiance), so the writer encodes RGB to sRGB with the standard transfer
+  function and leaves alpha untouched; the reference comparison decodes the PNG
+  back before measuring, so a golden and a candidate are compared in the same
+  space they were rendered in.
 - **`--validation`**: enables the layers and **returns exit code 2** if any
   validation message was emitted; code 1 if Vulkan initialisation fails.
 - **`--verify-golden` / `--update-golden`**: compares or regenerates the
@@ -283,10 +299,17 @@ sim --headless --frames N [--scene NAME] [--screenshot path.png]
   instanced *debug draw* (`render::DebugDraw`); its reference is
   `tests/golden/<driver>/grid_debug.png`.
 - **Drive capture** (`--scene drive`): `--camera chase|cockpit|orbit|side`
-  selects the view, `--yaw`/`--pitch` set the orbit angles, and `--time S`
-  drives the car with the built-in autopilot for `S` seconds before the capture
-  (`0` leaves it parked on the start/finish line). `tools\capture_readme_shots.bat`
-  uses these to regenerate the README screenshots.
+  selects the view, `--yaw`/`--pitch` set the orbit angles, `--orbit-distance M`
+  sets how far the orbit camera sits from the car (2–2000 m, default 8), and
+  `--time S` drives the car with the built-in autopilot for `S` seconds before
+  the capture (`0` leaves it parked on the start/finish line). `--car REF|ID`
+  and `--skin ID` pick the car and its livery; `--grid-cars N` fills the grid
+  with `N` parked cars. `tools\capture_readme_shots.bat` uses these to
+  regenerate the README screenshots (see *Screenshots* below).
+- **Showroom** (`--scene garage`): the car menu's scene, with the same
+  `--car`/`--skin`/`--yaw`/`--pitch` arguments. It is the studio the README's
+  car shots come from: a neutral backdrop, one key light and a floor that
+  receives but does not cast shadows.
 - **Benchmark** (`--benchmark --frames N [--grid-cars C]`): renders one warm-up
   frame, then `N` frames each submitted and waited on, and prints
   `[headless] benchmark '<scene>': N frame(s) in X s, Y ms/frame, Z fps (WxH)`.
@@ -311,6 +334,29 @@ The `gpu` tests (`ctest -L gpu`) compare each scene against references in
 `tests/golden/<driver>/` (see `docs/BUILDING.md`) and a contact sheet
 `screenshots/contact_sheet.png` (committed by hand) gathers all the scenes, with
 the physics ones captured after their 1.5 s settling speed.
+
+### Screenshots
+
+`tools\capture_readme_shots.bat` renders the whole README set — the circuit from
+the chase, cockpit, side and orbit cameras, the Sierra Verde grid, turn 1, the
+hairpin, an oblique aerial, and both shipped liveries in the showroom — at
+1600×900 through the engine itself, with no window and no external tool. By
+default it writes the candidates to `screenshots/golden_candidates/readme/`
+(with a `capture.log`); pass `--publish` to overwrite `docs\images` once they
+have been reviewed. The script is deterministic for a given build, so a
+regenerated image can be compared with the published one.
+
+Two framings are deliberate:
+
+- **The aerial stays oblique** (`--pitch` below ~0.6 rad). Sierra Verde's road
+  rests on the terrain with the 1–2 mm take-off the depth-precision rule above
+  asks for, which is plenty at driving distance; from 260 m up the 24 mm depth
+  resolution at that range beats it and the terrain wins the depth test over the
+  asphalt. The patch of grass where the road should be is a property of the
+  content's take-off, not of the depth buffer.
+- **The showroom uses its own studio light** (see `GarageScene`): a neutral
+  backdrop, a strong key from above and an exposure of 1.35, because the car
+  menu's original dark-sky scene hides the bodywork.
 
 ## Instanced debug draw
 

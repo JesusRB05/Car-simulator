@@ -217,18 +217,51 @@ void Renderer::updateFrameUniforms(std::uint32_t slot, const Scene& scene) {
     FrameUniforms uniforms{};
     writeMatrix(scene.camera().viewProjection(), &uniforms.viewProjection);
 
-    // Fit the shadow map to the region around where the camera looks. A 190 m
-    // box around a point 55 m ahead keeps the circuit's kerbs and barriers
-    // sharp while the sun is still overhead.
+    // Fit the shadow map to the region the casters occupy. A circuit spans
+    // hundreds of metres, so its box is fixed at 190 m around a point 55 m
+    // ahead of the camera: enough for the kerbs and barriers near the car
+    // without spending texels on the far side of the map. A small scene (the
+    // showroom, a single car) is fitted exactly, which is what keeps its
+    // shadows sharp instead of staircased by 9 cm texels.
     glm::vec3 lightDirection = glm::vec3(scene.lightDirection());
     if (glm::length(lightDirection) < 1.0e-6f) {
         lightDirection = glm::vec3(0.0f, -1.0f, 0.0f);
     }
     lightDirection = glm::normalize(lightDirection);
-    const glm::vec3 focus = scene.camera().position() + scene.camera().forward() * 55.0f;
+
+    Aabb casters;
+    bool hasCasters = false;
+    for (const Drawable& drawable : scene.drawables()) {
+        if (!drawable.mesh || !drawable.castsShadow) {
+            continue;
+        }
+        const Aabb world =
+            transformBounds(Aabb{drawable.mesh->boundsMin(), drawable.mesh->boundsMax()}, drawable.transform);
+        if (!hasCasters) {
+            casters = world;
+            hasCasters = true;
+            continue;
+        }
+        casters.lo = glm::min(casters.lo, world.lo);
+        casters.hi = glm::max(casters.hi, world.hi);
+    }
+
+    constexpr float kMaxHalfExtent = 95.0f;
+    constexpr float kExactFitRadius = 120.0f;
+    glm::vec3 focus = scene.camera().position() + scene.camera().forward() * 55.0f;
+    float halfExtent = kMaxHalfExtent;
+    if (hasCasters) {
+        const glm::vec3 centre = 0.5f * (casters.lo + casters.hi);
+        const float radius = 0.5f * glm::length(casters.hi - casters.lo);
+        if (radius <= kExactFitRadius) {
+            focus = centre;
+            halfExtent = glm::clamp(radius * 1.5f + 2.0f, 8.0f, kMaxHalfExtent);
+        }
+    }
+
     const glm::vec3 eye = focus - lightDirection * 240.0f;
     const glm::mat4 lightView = glm::lookAt(eye, focus, glm::vec3(0.0f, 1.0f, 0.0f));
-    lightViewProjection_ = reversedZOrtho(95.0f, 1.0f, 640.0f) * lightView;
+    lightViewProjection_ = reversedZOrtho(halfExtent, 1.0f, 640.0f) * lightView;
     writeMatrix(lightViewProjection_, &uniforms.lightViewProjection);
     writeMatrix(lightViewProjection_, &uniforms.shadowMatrix);
 
@@ -314,7 +347,7 @@ void Renderer::renderScene(rhi::CommandList& commandList, const Scene& scene,
 
         const Frustum lightFrustum(lightViewProjection_);
         for (const Drawable& drawable : scene.drawables()) {
-            if (!drawable.mesh || drawable.material.alphaBlend) {
+            if (!drawable.mesh || drawable.material.alphaBlend || !drawable.castsShadow) {
                 continue;
             }
             const Mesh& mesh = lodMesh(drawable, scene.camera().position());

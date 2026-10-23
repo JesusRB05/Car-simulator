@@ -40,6 +40,7 @@
 #include "session/CarCatalog.hpp"
 #include "session/CarVisual.hpp"
 #include "session/ContentOwner.hpp"
+#include "session/GarageScene.hpp"
 #include "session/TrackCatalog.hpp"
 #include "vfs/VirtualFileSystem.hpp"
 
@@ -185,14 +186,37 @@ std::vector<std::uint8_t> renderFrames(rhi::Device& device, render::Renderer& re
 
 // ---- PNG helpers -----------------------------------------------------------
 
+// The offscreen target is linear (the shaders always output linear colour and
+// only the window swapchain applies the sRGB encode). A PNG viewer assumes
+// sRGB, so the encode happens here, at the boundary, and the golden comparison
+// decodes the reference back to linear before comparing numbers.
+std::uint8_t linearToSrgb8(std::uint8_t value) {
+    const float linear = static_cast<float>(value) / 255.0f;
+    const float srgb = linear <= 0.0031308f ? 12.92f * linear : 1.055f * std::pow(linear, 1.0f / 2.4f) - 0.055f;
+    return static_cast<std::uint8_t>(std::lround(std::clamp(srgb, 0.0f, 1.0f) * 255.0f));
+}
+
+std::uint8_t srgbToLinear8(std::uint8_t value) {
+    const float srgb = static_cast<float>(value) / 255.0f;
+    const float linear = srgb <= 0.04045f ? srgb / 12.92f : std::pow((srgb + 0.055f) / 1.055f, 2.4f);
+    return static_cast<std::uint8_t>(std::lround(std::clamp(linear, 0.0f, 1.0f) * 255.0f));
+}
+
 bool writePng(const std::filesystem::path& path, const std::vector<std::uint8_t>& pixels, rhi::Extent2D extent) {
     if (!path.parent_path().empty()) {
         std::error_code ec;
         std::filesystem::create_directories(path.parent_path(), ec);
     }
+    // Alpha is copied through untouched: it is coverage, not light.
+    std::vector<std::uint8_t> encoded(pixels);
+    for (std::size_t i = 0; i + 3 < encoded.size(); i += 4) {
+        encoded[i] = linearToSrgb8(encoded[i]);
+        encoded[i + 1] = linearToSrgb8(encoded[i + 1]);
+        encoded[i + 2] = linearToSrgb8(encoded[i + 2]);
+    }
     const int stride = static_cast<int>(extent.width) * 4;
     const int written = stbi_write_png(path.string().c_str(), static_cast<int>(extent.width),
-                                       static_cast<int>(extent.height), 4, pixels.data(), stride);
+                                       static_cast<int>(extent.height), 4, encoded.data(), stride);
     return written != 0;
 }
 
@@ -217,7 +241,8 @@ bool compareGolden(const std::filesystem::path& reference, const std::vector<std
         int pixelDiff = 0;
         for (int c = 0; c < 3; ++c) {
             const int a = pixels[i * 4 + static_cast<std::size_t>(c)];
-            const int b = ref[i * 4 + static_cast<std::size_t>(c)];
+            // The reference PNG is sRGB-encoded; the render target is linear.
+            const int b = srgbToLinear8(ref[i * 4 + static_cast<std::size_t>(c)]);
             pixelDiff = std::max(pixelDiff, std::abs(a - b));
             const double d = static_cast<double>(a - b);
             sumSquared += d * d;
@@ -547,6 +572,38 @@ int runContactSheet(rhi::Device& device, vfs::VirtualFileSystem& vfs, render::Re
     return 0;
 }
 
+// ---- Capture selection -----------------------------------------------------
+
+// The car and livery a capture shows. `--car` takes a content reference
+// (`base.core/halvard_gt3`) or a bare id; an unknown key keeps the default and
+// says so, so a typo cannot silently produce the wrong screenshot.
+const CarSpec* selectedCar(const HeadlessOptions& options) {
+    CarCatalog& catalog = CarCatalog::instance();
+    if (options.car.empty()) {
+        return catalog.defaultCar();
+    }
+    const CarSpec* car = catalog.find(options.car);
+    if (car == nullptr) {
+        std::fprintf(stderr, "[headless] unknown car '%s', using the default\n", options.car.c_str());
+        return catalog.defaultCar();
+    }
+    return car;
+}
+
+const CarSkin* selectedSkin(const CarSpec* car, const std::string& key) {
+    if (car == nullptr) {
+        return nullptr;
+    }
+    if (!key.empty()) {
+        if (const CarSkin* skin = car->skin(key)) {
+            return skin;
+        }
+        std::fprintf(stderr, "[headless] unknown skin '%s' on '%s', using the first\n", key.c_str(),
+                     car->ref().c_str());
+    }
+    return car->skins.empty() ? nullptr : &car->skins.front();
+}
+
 } // namespace
 
 int runHeadless(const HeadlessOptions& options) {
@@ -625,22 +682,21 @@ int runHeadless(const HeadlessOptions& options) {
         render::Scene scene;
         std::unique_ptr<physics::PhysicsWorld> world;
         std::unique_ptr<drive::DriveScene> driveScene;
+        std::unique_ptr<GarageScene> garageScene;
         const bool physicsScene = isPhysicsScene(options.scene);
         if (drive::isDriveScene(options.scene)) {
             // The drivable circuit: let the car settle on its springs at the
             // start line, optionally autopilot for `time` seconds (so a capture
             // can show the car moving or cornering), then frame it. The car and
             // circuit come from the content that was just mounted.
-            const CarSpec* car = CarCatalog::instance().defaultCar();
+            const CarSpec* car = selectedCar(options);
             const TrackSpec* track = TrackCatalog::instance().defaultTrack();
             static const drive::TrackDescription kReferenceTrack = drive::defaultTrackDescription();
             std::shared_ptr<CarVisual> visual;
             if (car != nullptr && !car->modelPath.empty()) {
                 std::vector<std::string> warnings;
-                // Headless captures show the car in its first livery, so the
-                // screenshots match what the menu offers.
-                const CarSkin* skin = car->skins.empty() ? nullptr : &car->skins.front();
-                visual = loadCarVisual(*device, vfs, car->modelPath, carVisualOptions(skin), &warnings);
+                visual = loadCarVisual(*device, vfs, car->modelPath, carVisualOptions(selectedSkin(car, options.skin)),
+                                       &warnings);
                 for (const std::string& warning : warnings) {
                     log->warn("car: {}", warning);
                 }
@@ -668,10 +724,27 @@ int runHeadless(const HeadlessOptions& options) {
                 driveScene->setParkedCars(std::move(parked));
             }
             driveScene->setOrbit(options.yaw, options.pitch);
+            driveScene->setOrbitDistance(options.orbitDistance);
             driveScene->setCamera(driveCameraFromName(options.camera));
             driveScene->snapCamera();
             const float aspect = static_cast<float>(options.width) / static_cast<float>(std::max(options.height, 1u));
             driveScene->buildScene(scene, aspect, 0.0);
+        } else if (options.scene == "garage") {
+            // The showroom: the selected car on the floor of the garage scene,
+            // framed by the orbit camera. This is what the car menu shows, so a
+            // README capture and the game agree.
+            const CarSpec* car = selectedCar(options);
+            if (car == nullptr) {
+                log->critical("garage scene: no car content was loaded");
+                std::fprintf(stderr, "[headless] garage scene: no car content\n");
+                return 1;
+            }
+            garageScene = std::make_unique<GarageScene>(*device, vfs);
+            garageScene->setCar(*car, selectedSkin(car, options.skin));
+            garageScene->camera().yaw = options.yaw;
+            garageScene->camera().pitch = options.pitch;
+            const float aspect = static_cast<float>(options.width) / static_cast<float>(std::max(options.height, 1u));
+            garageScene->buildScene(scene, aspect);
         } else if (physicsScene) {
             world = std::make_unique<physics::PhysicsWorld>();
             const double settle = buildPhysicsWorld(options.scene, *world);

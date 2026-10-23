@@ -56,6 +56,13 @@ struct HeadlessOptions {
     double time = 0.0;
     float yaw = 0.8f;
     float pitch = 0.35f;
+    // Orbit camera distance in metres (the aerial shots need a few hundred).
+    float orbitDistance = 9.0f;
+    // Car and livery for the `drive` and `garage` scenes: a content reference
+    // or a bare id, and a skin id. Empty means the catalog's default car and
+    // its first livery.
+    std::string car;
+    std::string skin;
 
     // Tolerances for the golden comparison.
     double maxDiffPercent = 1.0;

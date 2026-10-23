@@ -224,6 +224,11 @@ void DriveScene::setOrbit(float yaw, float pitch) {
     cameraSnap_ = true;
 }
 
+void DriveScene::setOrbitDistance(float distance) {
+    orbitDistance_ = std::clamp(distance, 2.0f, 2000.0f);
+    cameraSnap_ = true;
+}
+
 void DriveScene::setKeys(const DriveKeys& keys) {
     VehicleInput input;
     input.throttle = std::max(keys.throttle ? 1.0 : 0.0, keys.throttleAnalog);
@@ -720,9 +725,13 @@ void DriveScene::updateCamera(float aspect, double frameDelta, render::Scene& sc
 
     render::Camera& camera = scene.camera();
     if (cameraMode_ == DriveCamera::Cockpit) {
-        camera.setPerspective(70.0f, aspect, 0.05f, 3000.0f);
-        const glm::vec3 eye = toVec3(body.localToWorldPoint(Vec3(-0.35, 0.50, 0.05)));
-        const glm::vec3 target = toVec3(body.localToWorldPoint(Vec3(-0.35, 0.32, -14.0)));
+        // Eye at the driver's head, a little left of the centre line and just
+        // behind the wheel, looking down the bonnet. The offset is in the
+        // chassis frame, whose origin is the centre of mass, so the height has
+        // to clear the seat and the steering wheel of the modelled interior.
+        camera.setPerspective(70.0f, aspect, 0.03f, 3000.0f);
+        const glm::vec3 eye = toVec3(body.localToWorldPoint(Vec3(-0.34, 0.62, -0.12)));
+        const glm::vec3 target = toVec3(body.localToWorldPoint(Vec3(-0.34, 0.42, -14.0)));
         camera.lookAt(eye, target, toVec3(body.localToWorldDirection(Vec3(0.0, 1.0, 0.0))));
         cameraSnap_ = true; // re-snap the chase camera when switching back
         return;
