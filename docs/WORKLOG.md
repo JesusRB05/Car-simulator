@@ -62,4 +62,4 @@ commit, tests green, pushed, and a line here.
 | I5 | Sierra Verde `track.toml`, collision extras, `track.json`, tiling | — | DONE |
 | I6 | Import-time LODs, frustum culling, 60 fps measurement | — | DONE |
 | I7 | Engine-made captures into `screenshots/golden_candidates/` | — | DONE |
-| I8 | Halvard GT3 on Sierra Verde becomes the default; README captures | — | TODO |
+| I8 | Halvard GT3 on Sierra Verde becomes the default; README captures | — | DONE |

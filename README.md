@@ -6,12 +6,17 @@ Vulkan renderer**: no Jolt, Bullet, PhysX, bgfx, Diligent or Filament. Cars,
 karts and (later) rally and road driving are all meant to run on the same
 engine, with the differences expressed as data.
 
-![The Voyager test car on the starting grid of the test circuit](docs/images/circuit.png)
+![The Halvard GT3 on the starting grid of Sierra Verde](docs/images/circuit.png)
 
-> **Status: pre-alpha (0.1.0).** You can drive the test car around a
-> procedural circuit with keyboard, gamepad or wheel. Graphics are placeholder
-> boxes on purpose: physics comes first (see the [roadmap](docs/ROADMAP.md)).
-> Expect things to change and break.
+> **Status: pre-alpha (0.1.0).** You can drive the Halvard GT3 around Sierra
+> Verde with keyboard, gamepad or wheel, and every picture in this README comes
+> out of the engine itself. Expect things to change and break.
+
+| | |
+|---|---|
+| ![Through the first corner](docs/images/cornering.png) | ![From the driver's seat](docs/images/cockpit.png) |
+| ![The grid from the front](docs/images/sierra_verde_grid_front.png) | ![Sierra Verde from above](docs/images/sierra_verde_aerial.png) |
+| ![The Halvard GT3 in the showroom](docs/images/gt3_studio_front.png) | ![The second shipped livery](docs/images/gt3_studio_rear.png) |
 
 ## What is in it today
 
@@ -45,6 +50,24 @@ engine, with the differences expressed as data.
   triangle meshes; friction, restitution, warm starting, speculative contacts
   against tunnelling, sleeping, sweep-and-prune broadphase.
 
+### Rendering and content
+- **Renderer**: Vulkan 1.3 with dynamic rendering and Slang shaders. glTF 2.0
+  models (cgltf, through the virtual file system), metallic-roughness PBR with
+  GGX and a clearcoat approximation, one sun with a fitted shadow map, a
+  hemispheric sky ambient, ACES tone mapping, sorted transparencies and
+  emissive maps the game drives (brake and rain lights).
+- **Circuit geometry**: a modelled circuit is imported once, split into tiles
+  with their own bounds, frustum-culled per drawable, simplified with
+  `meshoptimizer` into two LOD levels at import time, and turned into a
+  per-triangle BVH for the wheels to raycast. Sierra Verde draws 1430 tiles and
+  343k triangles at 309 fps on an integrated GPU.
+- **Shipped content**: the **Halvard GT3**, a fictional GT3 car with two
+  liveries selectable in the car menu, and **Sierra Verde**, a 2.78 km circuit
+  with a 520 m straight, kerbs, gravel, a pit lane, grandstands and a footbridge.
+  Both are ordinary `base.core` content, so a mod can override or replace
+  either; the primitive Voyager and the procedural sunset circuit are still
+  there as test content.
+
 ### Everything else
 - **Input**: keyboard, gamepads, wheels and pedals through SDL3, with hot
   plugging, calibration, remapping, saved profiles and a force-feedback
@@ -52,23 +75,24 @@ engine, with the differences expressed as data.
 - **Mods**: a virtual file system where every mod (folder or `.zip`) is
   mounted over the base content, `mod.toml` manifests with semver dependencies,
   sandboxed Lua scripts and a versioned C API for native plugins.
-- **Renderer**: Vulkan 1.3 with dynamic rendering, Slang shaders, debug
-  drawing and an off-screen (headless) mode used for automated image tests.
-- **Tests**: over 200 test cases check the physics against analytic solutions
+- **Tests**: over 270 test cases check the physics against analytic solutions
   and driving manoeuvres (braking, cornering, crashes, jumps, drifting,
-  0-100 km/h).
+  0-100 km/h), the content parsers (glTF, `car.toml`, `track.toml`,
+  `track.json`) and the render math.
 
 ## Not there yet
 
 Being honest about the gaps helps contributors pick something useful:
 
-- Cars and tracks are described by `car.toml` and `track.toml` and loaded
-  through the virtual file system, so a data-only mod can add either, but the
-  app does not switch to a loaded car at runtime yet.
-- The collision mesh is generated from the track description; there is no
-  pipeline for an authored track mesh yet.
-- No PBR materials, shadows, real car models, sound, multiplayer or VR yet.
-- Some manoeuvre numbers still need tuning against reference data.
+- The app has no content browser for installing a mod from a catalog yet (the
+  mod system is in place; the download catalog is not).
+- Imported circuits are drawn and drive on their collision mesh, but barrier
+  collision volumes are not imported: the walls are visual only.
+- Normal, metallic-roughness and occlusion maps are read by the loader but not
+  sampled yet; the two shipped assets encode everything the shader needs in the
+  base colour and emissive maps.
+- No sound, multiplayer or VR yet, and some manoeuvre numbers still need
+  tuning against reference data.
 
 ## Requirements
 
@@ -89,7 +113,10 @@ cmake --preset windows-msvc-release
 cmake --build --preset windows-msvc-release
 ctest --test-dir build/windows-msvc-release --output-on-failure
 
-# Drive
+# Play: the main menu opens on the Halvard GT3 / Sierra Verde session
+build\windows-msvc-release\bin\sim.exe
+
+# Or straight into the car, without the menu
 build\windows-msvc-release\bin\sim.exe --scene drive
 ```
 
@@ -111,15 +138,23 @@ including the headless GPU tests, are in [docs/BUILDING.md](docs/BUILDING.md).
 Gamepads, wheels and pedals are detected automatically; the controls wizard in
 the main menu helps map and calibrate them.
 
-To regenerate the screenshot above with your own GPU, run
-`tools\capture_readme_shots.bat`.
+## Screenshots
+
+Every image above is rendered by the engine: `tools\capture_readme_shots.bat`
+drives the headless runner through the same views (chase, cockpit, side and
+orbit cameras on the circuit, the showroom for the car) at 1600×900 and writes
+them to `screenshots/golden_candidates/readme/`. Run it after a change and
+compare; `--publish` overwrites `docs/images` once the result has been reviewed.
+No external screenshot tool, window manager or post-processing is involved.
 
 ## Modding
 
-Drop a folder or `.zip` with a `mod.toml` into `mods/` and enable it in the
-mods panel. Files in a mod override base content at the same path. See
-[docs/MODS.md](docs/MODS.md), [docs/SCRIPTS.md](docs/SCRIPTS.md) and
-[docs/PLUGINS.md](docs/PLUGINS.md).
+A mod is one `.simmod` file (a ZIP) or the same tree as a folder. Drop it on the
+window or into the user mods folder (`%APPDATA%/Car Simulator/mods/` on
+Windows): the installer validates it, keeps the previous version as a backup and
+mounts it over the base content, so a mod adds content instead of overwriting
+files. Cars, tracks, skins and patches are data; scripts are sandboxed Lua. See
+[docs/MODS.md](docs/MODS.md), [docs/SCRIPTS.md](docs/SCRIPTS.md) and [docs/PLUGINS.md](docs/PLUGINS.md).
 
 Only install mods you trust. Lua scripts run in a sandbox, but **native
 plugins run with the full permissions of the game**.

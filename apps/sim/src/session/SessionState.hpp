@@ -29,11 +29,14 @@ const char* gameScreenName(GameScreen screen);
 // resolved against CarCatalog/TrackCatalog; unknown selections fall back to the
 // catalog defaults.
 struct SessionSelection {
-    std::string carId = "base.core/voyager";
+    // The shipped showcase session: the Halvard GT3 in its green livery on
+    // Sierra Verde. Both are ordinary content (`base.core`), so a mod that
+    // ships its own car or circuit competes with them on equal terms.
+    std::string carId = "base.core/halvard_gt3";
     // Livery of the selected car (a bare skin id, resolved against the car).
     // Empty means the car's own materials.
-    std::string skinId = "red_black_8";
-    std::string trackId = "base.core/sunset_circuit";
+    std::string skinId = "green_44";
+    std::string trackId = "base.core/sierra_verde";
     std::string modeId = "practice";
     std::string weatherId = "clear";
     std::string timeOfDayId = "day";

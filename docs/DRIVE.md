@@ -1,12 +1,13 @@
 # Drive scene: keyboard car on a test circuit
 
-The `drive` scene drives the assembled [`VehicleModel`](PHYSICS_PLAN.md) (the
-default *Voyager* setup) around a procedural test circuit to exercise the whole
-vehicle stack. The wheels query the circuit's **collision triangle mesh**
-(`TrackCollisionMesh`: the asphalt ribbon, the kerbs and a terrain grid, indexed
-by a per-triangle BVH), so the tyres sit on the geometry that is actually drawn;
-the chassis is a real rigid body, so it also collides with the barrier walls and
-the run-off test yard.
+The `drive` scene drives the assembled [`VehicleModel`](PHYSICS_PLAN.md) around
+the selected circuit to exercise the whole vehicle stack. By default that is
+the *Halvard GT3* setup from `content/base/cars/halvard_gt3/car.toml` on
+*Sierra Verde*, whose `track.glb` supplies both the visuals and the collision
+geometry. The wheels query the circuit's **collision triangle mesh** (asphalt,
+kerbs and terrain, indexed by a per-triangle BVH), so the tyres sit on the
+geometry that is actually drawn; the chassis is a real rigid body, so it also
+collides with the terrain and the run-off.
 
 ```bat
 build\windows-msvc-release\bin\sim.exe --scene drive
@@ -28,8 +29,10 @@ sim.exe --headless --frames 4 --scene drive --camera cockpit --time 10 --screens
 sim.exe --headless --frames 4 --scene drive --camera side --time 16 --screenshot side.png
 ```
 
-`tools\capture_readme_shots.bat` regenerates the README screenshots (grid,
-cornering, cockpit and side) with these flags.
+`tools\capture_readme_shots.bat` regenerates the README screenshots (circuit,
+cornering, cockpit, side, the Sierra Verde grid, turn 1, the hairpin, the aerial
+and the two showroom liveries) with these flags; see
+[RENDERING.md](RENDERING.md#screenshots).
 
 ## Autopilot
 
@@ -133,13 +136,14 @@ normal load (blue) and the chassis velocity (white).
 
 ## Known limitations
 
-- Only the wheels touch the ground: they query the analytic surface, not a
-  collider. The chassis box collides with the barrier walls and the test yard,
-  but there are no other cars and no ground bumps.
+- Only the wheels touch the ground: they raycast the imported circuit's
+  collision mesh, and nothing else has a collider. Imported circuits skip the
+  barrier volumes, so leaving the road is met by the terrain, not by a wall, and
+  parked cars are visual only.
 - The wheel contact is a single point under the strut, with no tyre radius or
   carcass on slopes and no relaxation length (the slip denominators are clamped
   at 1 m/s instead).
-- The driver aids are attached here for the *Voyager* setup only; the per-car
-  aid configuration of [Section 7.8](PHYSICS_PLAN.md) is not read from data yet.
+- The driver aids are the app's three toggles (ABS, TCS, ESC); the per-car aid
+  configuration of [Section 7.8](PHYSICS_PLAN.md) is not read from data yet.
 - Steering is a direct wheel angle and the circuit sends no force feedback; the
   app's `input` stack drives the wheel separately.

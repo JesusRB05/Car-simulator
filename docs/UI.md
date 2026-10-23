@@ -26,16 +26,17 @@ showroom of the selected car. It is a small state machine (`GameScreen` in
 | Driving         | The simulation runs; `Escape` returns to the main menu.                 |
 
 While any menu screen is active the physics is paused and the **garage scene**
-(`apps/sim/src/session/GarageScene.{hpp,cpp}`) fills the frame: the selected car,
-assembled from the engine primitives on the real `VehicleSetup`, on a dark floor,
-with an orbit camera the player drives with the mouse. There is no glTF pipeline
-for the cars yet (the catalog bodies are placeholders), so the preview is the
-same procedural car the simulation drives.
+(`apps/sim/src/session/GarageScene.{hpp,cpp}`) fills the frame: the selected car
+in a photographic studio (a neutral backdrop, one key light and a shadow-catching
+floor), with an orbit camera the player drives with the mouse. A car with a glTF
+model is shown as the model itself, with its selected livery; a car without one
+falls back to the engine primitives assembled from its `VehicleSetup`.
 
 The catalogs (`CarCatalog`, `TrackCatalog`) are the single source of truth: the
 car specs are derived from the physics `VehicleSetup` (never invented), and the
-track length and minimap come from the real `Track`. Only one car (*Voyager*)
-and one circuit (*Sunset Circuit*) exist today; the flow is built for more.
+track length and minimap come from the real `Track`. The default session is the
+*Halvard GT3* on *Sierra Verde*; the *Voyager* and the *Sunset Circuit* are still
+there as test content, and the flow is built for more.
 Game mode (only *Practice*), weather and time of day are listed but **disabled**
 and labelled as not simulated, rather than faked. The car, track, mode, weather,
 time and the "controls configured" flag persist in `config.toml` under
