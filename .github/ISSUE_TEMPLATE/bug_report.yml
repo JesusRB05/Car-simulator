@@ -1,0 +1,66 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Car Simulator contributors
+name: Bug report
+description: Something behaves wrongly, crashes or looks broken
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please do not attach personal data: logs may contain file paths, so remove your user name first.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what did you see instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start `sim.exe --scene drive`
+        2. Hold `W` for 5 seconds
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Vehicle physics
+        - Physics engine
+        - Rendering
+        - UI / menus
+        - Input / wheels / gamepads
+        - Modding / scripting / plugins
+        - Content (cars, tracks)
+        - Build / CI
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.0 or a commit hash
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11, Ubuntu 24.04, ...
+    validations:
+      required: true
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and driver
+      description: Output of `vulkaninfo --summary` helps a lot.
+      placeholder: Example GPU, driver 5xx, Vulkan 1.3.x
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      render: text

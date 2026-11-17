@@ -1,0 +1,39 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 The Car Simulator contributors
+name: Feature request
+description: Suggest an improvement or a new feature
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the driving or modding experience you are missing.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: reference
+    attributes:
+      label: References
+      description: Papers, published data or open implementations. Physical models should name a validation reference (see docs/ROADMAP.md).
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Project rules
+      options:
+        - label: It does not need a third-party physics or rendering engine
+          required: true
+        - label: Any content involved is original or freely licensed, with no real brands
+          required: true
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Would you like to work on it?
+      options:
+        - label: I would like to implement this myself
