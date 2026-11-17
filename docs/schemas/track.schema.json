@@ -47,11 +47,22 @@
       "additionalProperties": false
     },
     "model": {
-      "type": "object",
-      "properties": {
-        "mesh": { "type": "string", "description": "Path to a glTF/GLB model." }
-      },
-      "additionalProperties": false
+      "description": "Path to the circuit glTF/GLB, relative to this descriptor.",
+      "oneOf": [
+        { "type": "string", "pattern": "\\.(glb|gltf)$" },
+        {
+          "type": "object",
+          "properties": {
+            "mesh": { "type": "string", "description": "Path to a glTF/GLB model." }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "layout": {
+      "type": "string",
+      "pattern": "\\.json$",
+      "description": "Authored centreline, start line, grid, sectors and pit lane (track.json), relative to this descriptor."
     },
     "start": {
       "type": "object",

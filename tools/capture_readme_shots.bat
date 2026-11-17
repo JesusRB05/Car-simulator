@@ -1,4 +1,6 @@
 @echo off
+rem SPDX-License-Identifier: GPL-3.0-or-later
+rem Copyright (C) 2026 The Car Simulator contributors
 rem Renders the README screenshots with the local GPU (headless, no window).
 rem
 rem The views are the ones the README shows, at 1600x900 and through the engine
