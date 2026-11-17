@@ -1,12 +1,42 @@
+<div align="center">
+
 # Car Simulator
 
-An open-source, community-maintained driving simulator built around
-**realistic vehicle physics**. It has its **own physics engine** and its **own
-Vulkan renderer**: no Jolt, Bullet, PhysX, bgfx, Diligent or Filament. Cars,
-karts and (later) rally and road driving are all meant to run on the same
-engine, with the differences expressed as data.
+**An open-source driving simulator where the physics come first.**<br>
+Its own physics engine. Its own Vulkan renderer. Cars, karts and tracks defined as data, and mods you can write in an afternoon.
+
+[![CI](https://github.com/JesusRB05/Car-simulator/actions/workflows/ci.yml/badge.svg)](https://github.com/JesusRB05/Car-simulator/actions/workflows/ci.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/code-GPL--3.0--or--later-blue.svg)](LICENSE)
+[![Content: CC BY-SA 4.0](https://img.shields.io/badge/content-CC%20BY--SA%204.0-lightgrey.svg)](content/base/LICENSE.txt)
+![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
+![C++20](https://img.shields.io/badge/C%2B%2B-20-00599C.svg)
+![Vulkan 1.3](https://img.shields.io/badge/Vulkan-1.3-AC162C.svg)
+![Windows and Linux](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-informational.svg)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](docs/CONTRIBUTING.md)
+
+[Build it](#build-and-run-windows) · [Drive it](#controls) · [Mod it](#modding) · [**Help build it**](#get-involved)
 
 ![The Halvard GT3 on the starting grid of Sierra Verde](docs/images/circuit.png)
+
+</div>
+
+## Why this project
+
+Most open-source racing games borrow a general-purpose physics engine and tune
+the handling until it feels right. Car Simulator goes the other way: a
+**double-precision, deterministic, fixed 1 kHz physics engine** underneath a
+vehicle model built from real equations (Pacejka tyres, double-wishbone
+kinematics, a full driveline), and every model comes with a test that checks it
+against an analytic solution or a driving manoeuvre.
+
+- **Realism you can verify.** Over 270 tests, with tolerances that are never relaxed to hide a regression.
+- **No black boxes.** No Jolt, Bullet, PhysX, bgfx, Diligent or Filament: the physics and the renderer are in this repository and written to be read.
+- **Everything is data.** Cars, tracks, skins and tuning are TOML/JSON; scripts are sandboxed Lua; native plugins use a versioned C API.
+- **Open and free.** GPL code, CC BY-SA content, no telemetry and no network connections.
+- **Early enough to matter.** The architecture is settled and the list of things to build is long, so a contribution here lands in the core, not in a corner.
+
+Cars, karts and (later) rally and road driving all run on the same engine, with
+the differences expressed as data.
 
 > **Status: pre-alpha (0.1.0).** You can drive the Halvard GT3 around Sierra
 > Verde with keyboard, gamepad or wheel, and every picture in this README comes
@@ -169,13 +199,42 @@ plugins run with the full permissions of the game**.
 - [Content and licensing](docs/CONTENT.md)
 - [Contributing](docs/CONTRIBUTING.md) and [security policy](SECURITY.md)
 
-## Contributing
+## Get involved
 
-Contributions are welcome, especially physics validation against real data,
-track and car content under free licences, and testing with real wheels. Read
-[CONTRIBUTING](docs/CONTRIBUTING.md) first: every commit needs a DCO
-sign-off, and all content must be original or freely licensed. Real brands,
-cars and tracks are not allowed.
+This is a young, community-maintained project and there is room for every
+skill level. You do not need to be a physicist to help.
+
+| If you are... | You could... |
+|---|---|
+| A **C++ developer** | Pick an issue labelled [`good first issue`](https://github.com/JesusRB05/Car-simulator/labels/good%20first%20issue), work on the HUD, audio, collisions or the renderer |
+| A **physics / vehicle-dynamics person** | Validate the tyre, suspension and powertrain models against published data, add test manoeuvres (see [PHYSICS_PLAN](docs/PHYSICS_PLAN.md)) |
+| A **sim racer** | Test with a real wheel and pedals, report how the car feels, help tune force feedback |
+| A **3D artist** | Make fictional cars and circuits under a free licence (see [CONTENT](docs/CONTENT.md)) |
+| A **modder** | Build a mod with the [mod format](docs/MOD_FORMAT.md) or a Lua [script](docs/SCRIPTS.md), and tell us what is missing |
+| A **writer or translator** | Improve the docs, write tutorials, report anything confusing |
+
+How to start:
+
+1. Build the game with the steps [above](#build-and-run-windows) and drive a lap.
+2. Browse the [open issues](https://github.com/JesusRB05/Car-simulator/issues) or the [roadmap](docs/ROADMAP.md), and comment on the one you want so nobody duplicates it.
+3. Read [CONTRIBUTING](docs/CONTRIBUTING.md): every commit needs a DCO sign-off (`git commit -s`), and all content must be original or freely licensed. Real brands, cars and tracks are not allowed.
+4. Open a pull request. Small, focused changes get reviewed fastest.
+
+Everyone is expected to follow the [code of conduct](CODE_OF_CONDUCT.md). If
+you like the idea, a star helps other people find the project.
+
+## Project layout
+
+| Path | What is there |
+|---|---|
+| `src/physics` | Rigid bodies, joints, collisions (GJK/EPA, BVH), deterministic solver |
+| `src/vehicle` | Tyres, suspension, powertrain, brakes, aero, driver aids |
+| `src/rhi`, `src/render` | Vulkan abstraction and the renderer (glTF PBR, shadows, LODs) |
+| `src/input` | Keyboard, gamepads and wheels through SDL3, calibration, force feedback |
+| `src/modding`, `src/scripting`, `src/plugin_api` | Mod VFS and installer, sandboxed Lua, native plugin API |
+| `apps/sim` | The game: menus, garage, drive scene, headless runner |
+| `content/base` | The shipped cars, skins and circuits |
+| `tests`, `tools` | The test suite and the asset and CI tooling |
 
 ## Privacy
 
