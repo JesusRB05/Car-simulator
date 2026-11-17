@@ -21,8 +21,7 @@ FetchContent_MakeAvailable(imgui_sources)
 
 FetchContent_Declare(implot_sources
     GIT_REPOSITORY https://github.com/epezent/implot.git
-    GIT_TAG        851cdbdd60d1dfb64c23e987969694de0f547a6b
-    GIT_SHALLOW    TRUE)
+    GIT_TAG        851cdbdd60d1dfb64c23e987969694de0f547a6b)
 
 # ImPlot has no CMake project either; compile it against the same imgui sources
 # the backends use so every translation unit sees one consistent imgui.h.
